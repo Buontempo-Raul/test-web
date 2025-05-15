@@ -178,75 +178,6 @@ export const shopAPI = {
   }
 };
 
-// Event API service
-export const eventAPI = {
-  getEvents: (filters = {}) => {
-    return api.get('/api/events', { params: filters });
-  },
-  
-  getEventById: (id) => {
-    return api.get(`/api/events/${id}`);
-  },
-  
-  getUserEvents: (userId) => {
-    return api.get(`/api/events/user/${userId}`);
-  },
-  
-  createEvent: (formData) => {
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    };
-    return api.post('/api/events', formData, config);
-  },
-  
-  updateEvent: (id, formData) => {
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    };
-    return api.put(`/api/events/${id}`, formData, config);
-  },
-  
-  deleteEvent: (id) => {
-    return api.delete(`/api/events/${id}`);
-  }
-};
-
-// Event Request API service
-export const eventRequestAPI = {
-  createEventRequest: (formData) => {
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    };
-    return api.post('/api/event-requests', formData, config);
-  },
-  
-  getMyEventRequests: () => {
-    return api.get('/api/event-requests/my');
-  },
-  
-  getAllEventRequests: () => {
-    return api.get('/api/event-requests');
-  },
-  
-  getEventRequestById: (id) => {
-    return api.get(`/api/event-requests/${id}`);
-  },
-  
-  updateEventRequestStatus: (id, statusData) => {
-    return api.put(`/api/event-requests/${id}/status`, statusData);
-  },
-  
-  deleteEventRequest: (id) => {
-    return api.delete(`/api/event-requests/${id}`);
-  }
-};
-
 // Post API service
 export const postAPI = {
   getPosts: (filters = {}) => {
@@ -295,5 +226,7 @@ export const postAPI = {
     return api.delete(`/api/posts/${postId}/comment/${commentId}`);
   }
 };
+
+// Removed event-related API services
 
 export default api;

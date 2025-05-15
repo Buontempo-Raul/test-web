@@ -30,7 +30,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Create subdirectories for different types of uploads
-const uploadDirs = ['profiles', 'artworks', 'events', 'posts'];
+const uploadDirs = ['profiles', 'artworks', 'posts'];  // Removed 'events'
 uploadDirs.forEach(dir => {
   const dirPath = path.join(uploadsDir, dir);
   if (!fs.existsSync(dirPath)) {
@@ -43,18 +43,16 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const artworkRoutes = require('./routes/artworks');
 const shopRoutes = require('./routes/shop');
-const eventRoutes = require('./routes/events');
-const eventRequestRoutes = require('./routes/eventRequests');
 const postsRoutes = require('./routes/posts');
+// Removed event imports
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/artworks', artworkRoutes);
 app.use('/api/shop', shopRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/event-requests', eventRequestRoutes);
 app.use('/api/posts', postsRoutes);
+// Removed event routes
 
 // Simple test route
 app.get('/api/test', (req, res) => {

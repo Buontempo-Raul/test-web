@@ -29,19 +29,12 @@ const Navbar = () => {
           <Link to="/" className="navbar-item" onClick={() => setIsMenuOpen(false)}>Home</Link>
           <Link to="/shop" className="navbar-item" onClick={() => setIsMenuOpen(false)}>Shop</Link>
           <Link to="/explore" className="navbar-item" onClick={() => setIsMenuOpen(false)}>Explore</Link>
-          <Link to="/events" className="navbar-item" onClick={() => setIsMenuOpen(false)}>Events</Link>
           
           {isAuthenticated ? (
             <>
               {isAdmin && (
                 <Link to="/admin/dashboard" className="navbar-item" onClick={() => setIsMenuOpen(false)}>
                   Admin Dashboard
-                </Link>
-              )}
-              
-              {!isAdmin && (
-                <Link to="/my-event-requests" className="navbar-item" onClick={() => setIsMenuOpen(false)}>
-                  My Event Requests
                 </Link>
               )}
               

@@ -605,51 +605,6 @@
   background-color: #d5d5d5;
 }
 
-/* Event request details */
-.event-request-details {
-  background-color: white;
-  border-radius: 8px;
-  padding: 2rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-}
-
-.request-details-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.request-details-header h2 {
-  margin: 0;
-  color: var(--text-color);
-}
-
-.request-info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-}
-
-.request-info-card {
-  background-color: #f9f9f9;
-  padding: 1.5rem;
-  border-radius: 8px;
-}
-
-.request-info-card h3 {
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-  color: var(--text-color);
-  font-size: 1.2rem;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 0.8rem;
-}
-
-.request-info-card p {
-  margin: 0.75rem 0;
-  color: #444;
-}
 
 .admin-feedback-input {
   margin-top: 2rem;

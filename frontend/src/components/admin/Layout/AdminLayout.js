@@ -54,13 +54,6 @@ const AdminLayout = () => {
           </NavLink>
           
           <NavLink 
-            to="/admin/event-requests" 
-            className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}
-          >
-            Event Requests
-          </NavLink>
-          
-          <NavLink 
             to="/admin/settings" 
             className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}
           >

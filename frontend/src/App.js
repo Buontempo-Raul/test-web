@@ -12,9 +12,6 @@ import Home from './pages/Home/Home';
 import Shop from './pages/Shop/Shop';
 import ProductDetail from './pages/Shop/ProductDetail';
 import Explore from './pages/Explore/Explore';
-import Events from './pages/Events/Events';
-import EventDetail from './pages/Events/EventDetail';
-import MyEventRequests from './pages/Events/MyEventRequests';
 import Profile from './pages/Profile/Profile';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
@@ -27,13 +24,11 @@ import AdminUsers from './pages/Admin/Users';
 import AdminProducts from './pages/Admin/Products';
 import AdminOrders from './pages/Admin/Orders';
 import AdminSettings from './pages/Admin/Settings';
-import AdminEventRequests from './pages/Admin/EventRequests';
 
 // Components
 import Navbar from './components/common/Navbar/Navbar';
 import Footer from './components/common/Footer/Footer';
 import ProtectedRoute from './components/common/ProtectedRoute/ProtectedRoute';
-import EventRequestForm from './components/events/EventRequestForm/EventRequestForm';
 
 function App() {
   return (
@@ -49,17 +44,9 @@ function App() {
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/shop/product/:id" element={<ProductDetail />} />
                 <Route path="/explore" element={<Explore />} />
-                <Route path="/events" element={<Events />} />
-                <Route path="/events/:id" element={<EventDetail />} />
                 <Route path="/profile/:username" element={<Profile />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                
-                {/* Protected Routes - Regular User */}
-                <Route element={<ProtectedRoute />}>
-                  <Route path="/request-event" element={<EventRequestForm />} />
-                  <Route path="/my-event-requests" element={<MyEventRequests />} />
-                </Route>
                 
                 {/* Admin Routes */}
                 <Route path="/admin" element={<ProtectedRoute adminOnly={true} />}>
@@ -70,7 +57,6 @@ function App() {
                     <Route path="products" element={<AdminProducts />} />
                     <Route path="orders" element={<AdminOrders />} />
                     <Route path="settings" element={<AdminSettings />} />
-                    <Route path="event-requests" element={<AdminEventRequests />} />
                   </Route>
                 </Route>
                 

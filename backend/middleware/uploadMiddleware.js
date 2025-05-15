@@ -1,4 +1,4 @@
- // backend/middleware/uploadMiddleware.js
+// backend/middleware/uploadMiddleware.js
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -20,9 +20,10 @@ const storage = multer.diskStorage({
       uploadPath = 'uploads/artworks/';
     } else if (req.originalUrl.includes('/users')) {
       uploadPath = 'uploads/profiles/';
-    } else if (req.originalUrl.includes('/events')) {
-      uploadPath = 'uploads/events/';
+    } else if (req.originalUrl.includes('/posts')) {
+      uploadPath = 'uploads/posts/';
     }
+    // Removed events upload path
     
     // Create directory if it doesn't exist
     createDirIfNotExists(uploadPath);

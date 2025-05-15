@@ -72,7 +72,6 @@ const AdminDashboard = () => {
           <Link to="/admin/users" className="admin-button">Manage Users</Link>
           <Link to="/admin/products" className="admin-button">Manage Products</Link>
           <Link to="/admin/orders" className="admin-button">View Orders</Link>
-          <Link to="/admin/event-requests" className="admin-button">Review Event Requests</Link>
           <Link to="/admin/settings" className="admin-button">Site Settings</Link>
         </div>
       </div>
@@ -90,11 +89,11 @@ const AdminDashboard = () => {
           </div>
           <div className="activity-item">
             <p className="activity-time">Yesterday</p>
-            <p className="activity-description">New event request submitted: "Modern Art Workshop"</p>
+            <p className="activity-description">Product "Abstract Art" updated</p>
           </div>
           <div className="activity-item">
             <p className="activity-time">2 days ago</p>
-            <p className="activity-description">Product "Abstract Art" updated</p>
+            <p className="activity-description">New product added: "Digital Dreams"</p>
           </div>
         </div>
       </div>
