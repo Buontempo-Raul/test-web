@@ -1,0 +1,174 @@
+/* src/components/explore/ExploreFilters/ExploreFilters.css */
+.explore-filters-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .filters-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .filter-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .filter-category {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    background-color: #f5f5f5;
+    border: 1px solid #eee;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #555;
+  }
+  
+  .filter-category:hover {
+    background-color: #f0e6ff;
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  
+  .filter-category.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+  }
+  
+  .more-categories-button {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    background-color: transparent;
+    border: 1px solid #eee;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #888;
+  }
+  
+  .more-categories-button:hover {
+    background-color: #f5f5f5;
+    color: #555;
+  }
+  
+  .following-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    background-color: #f5f5f5;
+    border: 1px solid #eee;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #555;
+  }
+  
+  .following-toggle:hover {
+    background-color: #f0e6ff;
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  
+  .following-toggle.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+  }
+  
+  .following-icon {
+    width: 18px;
+    height: 18px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  
+  .following-icon.active {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>');
+  }
+  
+  .search-container {
+    width: 100%;
+  }
+  
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 1rem;
+    height: 40px;
+    border-radius: 20px;
+    background-color: #f5f5f5;
+    border: 1px solid #eee;
+    transition: border-color 0.3s ease;
+  }
+  
+  .search-bar:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(169, 112, 255, 0.1);
+  }
+  
+  .search-icon {
+    width: 18px;
+    height: 18px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  
+  .search-bar input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 0.95rem;
+    color: #333;
+  }
+  
+  .search-bar input:focus {
+    outline: none;
+  }
+  
+  .clear-search {
+    border: none;
+    background: none;
+    color: #888;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0.2rem;
+    cursor: pointer;
+  }
+  
+  .clear-search:hover {
+    color: #555;
+  }
+  
+  /* Responsive design */
+  @media (max-width: 768px) {
+    .filters-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    
+    .filter-categories {
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+      flex-wrap: nowrap;
+    }
+    
+    .search-bar {
+      width: 100%;
+    }
+  }

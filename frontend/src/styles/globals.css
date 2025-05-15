@@ -1,0 +1,29 @@
+/* src/styles/globals.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+  }
+  
+  body {
+    background-color: #f6f6f6;
+  }
+  
+  .main-content {
+    min-height: calc(100vh - 120px);
+  }
+  
+  /* Add your custom variables here */
+  :root {
+    --primary-color: #a970ff;
+    --secondary-color: #121212;
+    --text-color: #333333;
+    --light-text: #ffffff;
+    --background-color: #f6f6f6;
+    --card-color: #ffffff;
+    --border-color: #e0e0e0;
+    --success-color: #28a745;
+    --error-color: #dc3545;
+    --warning-color: #ffc107;
+  }
