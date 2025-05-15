@@ -77,13 +77,9 @@ export const userAPI = {
     return api.put('/api/users/profile', profileData);
   },
   
-  uploadProfileImage: (formData) => {
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    };
-    return api.post('/api/users/profile/upload', formData, config);
+    uploadProfileImage: (formData) => {
+    // Don't set Content-Type header for FormData - let the browser set it with boundary
+    return api.post('/api/users/profile/upload', formData);
   },
   
   getFavorites: () => {

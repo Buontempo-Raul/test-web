@@ -297,9 +297,18 @@ const uploadProfileImage = async (req, res) => {
     // Get the user
     const user = await User.findById(req.user._id);
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
     // Delete old profile image if it exists and it's not the default
-    if (user.profileImage !== 'default-profile.jpg') {
-      const fullPath = path.join(__dirname, '..', '..', 'uploads/profiles', user.profileImage);
+    if (user.profileImage && 
+        user.profileImage !== 'default-profile.jpg' && 
+        user.profileImage.startsWith('uploads/')) {
+      const fullPath = path.join(__dirname, '..', '..', user.profileImage);
       if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
       }
@@ -315,9 +324,10 @@ const uploadProfileImage = async (req, res) => {
       profileImage: `${req.protocol}://${req.get('host')}/${req.file.path}`
     });
   } catch (error) {
+    console.error('Profile image upload error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message || 'Failed to upload profile image'
     });
   }
 };

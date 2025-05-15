@@ -4,61 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import './Profile.css';
 import { useAuth } from '../../hooks/useAuth';
-
-// Temporary user data - Replace with API calls when ready
-const tempUser = {
-  _id: '1',
-  username: 'artistic_soul',
-  profileImage: 'https://via.placeholder.com/150x150',
-  bio: 'Contemporary artist specializing in abstract expressionism. Exploring the boundaries between form and emotion through vibrant colors and dynamic compositions.',
-  website: 'https://example.com',
-  isArtist: true,
-  createdAt: '2023-01-15T00:00:00.000Z'
-};
-
-// Temporary artwork data - Replace with API calls when ready
-const tempArtworks = [
-  {
-    _id: '1',
-    title: 'Abstract Harmony',
-    description: 'A vibrant exploration of color and form.',
-    images: ['https://via.placeholder.com/400x300?text=Abstract+Harmony'],
-    price: 299.99,
-    category: 'painting',
-    forSale: true,
-    createdAt: '2023-05-10T00:00:00.000Z'
-  },
-  {
-    _id: '5',
-    title: 'Emotional Expressions',
-    description: 'A portrait series capturing human emotions.',
-    images: ['https://via.placeholder.com/400x300?text=Emotional+Expressions'],
-    price: 399.99,
-    category: 'painting',
-    forSale: true,
-    createdAt: '2023-07-22T00:00:00.000Z'
-  },
-  {
-    _id: '7',
-    title: 'Cosmic Journey',
-    description: 'Abstract representation of space and cosmos.',
-    images: ['https://via.placeholder.com/400x300?text=Cosmic+Journey'],
-    price: 449.99,
-    category: 'painting',
-    forSale: true,
-    createdAt: '2023-09-05T00:00:00.000Z'
-  },
-  {
-    _id: '9',
-    title: 'Urban Symphony',
-    description: 'A colorful interpretation of city life and movement.',
-    images: ['https://via.placeholder.com/400x300?text=Urban+Symphony'],
-    price: 329.99,
-    category: 'painting',
-    forSale: false,
-    createdAt: '2023-11-18T00:00:00.000Z'
-  }
-];
+import { userAPI } from '../../services/api';
 
 const Profile = () => {
   const { username } = useParams();
@@ -77,6 +23,8 @@ const Profile = () => {
     website: '',
     profileImage: ''
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [updatingProfile, setUpdatingProfile] = useState(false);
   
   // Use auth hook
   const { currentUser, isAdmin } = useAuth();
@@ -98,45 +46,30 @@ const Profile = () => {
       setError('');
       
       try {
-        // Uncomment when ready to use API
-        // const userResponse = await userAPI.getUserByUsername(username);
-        // const artworksResponse = await userAPI.getUserArtworks(username);
+        // Fetch user data and artworks from API
+        const userResponse = await userAPI.getUserByUsername(username);
+        const artworksResponse = await userAPI.getUserArtworks(username);
         
-        // if (userResponse.data.success && artworksResponse.data.success) {
-        //   setUser(userResponse.data.user);
-        //   setArtworks(artworksResponse.data.artworks);
-        //   
-        //   // Set initial form data for editing
-        //   if (isOwnProfile) {
-        //     setEditFormData({
-        //       username: userResponse.data.user.username,
-        //       bio: userResponse.data.user.bio || '',
-        //       website: userResponse.data.user.website || '',
-        //       profileImage: userResponse.data.user.profileImage || ''
-        //     });
-        //   }
-        // } else {
-        //   setError('Failed to load profile');
-        // }
-
-        // Temporary - using mock data
-        setTimeout(() => {
-          setUser(tempUser);
-          setArtworks(tempArtworks);
+        if (userResponse.data.success && artworksResponse.data.success) {
+          setUser(userResponse.data.user);
+          setArtworks(artworksResponse.data.artworks);
           
           // Set initial form data for editing
-          setEditFormData({
-            username: tempUser.username,
-            bio: tempUser.bio || '',
-            website: tempUser.website || '',
-            profileImage: tempUser.profileImage || ''
-          });
-          
-          setLoading(false);
-        }, 1000);
+          if (isOwnProfile) {
+            setEditFormData({
+              username: userResponse.data.user.username,
+              bio: userResponse.data.user.bio || '',
+              website: userResponse.data.user.website || '',
+              profileImage: userResponse.data.user.profileImage || ''
+            });
+          }
+        } else {
+          setError('Failed to load profile');
+        }
       } catch (error) {
         console.error('Error fetching profile:', error);
         setError('User not found');
+      } finally {
         setLoading(false);
       }
     };
@@ -154,47 +87,92 @@ const Profile = () => {
   };
 
   // Handle profile image change
-  const handleProfileImageChange = (e) => {
+  const handleProfileImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      // In a real app, you'd upload this file to your server and get a URL back
-      // For now, we'll create a local URL for preview purposes
-      const imageUrl = URL.createObjectURL(file);
-      setEditFormData({
-        ...editFormData,
-        profileImage: imageUrl
-      });
+      // Check file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size must be less than 5MB');
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      setUploadingImage(true);
+      
+      try {
+        // Create FormData object for image upload
+        const formData = new FormData();
+        formData.append('profileImage', file);
+        
+        // Upload image to server
+        const response = await userAPI.uploadProfileImage(formData);
+        
+        if (response.data.success) {
+          // Update form data with new image URL
+          setEditFormData({
+            ...editFormData,
+            profileImage: response.data.profileImage
+          });
+          
+          // Update user state if not in edit mode
+          if (!showEditModal) {
+            setUser({
+              ...user,
+              profileImage: response.data.profileImage
+            });
+          }
+          
+          alert('Profile image updated successfully!');
+        } else {
+          alert(response.data.message || 'Failed to upload image');
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        const errorMessage = error.response?.data?.message || 'Failed to upload image. Please try again.';
+        alert(errorMessage);
+      } finally {
+        setUploadingImage(false);
+      }
     }
   };
 
   // Handle form submission
   const handleSubmitEdit = async (e) => {
     e.preventDefault();
+    setUpdatingProfile(true);
     
     try {
-      // In a real app, you'd make an API call to update the profile
-      // const response = await userAPI.updateProfile(editFormData);
-      
-      // Simulate successful update for now
-      console.log('Updating profile with:', editFormData);
-      
-      // Update local user state with the edited data
-      setUser({
-        ...user,
-        username: editFormData.username,
+      // Make API call to update the profile
+      const response = await userAPI.updateProfile({
         bio: editFormData.bio,
-        website: editFormData.website,
-        profileImage: editFormData.profileImage
+        website: editFormData.website
       });
       
-      // Close the modal
-      setShowEditModal(false);
-      
-      // Show a success message
-      alert('Profile updated successfully!');
+      if (response.data.success) {
+        // Update local user state with the edited data
+        setUser({
+          ...user,
+          ...response.data.user
+        });
+        
+        // Close the modal
+        setShowEditModal(false);
+        
+        // Show a success message
+        alert('Profile updated successfully!');
+      } else {
+        alert(response.data.message || 'Failed to update profile');
+      }
     } catch (error) {
       console.error('Error updating profile:', error);
       alert('Failed to update profile. Please try again.');
+    } finally {
+      setUpdatingProfile(false);
     }
   };
 
@@ -248,7 +226,7 @@ const Profile = () => {
       >
         <div className="profile-avatar-container">
           <img 
-            src={user.profileImage} 
+            src={user.profileImage || 'https://via.placeholder.com/150x150'} 
             alt={user.username} 
             className="profile-avatar"
           />
@@ -297,7 +275,7 @@ const Profile = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.5 }}
           >
-            {user.bio}
+            {user.bio || 'No bio provided yet.'}
           </motion.p>
           
           {isOwnProfile && (
@@ -372,10 +350,10 @@ const Profile = () => {
                       }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Link to={`/artwork/${artwork._id}`} className="profile-artwork-image-link">
+                      <Link to={`/shop/product/${artwork._id}`} className="profile-artwork-image-link">
                         <div className="profile-artwork-image-container">
                           <img 
-                            src={artwork.images[0]} 
+                            src={artwork.images[0] || 'https://via.placeholder.com/400x300'} 
                             alt={artwork.title} 
                             className="profile-artwork-image"
                           />
@@ -386,7 +364,7 @@ const Profile = () => {
                       </Link>
                       
                       <div className="profile-artwork-details">
-                        <Link to={`/artwork/${artwork._id}`} className="profile-artwork-title-link">
+                        <Link to={`/shop/product/${artwork._id}`} className="profile-artwork-title-link">
                           <h3 className="profile-artwork-title">{artwork.title}</h3>
                         </Link>
                         
@@ -402,7 +380,7 @@ const Profile = () => {
                           </span>
                         </div>
                         
-                        <Link to={`/artwork/${artwork._id}`} className="profile-artwork-view-button">
+                        <Link to={`/shop/product/${artwork._id}`} className="profile-artwork-view-button">
                           View Details
                         </Link>
                       </div>
@@ -416,8 +394,8 @@ const Profile = () => {
                   <p>There are no artworks to display at this time.</p>
                   
                   {isOwnProfile && (
-                    <Link to="/artwork/create" className="profile-create-button">
-                      Create Your First Artwork
+                    <Link to="/shop" className="profile-create-button">
+                      Add Your First Artwork
                     </Link>
                   )}
                 </div>
@@ -467,7 +445,7 @@ const Profile = () => {
                 <label>Profile Picture</label>
                 <div className="profile-image-upload">
                   <img 
-                    src={editFormData.profileImage} 
+                    src={editFormData.profileImage || 'https://via.placeholder.com/150x150'} 
                     alt="Profile Preview" 
                     className="profile-image-preview" 
                   />
@@ -477,13 +455,15 @@ const Profile = () => {
                     accept="image/*" 
                     onChange={handleProfileImageChange}
                     className="profile-image-input"
+                    disabled={uploadingImage}
                   />
                   <button 
                     type="button" 
                     className="change-image-btn"
                     onClick={handleImageInputClick}
+                    disabled={uploadingImage}
                   >
-                    Choose Image
+                    {uploadingImage ? 'Uploading...' : 'Choose Image'}
                   </button>
                 </div>
               </div>
@@ -495,10 +475,10 @@ const Profile = () => {
                   id="username"
                   name="username"
                   value={editFormData.username}
-                  onChange={handleEditFormChange}
-                  required
+                  disabled
+                  style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
                 />
-                <small>Note: Username changes may not be allowed if already taken.</small>
+                <small>Username cannot be changed.</small>
               </div>
               
               <div className="form-group">
@@ -509,6 +489,7 @@ const Profile = () => {
                   value={editFormData.bio}
                   onChange={handleEditFormChange}
                   rows="4"
+                  placeholder="Tell us about yourself..."
                 />
               </div>
               
@@ -525,11 +506,18 @@ const Profile = () => {
               </div>
               
               <div className="form-actions">
-                <button type="submit" className="save-profile-btn">Save Changes</button>
+                <button 
+                  type="submit" 
+                  className="save-profile-btn"
+                  disabled={updatingProfile}
+                >
+                  {updatingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
                 <button 
                   type="button" 
                   className="cancel-btn" 
                   onClick={() => setShowEditModal(false)}
+                  disabled={updatingProfile}
                 >
                   Cancel
                 </button>

@@ -41,10 +41,18 @@ const storage = multer.diskStorage({
 // File filter to validate uploaded files
 const fileFilter = (req, file, cb) => {
   // Accept images only
-  if (file.mimetype.startsWith('image/')) {
+  const allowedMimeTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp'
+  ];
+  
+  if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed!'), false);
+    cb(new Error(`Invalid file type. Allowed types: JPEG, PNG, GIF, WebP. Received: ${file.mimetype}`), false);
   }
 };
 
@@ -56,6 +64,56 @@ const upload = multer({
   },
   fileFilter: fileFilter
 });
+
+// @desc    Upload profile image
+// @route   POST /api/users/profile/upload
+// @access  Private
+const uploadProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    // Get the user
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Delete old profile image if it exists and it's not the default
+    if (user.profileImage && 
+        user.profileImage !== 'default-profile.jpg' && 
+        user.profileImage.startsWith('uploads/')) {
+      const fullPath = path.join(__dirname, '..', '..', user.profileImage);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+    }
+
+    // Update user with new profile image
+    user.profileImage = req.file.path;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Profile image updated',
+      profileImage: `${req.protocol}://${req.get('host')}/${req.file.path}`
+    });
+  } catch (error) {
+    console.error('Profile image upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to upload profile image'
+    });
+  }
+};
 
 // Export different upload middleware configurations
 module.exports = {
