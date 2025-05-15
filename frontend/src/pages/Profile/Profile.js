@@ -1,6 +1,6 @@
 // src/pages/Profile/Profile.js
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import './Profile.css';
 import { useAuth } from '../../hooks/useAuth';
@@ -62,6 +62,7 @@ const tempArtworks = [
 
 const Profile = () => {
   const { username } = useParams();
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [artworks, setArtworks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +79,14 @@ const Profile = () => {
   });
   
   // Use auth hook
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
+  
+  // Redirect admins to dashboard
+  useEffect(() => {
+    if (isAdmin) {
+      navigate('/admin/dashboard');
+    }
+  }, [isAdmin, navigate]);
   
   // Check if the profile belongs to the current user
   const isOwnProfile = currentUser && (currentUser.username === username);

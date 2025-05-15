@@ -38,9 +38,11 @@ const Navbar = () => {
                 </Link>
               )}
               
-              <Link to={`/profile/${currentUser?.username || 'user'}`} className="navbar-item" onClick={() => setIsMenuOpen(false)}>
-                Profile
-              </Link>
+              {!isAdmin && (
+                <Link to={`/profile/${currentUser?.username || 'user'}`} className="navbar-item" onClick={() => setIsMenuOpen(false)}>
+                  Profile
+                </Link>
+              )}
               
               <button className="navbar-item logout-btn" onClick={handleLogout}>
                 Logout

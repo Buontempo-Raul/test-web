@@ -81,8 +81,13 @@ const initializeData = async () => {
     const User = require('./models/User');
     const bcrypt = require('bcryptjs');
     
-    // Check if admin already exists
-    const adminExists = await User.findOne({ role: 'admin' });
+    // Check if admin already exists by username or role
+    const adminExists = await User.findOne({ 
+      $or: [
+        { username: 'admin' },
+        { role: 'admin' }
+      ]
+    });
     
     if (!adminExists) {
       console.log('Creating admin user...');
@@ -98,31 +103,11 @@ const initializeData = async () => {
         password: hashedPassword,
         isArtist: true,
         role: 'admin',
-        profileImage: 'uploads/profiles/default-profile.jpg',
         bio: 'System administrator for Uncreated platform'
       });
       
       await admin.save();
       console.log('Admin user created successfully');
-    }
-
-    // Copy default images if they don't exist
-    const defaultProfileImagePath = path.join(uploadsDir, 'profiles', 'default-profile.jpg');
-    if (!fs.existsSync(defaultProfileImagePath)) {
-      const defaultImagesDir = path.join(__dirname, 'assets', 'defaults');
-      
-      // Ensure defaults directory exists
-      if (!fs.existsSync(defaultImagesDir)) {
-        fs.mkdirSync(defaultImagesDir, { recursive: true });
-      }
-      
-      // Create a simple default profile image
-      const defaultProfileSource = path.join(defaultImagesDir, 'default-profile.jpg');
-      if (!fs.existsSync(defaultProfileSource)) {
-        console.log('Default profile image not found, it should be created or provided');
-      } else {
-        fs.copyFileSync(defaultProfileSource, defaultProfileImagePath);
-      }
     }
   } catch (error) {
     console.error('Error initializing data:', error);

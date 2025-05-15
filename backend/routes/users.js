@@ -1,4 +1,4 @@
-// backend/routes/users.js (updated)
+// backend/routes/users.js
 const express = require('express');
 const router = express.Router();
 const { 
@@ -13,7 +13,11 @@ const {
   addToFavorites,
   removeFromFavorites,
   getUserFavorites,
-  uploadProfileImage
+  uploadProfileImage,
+  followUser,
+  unfollowUser,
+  getFollowing,
+  getFollowers
 } = require('../controllers/userController');
 const { protect, admin } = require('../middleware/authMiddleware');
 const uploadMiddleware = require('../middleware/uploadMiddleware');
