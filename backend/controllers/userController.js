@@ -2,6 +2,7 @@
 const userService = require('../services/userService');
 const User = require('../models/User');
 const Artwork = require('../models/Artwork');
+const { uploadToAzure, deleteFromAzure } = require('../middleware/azureStorageMiddleware');
 
 // @desc    Get user by username
 // @route   GET /api/users/:username
@@ -287,6 +288,8 @@ const getUserFavorites = async (req, res) => {
 // @access  Private
 const uploadProfileImage = async (req, res) => {
   try {
+    console.log('Upload request received, file:', req.file);
+    
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -304,30 +307,36 @@ const uploadProfileImage = async (req, res) => {
       });
     }
 
-    // Delete old profile image if it exists and it's not the default
+    // Delete old profile image if it exists (and isn't the default)
     if (user.profileImage && 
-        user.profileImage !== 'default-profile.jpg' && 
-        user.profileImage.startsWith('uploads/')) {
-      const fullPath = path.join(__dirname, '..', '..', user.profileImage);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-      }
+        !user.profileImage.includes('default-profile') && 
+        user.profileImage.includes('blob.core.windows.net')) {
+      await deleteFromAzure(user.profileImage);
+      console.log('Deleted old profile image:', user.profileImage);
     }
 
-    // Update user with new profile image
-    user.profileImage = req.file.path;
+    // Generate a unique blob name with a prefix to identify it as a profile picture
+    const blobName = `profile-${user._id}-${Date.now()}-${req.file.originalname.replace(/\s+/g, '-')}`;
+    console.log('Generated blob name:', blobName);
+    
+    // Upload the new image to Azure
+    const imageUrl = await uploadToAzure(req.file, blobName);
+    console.log('Image uploaded to Azure, URL:', imageUrl);
+    
+    // Update user with new profile image URL
+    user.profileImage = imageUrl;
     await user.save();
 
     res.json({
       success: true,
       message: 'Profile image updated',
-      profileImage: `${req.protocol}://${req.get('host')}/${req.file.path}`
+      profileImage: imageUrl
     });
   } catch (error) {
     console.error('Profile image upload error:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to upload profile image'
+      message: 'Failed to upload profile image: ' + error.message
     });
   }
 };

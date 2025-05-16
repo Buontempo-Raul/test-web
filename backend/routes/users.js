@@ -21,6 +21,7 @@ const {
 } = require('../controllers/userController');
 const { protect, admin } = require('../middleware/authMiddleware');
 const uploadMiddleware = require('../middleware/uploadMiddleware');
+const { upload } = require('../middleware/azureStorageMiddleware');
 
 // Public routes
 router.get('/:username', getUserByUsername);
@@ -31,8 +32,7 @@ router.put('/profile', protect, updateUserProfile);
 router.post(
   '/profile/upload',
   protect,
-  uploadMiddleware.single('profileImage'),
-  uploadMiddleware.handleMulterError,
+  upload.single('profileImage'),
   uploadProfileImage
 );
 router.get('/favorites', protect, getUserFavorites);

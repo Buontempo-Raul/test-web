@@ -14,6 +14,8 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('Artworks');
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   
   // Add state for edit modal
   const [showEditModal, setShowEditModal] = useState(false);
@@ -86,60 +88,66 @@ const Profile = () => {
     });
   };
 
-  // Handle profile image change
   const handleProfileImageChange = async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Check file size (5MB limit)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
-        return;
-      }
+  const file = e.target.files[0];
+  if (!file) {
+    return; // Silently return if no file selected
+  }
+  
+  // Check file size (5MB limit)
+  if (file.size > 5 * 1024 * 1024) {
+    // Instead of alert, you could show an error message in the UI
+    setUploadError('File size must be less than 5MB');
+    return;
+  }
+  
+  // Check file type
+  if (!file.type.startsWith('image/')) {
+    setUploadError('Please select an image file');
+    return;
+  }
+  
+  setUploadingImage(true);
+  setUploadError(null); // Clear any previous errors
+  
+  try {
+    // Create FormData object for image upload
+    const formData = new FormData();
+    formData.append('profileImage', file);
+    
+    // Upload image to server
+    const response = await userAPI.uploadProfileImage(formData);
+    
+    if (response.data.success) {
+      // Update form data with new image URL
+      setEditFormData({
+        ...editFormData,
+        profileImage: response.data.profileImage
+      });
       
-      // Check file type
-      if (!file.type.startsWith('image/')) {
-        alert('Please select an image file');
-        return;
-      }
+      // Update user state
+      setUser({
+        ...user,
+        profileImage: response.data.profileImage
+      });
       
-      setUploadingImage(true);
+      // Instead of alert, show success feedback in the UI
+      setUploadSuccess(true);
       
-      try {
-        // Create FormData object for image upload
-        const formData = new FormData();
-        formData.append('profileImage', file);
-        
-        // Upload image to server
-        const response = await userAPI.uploadProfileImage(formData);
-        
-        if (response.data.success) {
-          // Update form data with new image URL
-          setEditFormData({
-            ...editFormData,
-            profileImage: response.data.profileImage
-          });
-          
-          // Update user state if not in edit mode
-          if (!showEditModal) {
-            setUser({
-              ...user,
-              profileImage: response.data.profileImage
-            });
-          }
-          
-          alert('Profile image updated successfully!');
-        } else {
-          alert(response.data.message || 'Failed to upload image');
-        }
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        const errorMessage = error.response?.data?.message || 'Failed to upload image. Please try again.';
-        alert(errorMessage);
-      } finally {
-        setUploadingImage(false);
-      }
+      // Automatically hide success message after 3 seconds
+      setTimeout(() => {
+        setUploadSuccess(false);
+      }, 3000);
+    } else {
+      setUploadError(response.data.message || 'Failed to upload image');
     }
-  };
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    setUploadError('Failed to upload image. Please try again.');
+  } finally {
+    setUploadingImage(false);
+  }
+};
 
   // Handle form submission
   const handleSubmitEdit = async (e) => {
@@ -445,10 +453,29 @@ const Profile = () => {
                 <label>Profile Picture</label>
                 <div className="profile-image-upload">
                   <img 
-                    src={editFormData.profileImage || 'https://via.placeholder.com/150x150'} 
-                    alt="Profile Preview" 
-                    className="profile-image-preview" 
+                    src={user.profileImage || 'https://via.placeholder.com/150x150'} 
+                    alt={user.username} 
+                    className="profile-avatar"
                   />
+                  
+                  {uploadingImage && (
+                    <div className="upload-status uploading">
+                      <span>Uploading...</span>
+                    </div>
+                  )}
+                  
+                  {uploadSuccess && (
+                    <div className="upload-status success">
+                      <span>Profile image updated successfully!</span>
+                    </div>
+                  )}
+                  
+                  {uploadError && (
+                    <div className="upload-status error">
+                      <span>{uploadError}</span>
+                    </div>
+                  )}
+                  
                   <input 
                     type="file" 
                     id="profile-image-input"
@@ -460,7 +487,7 @@ const Profile = () => {
                   <button 
                     type="button" 
                     className="change-image-btn"
-                    onClick={handleImageInputClick}
+                    onClick={() => document.getElementById('profile-image-input').click()}
                     disabled={uploadingImage}
                   >
                     {uploadingImage ? 'Uploading...' : 'Choose Image'}

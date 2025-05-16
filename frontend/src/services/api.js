@@ -77,9 +77,12 @@ export const userAPI = {
     return api.put('/api/users/profile', profileData);
   },
   
-    uploadProfileImage: (formData) => {
-    // Don't set Content-Type header for FormData - let the browser set it with boundary
-    return api.post('/api/users/profile/upload', formData);
+  uploadProfileImage: (formData) => {
+    return api.post('/api/users/profile/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
   },
   
   getFavorites: () => {
