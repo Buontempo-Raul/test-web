@@ -2,7 +2,7 @@
 const userService = require('../services/userService');
 const User = require('../models/User');
 const Artwork = require('../models/Artwork');
-const { uploadToAzure, deleteFromAzure } = require('../middleware/azureStorageMiddleware');
+const { uploadToAzure, deleteFromAzure, generateBlobName } = require('../middleware/azureStorageMiddleware');
 
 // @desc    Get user by username
 // @route   GET /api/users/:username
@@ -315,12 +315,12 @@ const uploadProfileImage = async (req, res) => {
       console.log('Deleted old profile image:', user.profileImage);
     }
 
-    // Generate a unique blob name with a prefix to identify it as a profile picture
-    const blobName = `profile-${user._id}-${Date.now()}-${req.file.originalname.replace(/\s+/g, '-')}`;
+    // Generate a unique blob name using the helper function
+    const blobName = generateBlobName('profile', user._id, req.file.originalname);
     console.log('Generated blob name:', blobName);
     
-    // Upload the new image to Azure
-    const imageUrl = await uploadToAzure(req.file, blobName);
+    // Upload the new image to Azure (to the images container)
+    const imageUrl = await uploadToAzure(req.file, blobName, 'images');
     console.log('Image uploaded to Azure, URL:', imageUrl);
     
     // Update user with new profile image URL

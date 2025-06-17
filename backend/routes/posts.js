@@ -13,7 +13,7 @@ const {
   getUserPosts
 } = require('../controllers/postController');
 const { protect } = require('../middleware/authMiddleware');
-const uploadMiddleware = require('../middleware/uploadMiddleware');
+const { uploadPostMedia } = require('../middleware/azureStorageMiddleware');
 
 // Get all posts with filtering
 router.get('/', getPosts);
@@ -28,8 +28,7 @@ router.get('/:id', getPostById);
 router.post(
   '/',
   protect,
-  uploadMiddleware.array('media', 10), // Allow up to 10 files for carousel
-  uploadMiddleware.handleMulterError,
+  uploadPostMedia.array('media', 10), // Allow up to 10 files for carousel
   createPost
 );
 
@@ -37,8 +36,7 @@ router.post(
 router.put(
   '/:id',
   protect,
-  uploadMiddleware.array('media', 10),
-  uploadMiddleware.handleMulterError,
+  uploadPostMedia.array('media', 10),
   updatePost
 );
 

@@ -2,8 +2,7 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
 const Artwork = require('../models/Artwork');
-const fs = require('fs');
-const path = require('path');
+const { uploadToAzure, deleteFromAzure, generateBlobName } = require('../middleware/azureStorageMiddleware');
 
 // @desc    Get all posts with filtering
 // @route   GET /api/posts
@@ -37,12 +36,10 @@ const getPosts = async (req, res) => {
 
     // Filter by following
     if (followingOnly === 'true' && req.user) {
-      // Get user's following list (assuming it's stored in User model)
       const currentUser = await User.findById(req.user._id);
       if (currentUser && currentUser.following && currentUser.following.length > 0) {
         query.creator = { $in: currentUser.following };
       } else {
-        // If user isn't following anyone, return empty array
         return res.json({
           success: true,
           count: 0,
@@ -75,114 +72,12 @@ const getPosts = async (req, res) => {
       .populate('creator', 'username profileImage')
       .populate('linkedShopItem', 'title price images');
 
-    // Format response data
-    const formattedPosts = posts.map(post => {
-      const postObj = post.toObject();
-      
-      // Format content URLs
-      if (postObj.content.type === 'image' && postObj.content.url) {
-        postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-      } else if (postObj.content.type === 'video') {
-        if (postObj.content.url) {
-          postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-        }
-        if (postObj.content.thumbnailUrl) {
-          postObj.content.thumbnailUrl = `${req.protocol}://${req.get('host')}/${postObj.content.thumbnailUrl}`;
-        }
-      } else if (postObj.content.type === 'carousel' && postObj.content.items) {
-        postObj.content.items = postObj.content.items.map(item => {
-          if (item.url) {
-            item.url = `${req.protocol}://${req.get('host')}/${item.url}`;
-          }
-          return item;
-        });
-      }
-
-      // Format linked shop item image
-      if (postObj.linkedShopItem && postObj.linkedShopItem.images && postObj.linkedShopItem.images.length > 0) {
-        postObj.linkedShopItem.images = postObj.linkedShopItem.images.map(img => 
-          `${req.protocol}://${req.get('host')}/${img}`
-        );
-      }
-
-      // Format profile image
-      if (postObj.creator && postObj.creator.profileImage) {
-        postObj.creator.profileImage = `${req.protocol}://${req.get('host')}/${postObj.creator.profileImage}`;
-      }
-
-      return postObj;
-    });
-
     res.json({
       success: true,
       count,
       pages: Math.ceil(count / pageSize),
       currentPage: pageNumber,
-      posts: formattedPosts
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// @desc    Get posts by a specific user
-// @route   GET /api/posts/user/:userId
-// @access  Public
-const getUserPosts = async (req, res) => {
-  try {
-    const userId = req.params.userId;
-    
-    // Find posts by user ID
-    const posts = await Post.find({ creator: userId })
-      .sort({ createdAt: -1 })
-      .populate('creator', 'username profileImage')
-      .populate('linkedShopItem', 'title price images');
-    
-    // Format response data (similar to getPosts)
-    const formattedPosts = posts.map(post => {
-      const postObj = post.toObject();
-      
-      // Format content URLs
-      if (postObj.content.type === 'image' && postObj.content.url) {
-        postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-      } else if (postObj.content.type === 'video') {
-        if (postObj.content.url) {
-          postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-        }
-        if (postObj.content.thumbnailUrl) {
-          postObj.content.thumbnailUrl = `${req.protocol}://${req.get('host')}/${postObj.content.thumbnailUrl}`;
-        }
-      } else if (postObj.content.type === 'carousel' && postObj.content.items) {
-        postObj.content.items = postObj.content.items.map(item => {
-          if (item.url) {
-            item.url = `${req.protocol}://${req.get('host')}/${item.url}`;
-          }
-          return item;
-        });
-      }
-
-      // Format linked shop item image
-      if (postObj.linkedShopItem && postObj.linkedShopItem.images && postObj.linkedShopItem.images.length > 0) {
-        postObj.linkedShopItem.images = postObj.linkedShopItem.images.map(img => 
-          `${req.protocol}://${req.get('host')}/${img}`
-        );
-      }
-
-      // Format profile image
-      if (postObj.creator && postObj.creator.profileImage) {
-        postObj.creator.profileImage = `${req.protocol}://${req.get('host')}/${postObj.creator.profileImage}`;
-      }
-
-      return postObj;
-    });
-
-    res.json({
-      success: true,
-      count: posts.length,
-      posts: formattedPosts
+      posts
     });
   } catch (error) {
     res.status(500).json({
@@ -209,53 +104,9 @@ const getPostById = async (req, res) => {
       });
     }
 
-    // Format response data (similar to getPosts)
-    const postObj = post.toObject();
-    
-    // Format content URLs
-    if (postObj.content.type === 'image' && postObj.content.url) {
-      postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-    } else if (postObj.content.type === 'video') {
-      if (postObj.content.url) {
-        postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-      }
-      if (postObj.content.thumbnailUrl) {
-        postObj.content.thumbnailUrl = `${req.protocol}://${req.get('host')}/${postObj.content.thumbnailUrl}`;
-      }
-    } else if (postObj.content.type === 'carousel' && postObj.content.items) {
-      postObj.content.items = postObj.content.items.map(item => {
-        if (item.url) {
-          item.url = `${req.protocol}://${req.get('host')}/${item.url}`;
-        }
-        return item;
-      });
-    }
-
-    // Format linked shop item image
-    if (postObj.linkedShopItem && postObj.linkedShopItem.images && postObj.linkedShopItem.images.length > 0) {
-      postObj.linkedShopItem.images = postObj.linkedShopItem.images.map(img => 
-        `${req.protocol}://${req.get('host')}/${img}`
-      );
-    }
-
-    // Format profile images
-    if (postObj.creator && postObj.creator.profileImage) {
-      postObj.creator.profileImage = `${req.protocol}://${req.get('host')}/${postObj.creator.profileImage}`;
-    }
-    
-    // Format comment user profile images
-    if (postObj.comments && postObj.comments.length > 0) {
-      postObj.comments = postObj.comments.map(comment => {
-        if (comment.user && comment.user.profileImage) {
-          comment.user.profileImage = `${req.protocol}://${req.get('host')}/${comment.user.profileImage}`;
-        }
-        return comment;
-      });
-    }
-
     res.json({
       success: true,
-      post: postObj
+      post
     });
   } catch (error) {
     res.status(500).json({
@@ -280,32 +131,43 @@ const createPost = async (req, res) => {
       });
     }
 
-    // Process files based on content type
+    // Process files and upload to Azure
     let content = {};
     
     if (contentType === 'image' && req.files.length === 1) {
       // Single image post
+      const file = req.files[0];
+      const blobName = generateBlobName('post', req.user._id, file.originalname);
+      const url = await uploadToAzure(file, blobName, 'posts');
+      
       content = {
         type: 'image',
-        url: req.files[0].path,
-        aspectRatio: '1:1' // Default, can be calculated from actual image
+        url,
+        aspectRatio: '1:1'
       };
     } else if (contentType === 'video' && req.files.length === 1) {
       // Single video post
+      const file = req.files[0];
+      const blobName = generateBlobName('post', req.user._id, file.originalname);
+      const url = await uploadToAzure(file, blobName, 'posts');
+      
       content = {
         type: 'video',
-        url: req.files[0].path,
-        thumbnailUrl: req.files[0].path, // In a real app, generate a thumbnail
-        aspectRatio: '16:9' // Default
+        url,
+        thumbnailUrl: url, // In production, generate a proper thumbnail
+        aspectRatio: '16:9'
       };
     } else if (req.files.length > 1) {
       // Carousel post with multiple items
-      const items = req.files.map(file => {
+      const items = await Promise.all(req.files.map(async (file) => {
+        const blobName = generateBlobName('post', req.user._id, file.originalname);
+        const url = await uploadToAzure(file, blobName, 'posts');
+        
         return {
           type: file.mimetype.startsWith('image/') ? 'image' : 'video',
-          url: file.path
+          url
         };
-      });
+      }));
       
       content = {
         type: 'carousel',
@@ -316,62 +178,29 @@ const createPost = async (req, res) => {
     // Parse tags
     const parsedTags = tags ? tags.split(',').map(tag => tag.trim()) : [];
 
-    // Create new post
+    // Create the post
     const post = new Post({
       creator: req.user._id,
       content,
       caption,
       tags: parsedTags,
-      linkedShopItem: linkedShopItem || null
+      linkedShopItem
     });
 
-    const createdPost = await post.save();
+    await post.save();
 
-    // Populate creator and shop item
-    await createdPost.populate('creator', 'username profileImage');
+    // Populate creator info
+    await post.populate('creator', 'username profileImage');
     if (linkedShopItem) {
-      await createdPost.populate('linkedShopItem', 'title price images');
-    }
-
-    // Format response data
-    const postObj = createdPost.toObject();
-    
-    // Format content URLs
-    if (postObj.content.type === 'image' && postObj.content.url) {
-      postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-    } else if (postObj.content.type === 'video') {
-      if (postObj.content.url) {
-        postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-      }
-      if (postObj.content.thumbnailUrl) {
-        postObj.content.thumbnailUrl = `${req.protocol}://${req.get('host')}/${postObj.content.thumbnailUrl}`;
-      }
-    } else if (postObj.content.type === 'carousel' && postObj.content.items) {
-      postObj.content.items = postObj.content.items.map(item => {
-        if (item.url) {
-          item.url = `${req.protocol}://${req.get('host')}/${item.url}`;
-        }
-        return item;
-      });
-    }
-
-    // Format linked shop item image
-    if (postObj.linkedShopItem && postObj.linkedShopItem.images && postObj.linkedShopItem.images.length > 0) {
-      postObj.linkedShopItem.images = postObj.linkedShopItem.images.map(img => 
-        `${req.protocol}://${req.get('host')}/${img}`
-      );
-    }
-
-    // Format profile image
-    if (postObj.creator && postObj.creator.profileImage) {
-      postObj.creator.profileImage = `${req.protocol}://${req.get('host')}/${postObj.creator.profileImage}`;
+      await post.populate('linkedShopItem', 'title price images');
     }
 
     res.status(201).json({
       success: true,
-      post: postObj
+      post
     });
   } catch (error) {
+    console.error('Error creating post:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -404,65 +233,55 @@ const updatePost = async (req, res) => {
     const { caption, tags, linkedShopItem } = req.body;
 
     // Update fields
-    if (caption) post.caption = caption;
+    if (caption !== undefined) post.caption = caption;
     if (tags) post.tags = tags.split(',').map(tag => tag.trim());
-    if (linkedShopItem) post.linkedShopItem = linkedShopItem;
+    if (linkedShopItem !== undefined) post.linkedShopItem = linkedShopItem;
 
     // Update content if new files are uploaded
     if (req.files && req.files.length > 0) {
-      const contentType = req.body.contentType || post.content.type;
-      
-      // Delete old media files
+      // Delete old media files from Azure
       if (post.content.type === 'image' && post.content.url) {
-        const fullPath = path.join(__dirname, '..', '..', post.content.url);
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
-        }
-      } else if (post.content.type === 'video') {
-        if (post.content.url) {
-          const fullPath = path.join(__dirname, '..', '..', post.content.url);
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath);
-          }
-        }
-        if (post.content.thumbnailUrl && post.content.thumbnailUrl !== post.content.url) {
-          const fullPath = path.join(__dirname, '..', '..', post.content.thumbnailUrl);
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath);
-          }
-        }
+        await deleteFromAzure(post.content.url);
+      } else if (post.content.type === 'video' && post.content.url) {
+        await deleteFromAzure(post.content.url);
       } else if (post.content.type === 'carousel' && post.content.items) {
-        post.content.items.forEach(item => {
-          if (item.url) {
-            const fullPath = path.join(__dirname, '..', '..', item.url);
-            if (fs.existsSync(fullPath)) {
-              fs.unlinkSync(fullPath);
-            }
-          }
-        });
+        await Promise.all(post.content.items.map(item => deleteFromAzure(item.url)));
       }
 
-      // Process new files
+      // Upload new files
+      const contentType = req.body.contentType || post.content.type;
+      
       if (contentType === 'image' && req.files.length === 1) {
+        const file = req.files[0];
+        const blobName = generateBlobName('post', req.user._id, file.originalname);
+        const url = await uploadToAzure(file, blobName, 'posts');
+        
         post.content = {
           type: 'image',
-          url: req.files[0].path,
-          aspectRatio: '1:1' // Default
+          url,
+          aspectRatio: '1:1'
         };
       } else if (contentType === 'video' && req.files.length === 1) {
+        const file = req.files[0];
+        const blobName = generateBlobName('post', req.user._id, file.originalname);
+        const url = await uploadToAzure(file, blobName, 'posts');
+        
         post.content = {
           type: 'video',
-          url: req.files[0].path,
-          thumbnailUrl: req.files[0].path, // In a real app, generate a thumbnail
-          aspectRatio: '16:9' // Default
+          url,
+          thumbnailUrl: url,
+          aspectRatio: '16:9'
         };
       } else if (req.files.length > 1) {
-        const items = req.files.map(file => {
+        const items = await Promise.all(req.files.map(async (file) => {
+          const blobName = generateBlobName('post', req.user._id, file.originalname);
+          const url = await uploadToAzure(file, blobName, 'posts');
+          
           return {
             type: file.mimetype.startsWith('image/') ? 'image' : 'video',
-            url: file.path
+            url
           };
-        });
+        }));
         
         post.content = {
           type: 'carousel',
@@ -471,54 +290,20 @@ const updatePost = async (req, res) => {
       }
     }
 
-    // Save updated post
-    const updatedPost = await post.save();
+    await post.save();
 
-    // Populate creator and shop item
-    await updatedPost.populate('creator', 'username profileImage');
-    if (updatedPost.linkedShopItem) {
-      await updatedPost.populate('linkedShopItem', 'title price images');
-    }
-
-    // Format response data
-    const postObj = updatedPost.toObject();
-    
-    // Format content URLs
-    if (postObj.content.type === 'image' && postObj.content.url) {
-      postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-    } else if (postObj.content.type === 'video') {
-      if (postObj.content.url) {
-        postObj.content.url = `${req.protocol}://${req.get('host')}/${postObj.content.url}`;
-      }
-      if (postObj.content.thumbnailUrl) {
-        postObj.content.thumbnailUrl = `${req.protocol}://${req.get('host')}/${postObj.content.thumbnailUrl}`;
-      }
-    } else if (postObj.content.type === 'carousel' && postObj.content.items) {
-      postObj.content.items = postObj.content.items.map(item => {
-        if (item.url) {
-          item.url = `${req.protocol}://${req.get('host')}/${item.url}`;
-        }
-        return item;
-      });
-    }
-
-    // Format linked shop item image
-    if (postObj.linkedShopItem && postObj.linkedShopItem.images && postObj.linkedShopItem.images.length > 0) {
-      postObj.linkedShopItem.images = postObj.linkedShopItem.images.map(img => 
-        `${req.protocol}://${req.get('host')}/${img}`
-      );
-    }
-
-    // Format profile image
-    if (postObj.creator && postObj.creator.profileImage) {
-      postObj.creator.profileImage = `${req.protocol}://${req.get('host')}/${postObj.creator.profileImage}`;
+    // Populate creator info
+    await post.populate('creator', 'username profileImage');
+    if (post.linkedShopItem) {
+      await post.populate('linkedShopItem', 'title price images');
     }
 
     res.json({
       success: true,
-      post: postObj
+      post
     });
   } catch (error) {
+    console.error('Error updating post:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -548,38 +333,16 @@ const deletePost = async (req, res) => {
       });
     }
 
-    // Delete media files
+    // Delete media files from Azure
     if (post.content.type === 'image' && post.content.url) {
-      const fullPath = path.join(__dirname, '..', '..', post.content.url);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-      }
-    } else if (post.content.type === 'video') {
-      if (post.content.url) {
-        const fullPath = path.join(__dirname, '..', '..', post.content.url);
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
-        }
-      }
-      if (post.content.thumbnailUrl && post.content.thumbnailUrl !== post.content.url) {
-        const fullPath = path.join(__dirname, '..', '..', post.content.thumbnailUrl);
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
-        }
-      }
+      await deleteFromAzure(post.content.url);
+    } else if (post.content.type === 'video' && post.content.url) {
+      await deleteFromAzure(post.content.url);
     } else if (post.content.type === 'carousel' && post.content.items) {
-      post.content.items.forEach(item => {
-        if (item.url) {
-          const fullPath = path.join(__dirname, '..', '..', item.url);
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath);
-          }
-        }
-      });
+      await Promise.all(post.content.items.map(item => deleteFromAzure(item.url)));
     }
 
-    // Delete post
-    await Post.findByIdAndDelete(req.params.id);
+    await post.deleteOne();
 
     res.json({
       success: true,
@@ -593,7 +356,7 @@ const deletePost = async (req, res) => {
   }
 };
 
-// @desc    Like a post
+// @desc    Like/Unlike a post
 // @route   POST /api/posts/:id/like
 // @access  Private
 const likePost = async (req, res) => {
@@ -607,14 +370,13 @@ const likePost = async (req, res) => {
       });
     }
 
-    // In a real-world application, you'd track which users have liked the post
-    // For simplicity, we're just incrementing the like count here
-    post.likes += 1;
+    // For simplicity, we'll just increment/decrement the likes count
+    // In production, you'd track which users liked the post
+    post.likes = post.likes + 1;
     await post.save();
 
     res.json({
       success: true,
-      message: 'Post liked successfully',
       likes: post.likes
     });
   } catch (error) {
@@ -648,31 +410,21 @@ const commentOnPost = async (req, res) => {
       });
     }
 
-    // Add comment to post
     const comment = {
       user: req.user._id,
-      text
+      text,
+      createdAt: new Date()
     };
 
     post.comments.push(comment);
     await post.save();
 
-    // Get the new comment with populated user
-    const updatedPost = await Post.findById(req.params.id)
-      .populate('comments.user', 'username profileImage');
-    
-    const newComment = updatedPost.comments[updatedPost.comments.length - 1];
-    
-    // Format user profile image
-    const formattedComment = newComment.toObject();
-    if (formattedComment.user && formattedComment.user.profileImage) {
-      formattedComment.user.profileImage = `${req.protocol}://${req.get('host')}/${formattedComment.user.profileImage}`;
-    }
+    // Populate the comment user info
+    await post.populate('comments.user', 'username profileImage');
 
     res.status(201).json({
       success: true,
-      message: 'Comment added successfully',
-      comment: formattedComment
+      comment: post.comments[post.comments.length - 1]
     });
   } catch (error) {
     res.status(500).json({
@@ -696,7 +448,6 @@ const deleteComment = async (req, res) => {
       });
     }
 
-    // Find comment
     const comment = post.comments.id(req.params.commentId);
 
     if (!comment) {
@@ -706,24 +457,56 @@ const deleteComment = async (req, res) => {
       });
     }
 
-    // Check if user is the creator of the comment or the post
-    const isCommentCreator = comment.user.toString() === req.user._id.toString();
-    const isPostCreator = post.creator.toString() === req.user._id.toString();
-
-    if (!isCommentCreator && !isPostCreator) {
+    // Check if user is the comment author
+    if (comment.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'You can only delete your own comments'
       });
     }
 
-    // Remove comment
-    comment.remove();
+    comment.deleteOne();
     await post.save();
 
     res.json({
       success: true,
       message: 'Comment deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Get posts by a specific user
+// @route   GET /api/posts/user/:userId
+// @access  Public
+const getUserPosts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { limit = 12, page = 1 } = req.query;
+
+    const pageSize = parseInt(limit);
+    const pageNumber = parseInt(page);
+    const skip = (pageNumber - 1) * pageSize;
+
+    const count = await Post.countDocuments({ creator: userId });
+
+    const posts = await Post.find({ creator: userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .populate('creator', 'username profileImage')
+      .populate('linkedShopItem', 'title price images');
+
+    res.json({
+      success: true,
+      count,
+      pages: Math.ceil(count / pageSize),
+      currentPage: pageNumber,
+      posts
     });
   } catch (error) {
     res.status(500).json({

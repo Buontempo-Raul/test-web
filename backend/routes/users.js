@@ -20,8 +20,7 @@ const {
   getFollowers
 } = require('../controllers/userController');
 const { protect, admin } = require('../middleware/authMiddleware');
-const uploadMiddleware = require('../middleware/uploadMiddleware');
-const { upload } = require('../middleware/azureStorageMiddleware');
+const { uploadProfileImage: uploadMiddleware } = require('../middleware/azureStorageMiddleware');
 
 // Public routes
 router.get('/:username', getUserByUsername);
@@ -32,7 +31,7 @@ router.put('/profile', protect, updateUserProfile);
 router.post(
   '/profile/upload',
   protect,
-  upload.single('profileImage'),
+  uploadMiddleware.single('profileImage'),
   uploadProfileImage
 );
 router.get('/favorites', protect, getUserFavorites);
