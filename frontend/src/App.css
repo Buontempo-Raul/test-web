@@ -36,3 +36,43 @@
     transform: rotate(360deg);
   }
 }
+
+
+/* Add these to your global styles (App.css or index.css) */
+
+:root {
+  --primary-color: #9b51e0;
+  --primary-hover: #8a5ce6;
+  --text-color: #1a1a1a;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+  --background-light: #f8f9fa;
+  --background-white: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-light);
+  color: var(--text-color);
+}
+
+/* Ensure the main app container has proper styling */
+.App {
+  min-height: 100vh;
+  background-color: var(--background-light);
+}
+
+/* If you have a main content area */
+.main-content {
+  padding-top: 60px; /* Adjust based on your navbar height */
+  min-height: calc(100vh - 60px);
+}

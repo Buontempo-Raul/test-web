@@ -1,226 +1,140 @@
-// src/components/explore/PostCard/PostCard.js
+// frontend/src/components/explore/PostCard/PostCard.js
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import api from '../../../services/api';
 import './PostCard.css';
 
-const PostCard = ({ post, currentUser, isAuthenticated }) => {
+const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated }) => {
   const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [likesCount, setLikesCount] = useState(post.likes);
+  const [likes, setLikes] = useState(post.likes || 0);
   const [showComments, setShowComments] = useState(false);
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState([]);
-  const [loadingComments, setLoadingComments] = useState(false);
+  const [comments, setComments] = useState(post.comments || []);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
 
-  // Truncate caption if it's too long
-  const truncateCaption = (text, maxLength = 150) => {
-    if (!text) return '';
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '... ';
-  };
-
-  // Format the date relative to now
-  const formatRelativeTime = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
-    const diffMinutes = Math.floor(diffTime / (1000 * 60));
-    
-    if (diffDays > 0) {
-      return diffDays === 1 ? 'Yesterday' : `${diffDays} days ago`;
-    } else if (diffHours > 0) {
-      return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
-    } else if (diffMinutes > 0) {
-      return `${diffMinutes} ${diffMinutes === 1 ? 'minute' : 'minutes'} ago`;
-    } else {
-      return 'Just now';
-    }
-  };
-
-  const handleLike = () => {
+  // Handle like functionality
+  const handleLike = async () => {
     if (!isAuthenticated) {
       alert('Please log in to like posts');
       return;
     }
-    
-    // Toggle liked state
-    setLiked(!liked);
-    setLikesCount(liked ? likesCount - 1 : likesCount + 1);
-    
-    // In a real app, call API to update like status
-    // fetch(`/api/posts/${post.id}/like`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${localStorage.getItem('token')}`
-    //   }
-    // });
-  };
 
-  const handleSave = () => {
-    if (!isAuthenticated) {
-      alert('Please log in to save posts');
-      return;
-    }
-    
-    // Toggle saved state
-    setSaved(!saved);
-    
-    // In a real app, call API to update saved status
-    // fetch(`/api/posts/${post.id}/save`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${localStorage.getItem('token')}`
-    //   }
-    // });
-  };
-
-  const handleToggleComments = async () => {
-    // If already showing comments, just hide them
-    if (showComments) {
-      setShowComments(false);
-      return;
-    }
-    
-    // If not authenticated, prompt to log in
-    if (!isAuthenticated) {
-      alert('Please log in to view comments');
-      return;
-    }
-    
-    // Fetch comments if we're showing them for the first time
-    if (comments.length === 0) {
-      setLoadingComments(true);
-      
-      try {
-        // In a real app, fetch comments from API
-        // const response = await fetch(`/api/posts/${post.id}/comments`);
-        // const data = await response.json();
-        // setComments(data.comments);
-        
-        // Simulate API call with mock data
-        setTimeout(() => {
-          const mockComments = [
-            {
-              id: '1',
-              user: {
-                username: 'art_enthusiast',
-                profileImage: 'https://via.placeholder.com/32x32'
-              },
-              text: 'This is absolutely stunning work! Love the composition.',
-              createdAt: '2025-04-11T15:45:00Z'
-            },
-            {
-              id: '2',
-              user: {
-                username: 'creative_soul99',
-                profileImage: 'https://via.placeholder.com/32x32'
-              },
-              text: 'The colors are so vibrant. What medium did you use?',
-              createdAt: '2025-04-11T16:20:00Z'
-            }
-          ];
-          
-          setComments(mockComments);
-          setLoadingComments(false);
-        }, 1000);
-      } catch (error) {
-        console.error('Error fetching comments:', error);
-        setLoadingComments(false);
+    try {
+      const response = await api.post(`/api/posts/${post._id}/like`);
+      if (response.data.success) {
+        setLiked(!liked);
+        setLikes(response.data.likes);
       }
+    } catch (error) {
+      console.error('Error liking post:', error);
     }
-    
-    setShowComments(true);
   };
 
-  const handleCommentChange = (e) => {
-    setComment(e.target.value);
-  };
-
-  const handleAddComment = (e) => {
+  // Handle comment submission
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    
     if (!comment.trim()) return;
-    
-    // In a real app, send comment to API
-    // const response = await fetch(`/api/posts/${post.id}/comments`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${localStorage.getItem('token')}`
-    //   },
-    //   body: JSON.stringify({ text: comment })
-    // });
-    
-    // Optimistically add comment to UI
-    const newComment = {
-      id: Date.now().toString(),
-      user: {
-        username: currentUser?.username || 'current_user',
-        profileImage: currentUser?.profileImage || 'https://via.placeholder.com/32x32'
-      },
-      text: comment,
-      createdAt: new Date().toISOString()
-    };
-    
-    setComments([...comments, newComment]);
-    setComment('');
+
+    try {
+      const response = await api.post(`/api/posts/${post._id}/comment`, {
+        text: comment
+      });
+      
+      if (response.data.success) {
+        setComments([...comments, response.data.comment]);
+        setComment('');
+      }
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      alert('Failed to post comment');
+    }
   };
 
-  // Render media content based on type
-  const renderContent = () => {
-    if (!post.content) return null;
+  // Navigate carousel
+  const handlePrevMedia = () => {
+    setCurrentMediaIndex((prev) => 
+      prev === 0 ? post.content.items.length - 1 : prev - 1
+    );
+  };
+
+  const handleNextMedia = () => {
+    setCurrentMediaIndex((prev) => 
+      prev === post.content.items.length - 1 ? 0 : prev + 1
+    );
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
-    switch (post.content.type) {
-      case 'image':
-        return (
-          <div className="post-image-container">
-            <img src={post.content.url} alt="Post" className="post-image" />
-          </div>
-        );
-      case 'video':
-        return (
-          <div className="post-video-container">
-            <video 
-              src={post.content.url}
-              poster={post.content.thumbnailUrl}
-              controls
-              className="post-video"
-            />
-          </div>
-        );
-      case 'carousel':
-        // Simple carousel implementation - in a real app, use a carousel component
-        return (
-          <div className="post-carousel">
-            <div className="carousel-inner">
-              {post.content.items.map((item, index) => (
-                <div key={index} className="carousel-item">
-                  {item.type === 'image' ? (
-                    <img src={item.url} alt={`Slide ${index + 1}`} />
-                  ) : (
-                    <video src={item.url} controls />
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="carousel-indicators">
-              {post.content.items.map((_, index) => (
-                <span 
-                  key={index} 
-                  className="carousel-indicator"
-                  data-active={index === 0}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      default:
-        return null;
+    if (diffDays === 0) {
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      if (diffHours === 0) {
+        const diffMinutes = Math.floor(diffTime / (1000 * 60));
+        return `${diffMinutes}m ago`;
+      }
+      return `${diffHours}h ago`;
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      return `${diffDays}d ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
+  // Render media content
+  const renderMedia = () => {
+    if (post.content.type === 'image') {
+      return (
+        <div className="post-media">
+          <img src={post.content.url} alt={post.caption || 'Post'} />
+        </div>
+      );
+    } else if (post.content.type === 'video') {
+      return (
+        <div className="post-media">
+          <video controls>
+            <source src={post.content.url} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      );
+    } else if (post.content.type === 'carousel') {
+      const currentItem = post.content.items[currentMediaIndex];
+      return (
+        <div className="post-media carousel">
+          {currentItem.type === 'image' ? (
+            <img src={currentItem.url} alt={`Slide ${currentMediaIndex + 1}`} />
+          ) : (
+            <video controls>
+              <source src={currentItem.url} type="video/mp4" />
+            </video>
+          )}
+          {post.content.items.length > 1 && (
+            <>
+              <button className="carousel-nav prev" onClick={handlePrevMedia}>
+                ‹
+              </button>
+              <button className="carousel-nav next" onClick={handleNextMedia}>
+                ›
+              </button>
+              <div className="carousel-indicators">
+                {post.content.items.map((_, index) => (
+                  <span
+                    key={index}
+                    className={`indicator ${index === currentMediaIndex ? 'active' : ''}`}
+                    onClick={() => setCurrentMediaIndex(index)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      );
     }
   };
 
@@ -228,147 +142,88 @@ const PostCard = ({ post, currentUser, isAuthenticated }) => {
     <div className="post-card">
       {/* Post Header */}
       <div className="post-header">
-        <Link to={`/profile/${post.creator.username}`} className="creator-info">
-          <div className="creator-avatar">
-            <img src={post.creator.profileImage} alt={post.creator.username} />
+        <Link to={`/profile/${post.creator.username}`} className="post-creator">
+          <img 
+            src={post.creator.profileImage || '/default-profile.jpg'} 
+            alt={post.creator.username}
+            className="creator-avatar"
+          />
+          <div className="creator-info">
+            <span className="creator-name">{post.creator.username}</span>
+            <span className="post-date">{formatDate(post.createdAt)}</span>
           </div>
-          <div className="creator-name">{post.creator.username}</div>
         </Link>
-        <div className="post-time">{formatRelativeTime(post.createdAt)}</div>
       </div>
-      
+
+      {/* Post Media */}
+      {renderMedia()}
+
+      {/* Post Actions */}
+      <div className="post-actions">
+        <button 
+          className={`action-btn ${liked ? 'liked' : ''}`}
+          onClick={handleLike}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+          <span>{likes}</span>
+        </button>
+        <button 
+          className="action-btn"
+          onClick={() => setShowComments(!showComments)}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>{comments.length}</span>
+        </button>
+      </div>
+
       {/* Post Content */}
       <div className="post-content">
-        {renderContent()}
-      </div>
-      
-
-        {/* Post Actions */}
-        <div className="post-actions">
-          <div className="action-buttons">
-            <button 
-              className={`action-button like-button ${liked ? 'liked' : ''}`}
-              onClick={handleLike}
-              aria-label="Like post"
-            >
-              <i className={`like-icon ${liked ? 'liked' : ''}`}></i>
-              <span>{likesCount}</span>
-            </button>
-            
-            <button 
-              className="action-button comment-button"
-              onClick={handleToggleComments}
-              aria-label="Comment"
-            >
-              <i className="comment-icon"></i>
-              <span>{post.comments}</span>
-            </button>
-            
-            <button 
-              className="action-button share-button"
-              aria-label="Share post"
-            >
-              <i className="share-icon"></i>
-            </button>
-            
-            <button 
-              className={`action-button save-button ${saved ? 'saved' : ''}`}
-              onClick={handleSave}
-              aria-label="Save post"
-            >
-              <i className={`save-icon ${saved ? 'saved' : ''}`}></i>
-            </button>
+        {post.caption && (
+          <p className="post-caption">
+            <Link to={`/profile/${post.creator.username}`} className="creator-link">
+              {post.creator.username}
+            </Link>
+            {' '}{post.caption}
+          </p>
+        )}
+        {post.tags && post.tags.length > 0 && (
+          <div className="post-tags">
+            {post.tags.map((tag, index) => (
+              <span key={index} className="tag">#{tag}</span>
+            ))}
           </div>
-        </div>
-      
-      {/* Shop Item Link (if applicable) */}
-      {post.linkedShopItem && (
-        <div className="shop-item-link">
-          <Link to={`/shop/item/${post.linkedShopItem.id}`} className="shop-item">
-            <div className="shop-icon"></div>
-            <div className="shop-item-info">
-              <span className="shop-item-label">Available in Shop</span>
-              <span className="shop-item-name">{post.linkedShopItem.name}</span>
-              <span className="shop-item-price">${post.linkedShopItem.price.toFixed(2)}</span>
-            </div>
-            <div className="shop-item-action">
-              <button className="shop-button">View</button>
-            </div>
-          </Link>
-        </div>
-      )}
-      
-      {/* Post Caption */}
-      <div className="post-caption">
-        <Link to={`/profile/${post.creator.username}`} className="caption-username">
-          {post.creator.username}
-        </Link>{' '}
-        <span>{truncateCaption(post.caption)}</span>
-        {post.caption.length > 150 && (
-          <button className="read-more-button">more</button>
         )}
       </div>
-      
-      {/* Post Tags */}
-      <div className="post-tags">
-        {post.tags.map((tag, index) => (
-          <Link key={index} to={`/explore?tag=${tag}`} className="post-tag">
-            #{tag}
-          </Link>
-        ))}
-      </div>
-      
+
       {/* Comments Section */}
       {showComments && (
         <div className="comments-section">
-          <h4 className="comments-heading">Comments</h4>
-          
-          {loadingComments ? (
-            <div className="comments-loading">Loading comments...</div>
-          ) : (
-            <>
-              <div className="comments-list">
-                {comments.length > 0 ? (
-                  comments.map((comment) => (
-                    <div key={comment.id} className="comment">
-                      <Link to={`/profile/${comment.user.username}`} className="comment-avatar">
-                        <img src={comment.user.profileImage} alt={comment.user.username} />
-                      </Link>
-                      <div className="comment-content">
-                        <div className="comment-header">
-                          <Link to={`/profile/${comment.user.username}`} className="comment-username">
-                            {comment.user.username}
-                          </Link>
-                          <span className="comment-time">{formatRelativeTime(comment.createdAt)}</span>
-                        </div>
-                        <div className="comment-text">{comment.text}</div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="no-comments">Be the first to comment!</div>
-                )}
+          <div className="comments-list">
+            {comments.map((comment) => (
+              <div key={comment._id} className="comment">
+                <Link to={`/profile/${comment.user.username}`} className="comment-author">
+                  {comment.user.username}
+                </Link>
+                <span className="comment-text">{comment.text}</span>
               </div>
-              
-              {isAuthenticated && (
-                <form className="comment-form" onSubmit={handleAddComment}>
-                  <input
-                    type="text"
-                    placeholder="Add a comment..."
-                    value={comment}
-                    onChange={handleCommentChange}
-                    className="comment-input"
-                  />
-                  <button 
-                    type="submit" 
-                    className="comment-submit"
-                    disabled={!comment.trim()}
-                  >
-                    Post
-                  </button>
-                </form>
-              )}
-            </>
+            ))}
+          </div>
+          {isAuthenticated && (
+            <form className="comment-form" onSubmit={handleCommentSubmit}>
+              <input
+                type="text"
+                placeholder="Add a comment..."
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+              />
+              <button type="submit" disabled={!comment.trim()}>
+                Post
+              </button>
+            </form>
           )}
         </div>
       )}
