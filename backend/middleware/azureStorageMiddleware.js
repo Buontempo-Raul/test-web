@@ -22,16 +22,21 @@ const createUploadMiddleware = (allowVideo = false) => {
       fileSize: allowVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024, // 50MB for videos, 10MB for images
     },
     fileFilter: (req, file, cb) => {
+      console.log("=== Multer File Filter Debug ===");
       console.log("Received file:", file.originalname, file.mimetype);
+      console.log("Allow video:", allowVideo);
       
       const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
       const allowedVideoTypes = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo'];
       
       if (allowedImageTypes.includes(file.mimetype)) {
+        console.log("File accepted: Valid image type");
         cb(null, true);
       } else if (allowVideo && allowedVideoTypes.includes(file.mimetype)) {
+        console.log("File accepted: Valid video type");
         cb(null, true);
       } else {
+        console.log("File rejected: Invalid type");
         cb(new Error(`Invalid file type. Allowed types: ${allowVideo ? 'images and videos' : 'images only'}`), false);
       }
     }
@@ -40,16 +45,45 @@ const createUploadMiddleware = (allowVideo = false) => {
 
 // Helper function to upload a file to Azure Blob Storage
 const uploadToAzure = async (file, blobName, containerName = 'images') => {
-  const container = containerName === 'posts' ? postsContainer : imagesContainer;
-  const blockBlobClient = container.getBlockBlobClient(blobName);
-  
-  await blockBlobClient.upload(file.buffer, file.size, {
-    blobHTTPHeaders: {
-      blobContentType: file.mimetype
+  try {
+    console.log('=== Azure Upload Debug ===');
+    console.log('Container name:', containerName);
+    console.log('Blob name:', blobName);
+    console.log('File size:', file.size || file.buffer?.length);
+    console.log('File mimetype:', file.mimetype);
+    
+    // Check if connection string is available
+    if (!connectionString) {
+      throw new Error('Azure Storage connection string not configured');
     }
-  });
-  
-  return blockBlobClient.url;
+    
+    const container = containerName === 'posts' ? postsContainer : imagesContainer;
+    console.log('Using container:', container.containerName);
+    
+    const blockBlobClient = container.getBlockBlobClient(blobName);
+    
+    // Use the file buffer if available, otherwise use the file itself
+    const fileData = file.buffer || file;
+    const fileSize = file.size || file.buffer?.length;
+    
+    console.log('Starting Azure blob upload...');
+    
+    await blockBlobClient.upload(fileData, fileSize, {
+      blobHTTPHeaders: {
+        blobContentType: file.mimetype
+      }
+    });
+    
+    console.log('Azure upload successful. URL:', blockBlobClient.url);
+    return blockBlobClient.url;
+  } catch (error) {
+    console.error('=== Azure Upload Error ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    
+    // Re-throw with more context
+    throw new Error(`Azure storage upload failed: ${error.message}`);
+  }
 };
 
 // Helper function to delete a blob
@@ -73,6 +107,19 @@ const deleteFromAzure = async (blobUrl) => {
   }
 };
 
+const checkAzureConfig = () => {
+  console.log('=== Azure Storage Configuration Check ===');
+  console.log('Connection string available:', !!connectionString);
+  
+  if (!connectionString) {
+    console.error('ERROR: AZURE_STORAGE_CONNECTION_STRING not found in environment variables');
+    return false;
+  }
+  
+  console.log('Azure Storage configured successfully');
+  return true;
+};
+
 // Helper function to generate unique blob names
 const generateBlobName = (prefix, userId, originalName) => {
   const timestamp = Date.now();
@@ -85,6 +132,9 @@ const generateBlobName = (prefix, userId, originalName) => {
 const uploadProfileImage = createUploadMiddleware(false);
 const uploadPostMedia = createUploadMiddleware(true);
 
+checkAzureConfig();
+
+
 module.exports = {
   uploadProfileImage,
   uploadPostMedia,
@@ -92,5 +142,6 @@ module.exports = {
   postsContainer,
   uploadToAzure,
   deleteFromAzure,
-  generateBlobName
+  generateBlobName,
+  checkAzureConfig
 };

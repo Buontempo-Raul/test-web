@@ -1,4 +1,4 @@
-// src/context/AuthContext.js
+// src/context/AuthContext.js - Fix to prevent role confusion
 import React, { createContext, useState, useEffect } from 'react';
 import authService from '../services/auth';
 
@@ -18,12 +18,19 @@ export const AuthProvider = ({ children }) => {
         const user = authService.getUserFromStorage();
         
         if (user) {
+          // Ensure role is only 'user' or 'admin', never 'artist'
+          if (user.role && !['user', 'admin'].includes(user.role)) {
+            console.warn('Invalid role detected, defaulting to user:', user.role);
+            user.role = 'user';
+          }
+          
           setCurrentUser(user);
           setIsAuthenticated(true);
           // Set admin status if user has admin role
           setIsAdmin(user.role === 'admin');
           console.log("User authenticated:", user);
           console.log("Is admin:", user.role === 'admin');
+          console.log("Is artist:", user.isArtist); // Use isArtist field instead of role
         }
       } catch (error) {
         console.error('Authentication error:', error);
@@ -46,9 +53,15 @@ export const AuthProvider = ({ children }) => {
       });
       
       if (result.success) {
-        setCurrentUser(result.user);
+        // Ensure proper role handling
+        const user = result.user;
+        if (user.role && !['user', 'admin'].includes(user.role)) {
+          user.role = 'user';
+        }
+        
+        setCurrentUser(user);
         setIsAuthenticated(true);
-        setIsAdmin(result.user.role === 'admin');
+        setIsAdmin(user.role === 'admin');
       }
       
       return result;
@@ -67,8 +80,8 @@ export const AuthProvider = ({ children }) => {
           _id: 'admin123',
           username: 'admin',
           email: 'admin@uncreated.com',
-          role: 'admin',
-          isArtist: true,
+          role: 'admin', // Correct role
+          isArtist: true, // Can be an artist but role is still admin
           profileImage: 'default-profile.jpg',
           token: 'simulated_token_123'
         };
@@ -91,9 +104,16 @@ export const AuthProvider = ({ children }) => {
       });
       
       if (result.success) {
-        setCurrentUser(result.user);
+        // Ensure proper role handling
+        const user = result.user;
+        if (user.role && !['user', 'admin'].includes(user.role)) {
+          console.warn('Invalid role detected, defaulting to user:', user.role);
+          user.role = 'user';
+        }
+        
+        setCurrentUser(user);
         setIsAuthenticated(true);
-        setIsAdmin(result.user.role === 'admin');
+        setIsAdmin(user.role === 'admin');
       }
       
       return result;

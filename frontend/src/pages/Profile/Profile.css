@@ -544,7 +544,7 @@
 }
 
 .profile-image-input {
-  display: none;
+  display: none !important; /* Keep this as backup */
 }
 
 .change-image-btn {
@@ -559,6 +559,11 @@
 
 .change-image-btn:hover {
   background-color: #e0e0e0;
+}
+
+.change-image-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Form Actions */

@@ -1,4 +1,6 @@
-// backend/models/User.js
+// backend/models/User.js - Fix the role enum to include 'artist' if needed
+// OR ensure we never set role to 'artist'
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -47,7 +49,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin'], // Keep only 'user' and 'admin' - do NOT add 'artist'
     default: 'user'
   },
   favorites: [{

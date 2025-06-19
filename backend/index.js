@@ -96,19 +96,38 @@ const initializeData = async () => {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash('admin123', salt);
       
-      // Create admin user
+      // Create admin user with correct role
       const admin = new User({
         username: 'admin',
         email: 'admin@uncreated.com',
         password: hashedPassword,
-        isArtist: true,
-        role: 'admin',
+        isArtist: true,  // Can be an artist
+        role: 'admin',   // But role is admin, NOT 'artist'
         bio: 'System administrator for Uncreated platform'
       });
       
       await admin.save();
       console.log('Admin user created successfully');
     }
+    
+    // Check for any users with invalid roles and fix them
+    console.log('Checking for users with invalid roles...');
+    const usersWithInvalidRoles = await User.find({ 
+      role: { $nin: ['user', 'admin'] } 
+    });
+    
+    if (usersWithInvalidRoles.length > 0) {
+      console.log(`Found ${usersWithInvalidRoles.length} users with invalid roles. Fixing...`);
+      
+      for (const user of usersWithInvalidRoles) {
+        console.log(`Fixing user ${user.username}: role "${user.role}" -> "user"`);
+        user.role = 'user'; // Set to default user role
+        await user.save();
+      }
+      
+      console.log('Fixed all users with invalid roles');
+    }
+    
   } catch (error) {
     console.error('Error initializing data:', error);
   }

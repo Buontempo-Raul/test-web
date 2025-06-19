@@ -1,4 +1,5 @@
-// backend/routes/users.js
+// backend/routes/users.js - Fix the import and route configuration
+
 const express = require('express');
 const router = express.Router();
 const { 
@@ -20,7 +21,7 @@ const {
   getFollowers
 } = require('../controllers/userController');
 const { protect, admin } = require('../middleware/authMiddleware');
-const { uploadProfileImage: uploadMiddleware } = require('../middleware/azureStorageMiddleware');
+const { uploadProfileImage: uploadProfileImageMiddleware } = require('../middleware/azureStorageMiddleware');
 
 // Public routes
 router.get('/:username', getUserByUsername);
@@ -28,12 +29,15 @@ router.get('/:username/artworks', getUserArtworks);
 
 // Protected routes (logged in users)
 router.put('/profile', protect, updateUserProfile);
+
+// Fixed profile image upload route
 router.post(
   '/profile/upload',
   protect,
-  uploadMiddleware.single('profileImage'),
+  uploadProfileImageMiddleware.single('profileImage'), // Use the correct middleware
   uploadProfileImage
 );
+
 router.get('/favorites', protect, getUserFavorites);
 router.post('/favorites/:artworkId', protect, addToFavorites);
 router.delete('/favorites/:artworkId', protect, removeFromFavorites);

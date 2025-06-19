@@ -96,7 +96,6 @@ const Profile = () => {
   
   // Check file size (5MB limit)
   if (file.size > 5 * 1024 * 1024) {
-    // Instead of alert, you could show an error message in the UI
     setUploadError('File size must be less than 5MB');
     return;
   }
@@ -109,14 +108,26 @@ const Profile = () => {
   
   setUploadingImage(true);
   setUploadError(null); // Clear any previous errors
+  setUploadSuccess(false); // Clear any previous success messages
   
   try {
+    console.log('Starting profile image upload...');
+    console.log('File details:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
+    
     // Create FormData object for image upload
     const formData = new FormData();
     formData.append('profileImage', file);
     
+    console.log('Sending upload request...');
+    
     // Upload image to server
     const response = await userAPI.uploadProfileImage(formData);
+    
+    console.log('Upload response:', response.data);
     
     if (response.data.success) {
       // Update form data with new image URL
@@ -131,7 +142,7 @@ const Profile = () => {
         profileImage: response.data.profileImage
       });
       
-      // Instead of alert, show success feedback in the UI
+      // Show success feedback in the UI
       setUploadSuccess(true);
       
       // Automatically hide success message after 3 seconds
@@ -139,11 +150,22 @@ const Profile = () => {
         setUploadSuccess(false);
       }, 3000);
     } else {
+      // Handle case where response is not successful
       setUploadError(response.data.message || 'Failed to upload image');
     }
   } catch (error) {
     console.error('Error uploading image:', error);
-    setUploadError('Failed to upload image. Please try again.');
+    
+    // Extract the actual error message from the response
+    let errorMessage = 'Failed to upload image. Please try again.';
+    
+    if (error.response && error.response.data && error.response.data.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.message) {
+      errorMessage = `Upload failed: ${error.message}`;
+    }
+    
+    setUploadError(errorMessage);
   } finally {
     setUploadingImage(false);
   }
@@ -455,7 +477,7 @@ const Profile = () => {
                   <img 
                     src={user.profileImage || 'https://via.placeholder.com/150x150'} 
                     alt={user.username} 
-                    className="profile-avatar"
+                    className="profile-image-preview"
                   />
                   
                   {uploadingImage && (
@@ -476,14 +498,17 @@ const Profile = () => {
                     </div>
                   )}
                   
+                  {/* Hidden file input */}
                   <input 
                     type="file" 
                     id="profile-image-input"
                     accept="image/*" 
                     onChange={handleProfileImageChange}
-                    className="profile-image-input"
+                    style={{ display: 'none' }}
                     disabled={uploadingImage}
                   />
+                  
+                  {/* Custom button */}
                   <button 
                     type="button" 
                     className="change-image-btn"

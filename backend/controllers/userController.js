@@ -288,9 +288,22 @@ const getUserFavorites = async (req, res) => {
 // @access  Private
 const uploadProfileImage = async (req, res) => {
   try {
-    console.log('Upload request received, file:', req.file);
+    console.log('=== Profile Image Upload Debug ===');
+    console.log('User ID:', req.user?._id);
+    console.log('User role:', req.user?.role);
+    console.log('Is Artist:', req.user?.isArtist);
+    console.log('File received:', req.file ? 'Yes' : 'No');
+    
+    if (req.file) {
+      console.log('File details:', {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      });
+    }
     
     if (!req.file) {
+      console.log('ERROR: No file uploaded');
       return res.status(400).json({
         success: false,
         message: 'No file uploaded'
@@ -298,21 +311,35 @@ const uploadProfileImage = async (req, res) => {
     }
 
     // Get the user
+    console.log('Looking up user with ID:', req.user._id);
     const user = await User.findById(req.user._id);
 
     if (!user) {
+      console.log('ERROR: User not found');
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
 
+    console.log('User found:', {
+      username: user.username,
+      isArtist: user.isArtist,
+      currentProfileImage: user.profileImage
+    });
+
     // Delete old profile image if it exists (and isn't the default)
     if (user.profileImage && 
         !user.profileImage.includes('default-profile') && 
         user.profileImage.includes('blob.core.windows.net')) {
-      await deleteFromAzure(user.profileImage);
-      console.log('Deleted old profile image:', user.profileImage);
+      console.log('Attempting to delete old profile image:', user.profileImage);
+      try {
+        await deleteFromAzure(user.profileImage);
+        console.log('Successfully deleted old profile image');
+      } catch (deleteError) {
+        console.log('Warning: Could not delete old profile image:', deleteError.message);
+        // Don't fail the upload if we can't delete the old image
+      }
     }
 
     // Generate a unique blob name using the helper function
@@ -320,12 +347,14 @@ const uploadProfileImage = async (req, res) => {
     console.log('Generated blob name:', blobName);
     
     // Upload the new image to Azure (to the images container)
+    console.log('Uploading to Azure...');
     const imageUrl = await uploadToAzure(req.file, blobName, 'images');
-    console.log('Image uploaded to Azure, URL:', imageUrl);
+    console.log('Image uploaded to Azure successfully. URL:', imageUrl);
     
     // Update user with new profile image URL
     user.profileImage = imageUrl;
     await user.save();
+    console.log('User profile updated successfully');
 
     res.json({
       success: true,
@@ -333,10 +362,15 @@ const uploadProfileImage = async (req, res) => {
       profileImage: imageUrl
     });
   } catch (error) {
-    console.error('Profile image upload error:', error);
+    console.error('=== Profile Image Upload Error ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
     res.status(500).json({
       success: false,
-      message: 'Failed to upload profile image: ' + error.message
+      message: `Failed to upload profile image: ${error.message}`,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
