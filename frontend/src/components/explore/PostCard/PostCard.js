@@ -41,7 +41,7 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated }) => {
       });
       
       if (response.data.success) {
-        setComments([...comments, response.data.comment]);
+        setComments(prevComments => [...prevComments, response.data.comment]);
         setComment('');
       }
     } catch (error) {
@@ -205,8 +205,11 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated }) => {
           <div className="comments-list">
             {comments.map((comment) => (
               <div key={comment._id} className="comment">
-                <Link to={`/profile/${comment.user.username}`} className="comment-author">
-                  {comment.user.username}
+                <Link 
+                  to={`/profile/${comment.user?.username || 'unknown'}`} 
+                  className="comment-author"
+                >
+                  {comment.user?.username || 'Anonymous'}
                 </Link>
                 <span className="comment-text">{comment.text}</span>
               </div>

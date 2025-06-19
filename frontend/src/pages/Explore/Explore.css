@@ -116,11 +116,20 @@
   border-color: #8a5ce6;
 }
 
-/* Posts feed */
+/* Instagram-like Posts Feed */
 .posts-feed {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 2rem;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Make posts full width within the container */
+.posts-feed .post-card {
+  width: 100%;
+  max-width: 600px;
 }
 
 /* Empty state */
@@ -131,7 +140,8 @@
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e5e7eb;
-  grid-column: 1 / -1;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .no-posts h2 {
@@ -214,7 +224,8 @@
   min-height: 400px;
   background-color: white;
   border-radius: 16px;
-  margin: 2rem 0;
+  margin: 2rem auto;
+  max-width: 600px;
 }
 
 .spinner {
@@ -246,7 +257,8 @@
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   border: 1px solid #e5e7eb;
-  margin: 2rem 0;
+  margin: 2rem auto;
+  max-width: 600px;
 }
 
 .explore-error h2 {
@@ -306,8 +318,12 @@
   }
   
   .posts-feed {
-    grid-template-columns: 1fr;
+    max-width: 100%;
     gap: 1.5rem;
+  }
+  
+  .posts-feed .post-card {
+    max-width: 100%;
   }
   
   .search-form {

@@ -91,9 +91,22 @@ const Explore = () => {
     window.scrollTo(0, 0);
   };
 
-  // Get current user from localStorage
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const isAuthenticated = !!localStorage.getItem('token');
+  // Get current user from localStorage with better error handling
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        return JSON.parse(userStr);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error parsing user from localStorage:', error);
+      return null;
+    }
+  };
+
+  const currentUser = getCurrentUser();
+  const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
 
   if (loading && posts.length === 0) {
     return (
