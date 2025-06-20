@@ -9,7 +9,8 @@
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
   width: 100%;
-  margin-bottom: 1.5rem;
+  max-width: 600px;
+  margin: 0 auto 2rem auto;
 }
 
 .post-card:hover {
