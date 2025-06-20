@@ -14,7 +14,8 @@ const getPosts = async (req, res) => {
       user,
       followingOnly,
       limit = 10,
-      page = 1,
+      page = 1,      // Keep for backward compatibility
+      before,        // Cursor for infinite scroll
       search
     } = req.query;
 
@@ -43,7 +44,8 @@ const getPosts = async (req, res) => {
         return res.json({
           success: true,
           count: 0,
-          posts: []
+          posts: [],
+          hasMore: false
         });
       }
     }
@@ -56,36 +58,89 @@ const getPosts = async (req, res) => {
       ];
     }
 
-    // Pagination
+    // Cursor-based pagination for infinite scroll
+    if (before) {
+      // Add date filter for cursor-based pagination
+      query.createdAt = { $lt: new Date(before) };
+    }
+
     const pageSize = parseInt(limit);
-    const pageNumber = parseInt(page);
-    const skip = (pageNumber - 1) * pageSize;
 
-    // Get total count for pagination
-    const count = await Post.countDocuments(query);
+    let posts;
+    let count = 0;
+    let pages = 0;
+    let currentPage = 1;
+    let hasMore = true;
 
-    // Fetch posts with proper population
-    const posts = await Post.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(pageSize)
-      .populate('creator', 'username profileImage')
-      .populate('linkedShopItem', 'title price images')
-      .populate({
-        path: 'comments',
-        populate: {
-          path: 'user',
-          select: 'username profileImage'
-        }
-      });
+    if (before) {
+      // Cursor-based pagination (infinite scroll)
+      posts = await Post.find(query)
+        .sort({ createdAt: -1 })
+        .limit(pageSize + 1) // Get one extra to check if there are more
+        .populate('creator', 'username profileImage')
+        .populate('linkedShopItem', 'title price images')
+        .populate({
+          path: 'comments',
+          populate: {
+            path: 'user',
+            select: 'username profileImage'
+          }
+        });
 
-    res.json({
+      // Check if there are more posts
+      hasMore = posts.length > pageSize;
+      if (hasMore) {
+        posts = posts.slice(0, pageSize); // Remove the extra post
+      }
+
+      // For cursor-based, we don't need total count (expensive operation)
+      count = posts.length;
+    } else {
+      // Traditional pagination (backward compatibility)
+      const pageNumber = parseInt(page);
+      const skip = (pageNumber - 1) * pageSize;
+
+      // Get total count for pagination info
+      count = await Post.countDocuments(query);
+      pages = Math.ceil(count / pageSize);
+      currentPage = pageNumber;
+
+      posts = await Post.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .populate('creator', 'username profileImage')
+        .populate('linkedShopItem', 'title price images')
+        .populate({
+          path: 'comments',
+          populate: {
+            path: 'user',
+            select: 'username profileImage'
+          }
+        });
+
+      hasMore = currentPage < pages;
+    }
+
+    // Optimize response based on pagination type
+    const response = {
       success: true,
-      count,
-      pages: Math.ceil(count / pageSize),
-      currentPage: pageNumber,
       posts
-    });
+    };
+
+    if (before) {
+      // Infinite scroll response
+      response.hasMore = hasMore;
+      response.count = posts.length;
+    } else {
+      // Traditional pagination response
+      response.count = count;
+      response.pages = pages;
+      response.currentPage = currentPage;
+      response.hasMore = hasMore;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Error in getPosts:', error);
     res.status(500).json({
@@ -144,21 +199,47 @@ const createPost = async (req, res) => {
       });
     }
 
+    // Import the Azure upload functions at the top of the file
+    const { uploadToAzure, generateBlobName } = require('../middleware/azureStorageMiddleware');
+
+    // Upload all files to Azure and get URLs
+    const uploadedFiles = [];
+    
+    for (const file of req.files) {
+      try {
+        // Generate unique blob name for posts
+        const blobName = generateBlobName('post', req.user._id, file.originalname);
+        
+        // Upload to Azure (posts container)
+        const fileUrl = await uploadToAzure(file, blobName, 'posts');
+        
+        uploadedFiles.push({
+          type: file.mimetype.startsWith('image/') ? 'image' : 'video',
+          url: fileUrl,
+          mimetype: file.mimetype
+        });
+      } catch (uploadError) {
+        console.error('Error uploading file to Azure:', uploadError);
+        return res.status(500).json({
+          success: false,
+          message: `Failed to upload file: ${file.originalname}`
+        });
+      }
+    }
+
     // Create content object based on number of files
     let content;
-    if (req.files.length === 1) {
-      const file = req.files[0];
-      const fileType = file.mimetype.startsWith('image/') ? 'image' : 'video';
+    if (uploadedFiles.length === 1) {
       content = {
-        type: fileType,
-        url: file.url
+        type: uploadedFiles[0].type,
+        url: uploadedFiles[0].url
       };
     } else {
       // Carousel
       content = {
         type: 'carousel',
-        items: req.files.map(file => ({
-          type: file.mimetype.startsWith('image/') ? 'image' : 'video',
+        items: uploadedFiles.map(file => ({
+          type: file.type,
           url: file.url
         }))
       };
@@ -182,6 +263,7 @@ const createPost = async (req, res) => {
       post
     });
   } catch (error) {
+    console.error('Error creating post:', error);
     res.status(500).json({
       success: false,
       message: error.message

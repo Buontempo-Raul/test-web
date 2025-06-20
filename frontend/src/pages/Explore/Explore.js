@@ -1,6 +1,7 @@
+// Updated Explore component with infinite scroll
 // frontend/src/pages/Explore/Explore.js
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import PostCard from '../../components/explore/PostCard/PostCard';
 import CreatePostModal from '../../components/explore/CreatePostModal/CreatePostModal';
@@ -9,53 +10,77 @@ import './Explore.css';
 const Explore = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastPostDate, setLastPostDate] = useState(null);
   const [filters, setFilters] = useState({
     tag: '',
     followingOnly: false,
     search: ''
   });
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    limit: 10
-  });
 
-  // Fetch posts from the API
-  const fetchPosts = async () => {
+  const observer = useRef();
+  const lastPostElementRef = useCallback(node => {
+    if (loadingMore) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        loadMorePosts();
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loadingMore, hasMore]);
+
+  // Initial posts fetch
+  const fetchPosts = async (reset = false) => {
     try {
-      setLoading(true);
+      setLoading(reset);
       const params = {
-        page: pagination.currentPage,
-        limit: pagination.limit,
+        limit: 10,
         ...(filters.tag && { tag: filters.tag }),
         ...(filters.followingOnly && { followingOnly: 'true' }),
-        ...(filters.search && { search: filters.search })
+        ...(filters.search && { search: filters.search }),
+        // Use cursor-based pagination instead of skip/limit
+        ...(lastPostDate && !reset && { before: lastPostDate })
       };
 
       const response = await api.get('/api/posts', { params });
 
       if (response.data.success) {
-        setPosts(response.data.posts);
-        setPagination(prev => ({
-          ...prev,
-          totalPages: response.data.pages,
-          currentPage: response.data.currentPage
-        }));
+        const newPosts = response.data.posts;
+        
+        if (reset) {
+          setPosts(newPosts);
+        } else {
+          setPosts(prev => [...prev, ...newPosts]);
+        }
+
+        // Update cursor for next page
+        if (newPosts.length > 0) {
+          setLastPostDate(newPosts[newPosts.length - 1].createdAt);
+        }
+
+        // Check if there are more posts
+        setHasMore(newPosts.length === 10); // If we got less than limit, no more posts
       }
     } catch (err) {
       console.error('Error fetching posts:', err);
       setError('Failed to load posts. Please try again later.');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
-  // Fetch posts when component mounts or filters change
-  useEffect(() => {
-    fetchPosts();
-  }, [filters, pagination.currentPage]);
+  // Load more posts (infinite scroll)
+  const loadMorePosts = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    setLoadingMore(true);
+    await fetchPosts(false);
+  };
 
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
@@ -63,11 +88,17 @@ const Explore = () => {
       ...prev,
       [filterType]: value
     }));
-    setPagination(prev => ({
-      ...prev,
-      currentPage: 1 // Reset to first page when filters change
-    }));
+    
+    // Reset everything when filters change
+    setPosts([]);
+    setLastPostDate(null);
+    setHasMore(true);
   };
+
+  // Initial load and filter changes
+  useEffect(() => {
+    fetchPosts(true);
+  }, [filters]);
 
   // Handle search
   const handleSearch = (e) => {
@@ -82,23 +113,11 @@ const Explore = () => {
     setShowCreateModal(false);
   };
 
-  // Handle pagination
-  const handlePageChange = (newPage) => {
-    setPagination(prev => ({
-      ...prev,
-      currentPage: newPage
-    }));
-    window.scrollTo(0, 0);
-  };
-
-  // Get current user from localStorage with better error handling
+  // Get current user from localStorage
   const getCurrentUser = () => {
     try {
       const userStr = localStorage.getItem('user');
-      if (userStr) {
-        return JSON.parse(userStr);
-      }
-      return null;
+      return userStr ? JSON.parse(userStr) : null;
     } catch (error) {
       console.error('Error parsing user from localStorage:', error);
       return null;
@@ -117,12 +136,12 @@ const Explore = () => {
     );
   }
 
-  if (error) {
+  if (error && posts.length === 0) {
     return (
       <div className="explore-error">
         <h2>Error</h2>
         <p>{error}</p>
-        <button onClick={fetchPosts}>Try Again</button>
+        <button onClick={() => fetchPosts(true)}>Try Again</button>
       </div>
     );
   }
@@ -193,40 +212,40 @@ const Explore = () => {
 
       {/* Posts Feed */}
       {posts.length > 0 ? (
-        <>
-          <div className="posts-feed">
-            {posts.map(post => (
-              <PostCard
+        <div className="posts-feed">
+          {posts.map((post, index) => {
+            // Add ref to last post for infinite scroll
+            const isLast = index === posts.length - 1;
+            return (
+              <div
                 key={post._id}
-                post={post}
-                currentUser={currentUser}
-                isAuthenticated={isAuthenticated}
-                onPostUpdated={fetchPosts}
-              />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="pagination">
-              <button
-                disabled={pagination.currentPage === 1}
-                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                ref={isLast ? lastPostElementRef : null}
               >
-                Previous
-              </button>
-              <span>
-                Page {pagination.currentPage} of {pagination.totalPages}
-              </span>
-              <button
-                disabled={pagination.currentPage === pagination.totalPages}
-                onClick={() => handlePageChange(pagination.currentPage + 1)}
-              >
-                Next
-              </button>
+                <PostCard
+                  post={post}
+                  currentUser={currentUser}
+                  isAuthenticated={isAuthenticated}
+                  onPostUpdated={() => fetchPosts(true)}
+                />
+              </div>
+            );
+          })}
+          
+          {/* Loading indicator for infinite scroll */}
+          {loadingMore && (
+            <div className="loading-more">
+              <div className="spinner"></div>
+              <p>Loading more posts...</p>
             </div>
           )}
-        </>
+          
+          {/* End of posts indicator */}
+          {!hasMore && posts.length > 0 && (
+            <div className="end-of-posts">
+              <p>No more posts...</p>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="no-posts">
           <h2>No posts yet</h2>

@@ -128,6 +128,38 @@ const generateBlobName = (prefix, userId, originalName) => {
   return `${prefix}-${userId}-${timestamp}-${randomString}-${cleanName}`;
 };
 
+// Middleware to upload files to Azure and attach URLs
+const uploadFilesToAzure = (containerName = 'posts') => {
+  return async (req, res, next) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return next();
+      }
+
+      console.log(`Uploading ${req.files.length} files to Azure container: ${containerName}`);
+
+      // Upload all files and attach URLs
+      for (const file of req.files) {
+        const blobName = generateBlobName('post', req.user._id, file.originalname);
+        const fileUrl = await uploadToAzure(file, blobName, containerName);
+        
+        // Attach the URL to the file object
+        file.url = fileUrl;
+        
+        console.log(`File uploaded successfully: ${file.originalname} -> ${fileUrl}`);
+      }
+
+      next();
+    } catch (error) {
+      console.error('Azure upload middleware error:', error);
+      return res.status(500).json({
+        success: false,
+        message: `File upload failed: ${error.message}`
+      });
+    }
+  };
+};
+
 // Create specific upload middleware instances
 const uploadProfileImage = createUploadMiddleware(false);
 const uploadPostMedia = createUploadMiddleware(true);
@@ -138,6 +170,7 @@ checkAzureConfig();
 module.exports = {
   uploadProfileImage,
   uploadPostMedia,
+  uploadFilesToAzure,
   imagesContainer,
   postsContainer,
   uploadToAzure,

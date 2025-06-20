@@ -71,4 +71,46 @@ postSchema.index({ createdAt: -1 });
 
 const Post = mongoose.model('Post', postSchema);
 
-module.exports = Post;
+
+// Performance indexes for large datasets
+postSchema.index({ createdAt: -1 }); // For cursor-based pagination
+postSchema.index({ creator: 1, createdAt: -1 }); // For user posts
+postSchema.index({ tags: 1, createdAt: -1 }); // For tag filtering
+postSchema.index({ 
+  caption: 'text', 
+  tags: 'text' 
+}, { 
+  name: 'post_search_index' 
+}); // For text search
+
+// Compound indexes for common query patterns
+postSchema.index({ 
+  creator: 1, 
+  tags: 1, 
+  createdAt: -1 
+}); // For filtered user posts
+
+postSchema.index({ 
+  'creator': 1, 
+  'createdAt': -1 
+}, { 
+  partialFilterExpression: { 'creator': { $exists: true } } 
+}); // For following feed
+
+// Alternative: Run these directly in MongoDB
+/*
+db.posts.createIndex({ "createdAt": -1 })
+db.posts.createIndex({ "creator": 1, "createdAt": -1 })
+db.posts.createIndex({ "tags": 1, "createdAt": -1 })
+db.posts.createIndex({ 
+  "caption": "text", 
+  "tags": "text" 
+})
+db.posts.createIndex({ 
+  "creator": 1, 
+  "tags": 1, 
+  "createdAt": -1 
+})
+*/
+
+module.exports = mongoose.model('Post', postSchema);

@@ -358,3 +358,89 @@
     font-size: 0.85rem;
   }
 }
+
+/* Add these styles to frontend/src/pages/Explore/Explore.css */
+
+/* Infinite Scroll Loading States */
+.loading-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.loading-more .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(155, 81, 224, 0.2);
+  border-radius: 50%;
+  border-top-color: #9b51e0;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 1rem;
+}
+
+.loading-more p {
+  color: #6b7280;
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* End of Posts Indicator */
+.end-of-posts {
+  text-align: center;
+  padding: 3rem 2rem;
+  background-color: white;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+  margin-top: 2rem;
+}
+
+.end-of-posts p {
+  color: #9b51e0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Smooth animations for new posts */
+.posts-feed > div {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Improved responsive design for infinite scroll */
+@media (max-width: 768px) {
+  .loading-more {
+    padding: 1.5rem;
+  }
+  
+  .loading-more .spinner {
+    width: 32px;
+    height: 32px;
+    border-width: 2px;
+  }
+  
+  .end-of-posts {
+    padding: 2rem 1rem;
+    margin-top: 1.5rem;
+  }
+}
+
+/* Performance optimization - hide offscreen posts */
+.posts-feed > div:not([data-visible="true"]) {
+  content-visibility: auto;
+  contain-intrinsic-size: 600px; /* Estimated post height */
+}
