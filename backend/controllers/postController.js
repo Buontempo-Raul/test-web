@@ -14,20 +14,17 @@ const getPosts = async (req, res) => {
       user,
       followingOnly,
       limit = 10,
-      page = 1,      // Keep for backward compatibility
-      before,        // Cursor for infinite scroll
+      page = 1,
+      before,
       search
     } = req.query;
 
-    // Build query
     const query = {};
 
-    // Filter by tag
     if (tag && tag !== 'all') {
       query.tags = tag;
     }
 
-    // Filter by user
     if (user) {
       const userObj = await User.findOne({ username: user });
       if (userObj) {
@@ -35,7 +32,6 @@ const getPosts = async (req, res) => {
       }
     }
 
-    // Filter by following
     if (followingOnly === 'true' && req.user) {
       const currentUser = await User.findById(req.user._id);
       if (currentUser && currentUser.following && currentUser.following.length > 0) {
@@ -50,7 +46,6 @@ const getPosts = async (req, res) => {
       }
     }
 
-    // Search in caption or tags
     if (search) {
       query.$or = [
         { caption: { $regex: search, $options: 'i' } },
@@ -58,9 +53,7 @@ const getPosts = async (req, res) => {
       ];
     }
 
-    // Cursor-based pagination for infinite scroll
     if (before) {
-      // Add date filter for cursor-based pagination
       query.createdAt = { $lt: new Date(before) };
     }
 
@@ -73,10 +66,9 @@ const getPosts = async (req, res) => {
     let hasMore = true;
 
     if (before) {
-      // Cursor-based pagination (infinite scroll)
       posts = await Post.find(query)
         .sort({ createdAt: -1 })
-        .limit(pageSize + 1) // Get one extra to check if there are more
+        .limit(pageSize)
         .populate('creator', 'username profileImage')
         .populate('linkedShopItem', 'title price images')
         .populate({
@@ -87,23 +79,13 @@ const getPosts = async (req, res) => {
           }
         });
 
-      // Check if there are more posts
-      hasMore = posts.length > pageSize;
-      if (hasMore) {
-        posts = posts.slice(0, pageSize); // Remove the extra post
-      }
-
-      // For cursor-based, we don't need total count (expensive operation)
-      count = posts.length;
+      hasMore = posts.length === pageSize;
     } else {
-      // Traditional pagination (backward compatibility)
-      const pageNumber = parseInt(page);
-      const skip = (pageNumber - 1) * pageSize;
+      currentPage = parseInt(page);
+      const skip = (currentPage - 1) * pageSize;
 
-      // Get total count for pagination info
       count = await Post.countDocuments(query);
       pages = Math.ceil(count / pageSize);
-      currentPage = pageNumber;
 
       posts = await Post.find(query)
         .sort({ createdAt: -1 })
@@ -118,31 +100,25 @@ const getPosts = async (req, res) => {
             select: 'username profileImage'
           }
         });
-
-      hasMore = currentPage < pages;
     }
 
-    // Optimize response based on pagination type
-    const response = {
+    const postsWithLikeStatus = posts.map(post => {
+      const postObj = post.toObject();
+      if (req.user) {
+        postObj.isLikedByCurrentUser = post.likedBy.includes(req.user._id);
+      }
+      return postObj;
+    });
+
+    res.json({
       success: true,
-      posts
-    };
-
-    if (before) {
-      // Infinite scroll response
-      response.hasMore = hasMore;
-      response.count = posts.length;
-    } else {
-      // Traditional pagination response
-      response.count = count;
-      response.pages = pages;
-      response.currentPage = currentPage;
-      response.hasMore = hasMore;
-    }
-
-    res.json(response);
+      count,
+      pages,
+      currentPage,
+      hasMore,
+      posts: postsWithLikeStatus
+    });
   } catch (error) {
-    console.error('Error in getPosts:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -150,7 +126,7 @@ const getPosts = async (req, res) => {
   }
 };
 
-// @desc    Get a single post by ID
+// @desc    Get a single post
 // @route   GET /api/posts/:id
 // @access  Public
 const getPostById = async (req, res) => {
@@ -173,9 +149,15 @@ const getPostById = async (req, res) => {
       });
     }
 
+    // Add liked status for authenticated users
+    const postObj = post.toObject();
+    if (req.user) {
+      postObj.isLikedByCurrentUser = post.isLikedByUser(req.user._id);
+    }
+
     res.json({
       success: true,
-      post
+      post: postObj
     });
   } catch (error) {
     res.status(500).json({
@@ -192,54 +174,28 @@ const createPost = async (req, res) => {
   try {
     const { caption, tags, linkedShopItem } = req.body;
 
-    if (!req.files || req.files.length === 0) {
+    if (!req.uploadedFiles || req.uploadedFiles.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'At least one media file is required'
       });
     }
 
-    // Import the Azure upload functions at the top of the file
-    const { uploadToAzure, generateBlobName } = require('../middleware/azureStorageMiddleware');
-
-    // Upload all files to Azure and get URLs
-    const uploadedFiles = [];
-    
-    for (const file of req.files) {
-      try {
-        // Generate unique blob name for posts
-        const blobName = generateBlobName('post', req.user._id, file.originalname);
-        
-        // Upload to Azure (posts container)
-        const fileUrl = await uploadToAzure(file, blobName, 'posts');
-        
-        uploadedFiles.push({
-          type: file.mimetype.startsWith('image/') ? 'image' : 'video',
-          url: fileUrl,
-          mimetype: file.mimetype
-        });
-      } catch (uploadError) {
-        console.error('Error uploading file to Azure:', uploadError);
-        return res.status(500).json({
-          success: false,
-          message: `Failed to upload file: ${file.originalname}`
-        });
-      }
-    }
-
-    // Create content object based on number of files
     let content;
-    if (uploadedFiles.length === 1) {
+    const files = req.uploadedFiles;
+
+    if (files.length === 1) {
+      const file = files[0];
       content = {
-        type: uploadedFiles[0].type,
-        url: uploadedFiles[0].url
+        type: file.mimetype.startsWith('video/') ? 'video' : 'image',
+        url: file.url,
+        aspectRatio: '1:1'
       };
     } else {
-      // Carousel
       content = {
         type: 'carousel',
-        items: uploadedFiles.map(file => ({
-          type: file.type,
+        items: files.map(file => ({
+          type: file.mimetype.startsWith('video/') ? 'video' : 'image',
           url: file.url
         }))
       };
@@ -248,22 +204,22 @@ const createPost = async (req, res) => {
     const post = new Post({
       creator: req.user._id,
       content,
-      caption,
-      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+      caption: caption || '',
+      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim())) : [],
       linkedShopItem: linkedShopItem || null
     });
 
     await post.save();
 
-    // Populate creator info before sending response
-    await post.populate('creator', 'username profileImage');
+    const populatedPost = await Post.findById(post._id)
+      .populate('creator', 'username profileImage')
+      .populate('linkedShopItem', 'title price images');
 
     res.status(201).json({
       success: true,
-      post
+      post: populatedPost
     });
   } catch (error) {
-    console.error('Error creating post:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -276,6 +232,7 @@ const createPost = async (req, res) => {
 // @access  Private
 const updatePost = async (req, res) => {
   try {
+    const { caption, tags } = req.body;
     const post = await Post.findById(req.params.id);
 
     if (!post) {
@@ -285,7 +242,6 @@ const updatePost = async (req, res) => {
       });
     }
 
-    // Check if user is the post creator
     if (post.creator.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -293,27 +249,20 @@ const updatePost = async (req, res) => {
       });
     }
 
-    const { caption, tags } = req.body;
-
-    // Update fields
-    if (caption !== undefined) post.caption = caption;
-    if (tags !== undefined) post.tags = tags.split(',').map(tag => tag.trim());
+    post.caption = caption || post.caption;
+    if (tags) {
+      post.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
+    }
 
     await post.save();
 
-    // Populate before sending response
-    await post.populate('creator', 'username profileImage');
-    await post.populate({
-      path: 'comments',
-      populate: {
-        path: 'user',
-        select: 'username profileImage'
-      }
-    });
+    const updatedPost = await Post.findById(post._id)
+      .populate('creator', 'username profileImage')
+      .populate('linkedShopItem', 'title price images');
 
     res.json({
       success: true,
-      post
+      post: updatedPost
     });
   } catch (error) {
     res.status(500).json({
@@ -337,7 +286,6 @@ const deletePost = async (req, res) => {
       });
     }
 
-    // Check if user is the post creator
     if (post.creator.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -359,7 +307,7 @@ const deletePost = async (req, res) => {
   }
 };
 
-// @desc    Like a post
+// @desc    Like/Unlike a post
 // @route   POST /api/posts/:id/like
 // @access  Private
 const likePost = async (req, res) => {
@@ -373,14 +321,26 @@ const likePost = async (req, res) => {
       });
     }
 
-    // For simplicity, we'll just increment/decrement the likes count
-    // In production, you'd track which users liked the post
-    post.likes = post.likes + 1;
+    const userId = req.user._id;
+    const hasLiked = post.likedBy.includes(userId);
+
+    if (hasLiked) {
+      // Unlike the post
+      post.likedBy = post.likedBy.filter(id => id.toString() !== userId.toString());
+      post.likes = Math.max(0, post.likes - 1);
+    } else {
+      // Like the post
+      post.likedBy.push(userId);
+      post.likes = post.likes + 1;
+    }
+
     await post.save();
 
     res.json({
       success: true,
-      likes: post.likes
+      liked: !hasLiked,
+      likes: post.likes,
+      message: hasLiked ? 'Post unliked' : 'Post liked'
     });
   } catch (error) {
     res.status(500).json({
@@ -397,7 +357,7 @@ const commentOnPost = async (req, res) => {
   try {
     const { text } = req.body;
 
-    if (!text) {
+    if (!text || text.trim() === '') {
       return res.status(400).json({
         success: false,
         message: 'Comment text is required'
@@ -415,31 +375,28 @@ const commentOnPost = async (req, res) => {
 
     const comment = {
       user: req.user._id,
-      text,
+      text: text.trim(),
       createdAt: new Date()
     };
 
     post.comments.push(comment);
     await post.save();
 
-    // Populate the new comment's user info properly
-    await post.populate({
-      path: 'comments',
-      populate: {
-        path: 'user',
-        select: 'username profileImage'
-      }
-    });
+    const updatedPost = await Post.findById(post._id)
+      .populate('creator', 'username profileImage')
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          select: 'username profileImage'
+        }
+      });
 
-    // Return the newly added comment (last one in array)
-    const newComment = post.comments[post.comments.length - 1];
-
-    res.status(201).json({
+    res.json({
       success: true,
-      comment: newComment
+      post: updatedPost
     });
   } catch (error) {
-    console.error('Error in commentOnPost:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -470,7 +427,6 @@ const deleteComment = async (req, res) => {
       });
     }
 
-    // Check if user is the comment author
     if (comment.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -521,12 +477,22 @@ const getUserPosts = async (req, res) => {
         }
       });
 
+    // Add liked status for authenticated users
+    let processedPosts = posts;
+    if (req.user) {
+      processedPosts = posts.map(post => {
+        const postObj = post.toObject();
+        postObj.isLikedByCurrentUser = post.isLikedByUser(req.user._id);
+        return postObj;
+      });
+    }
+
     res.json({
       success: true,
       count,
       pages: Math.ceil(count / pageSize),
       currentPage: pageNumber,
-      posts
+      posts: processedPosts
     });
   } catch (error) {
     res.status(500).json({

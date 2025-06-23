@@ -1,7 +1,4 @@
-// Complete updated PostCard component with delete functionality
-// frontend/src/components/explore/PostCard/PostCard.js
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../../services/api';
 import './PostCard.css';
@@ -15,60 +12,45 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
 
-  // Handle like functionality
+  useEffect(() => {
+    if (isAuthenticated && post.likedBy) {
+      const userLiked = post.likedBy.includes(currentUser?._id || currentUser?.id);
+      setLiked(userLiked);
+    }
+  }, [post.likedBy, currentUser, isAuthenticated]);
+
   const handleLike = async () => {
     if (!isAuthenticated) {
       alert('Please log in to like posts');
       return;
     }
 
+    if (isLiking) return;
+
+    setIsLiking(true);
+    const previousLiked = liked;
+    const previousLikes = likes;
+
+    setLiked(!liked);
+    setLikes(liked ? likes - 1 : likes + 1);
+
     try {
       const response = await api.post(`/api/posts/${post._id}/like`);
       if (response.data.success) {
-        setLiked(!liked);
+        setLiked(response.data.liked);
         setLikes(response.data.likes);
       }
     } catch (error) {
+      setLiked(previousLiked);
+      setLikes(previousLikes);
       console.error('Error liking post:', error);
-    }
-  };
-
-  // Handle post deletion
-  const handleDeletePost = async () => {
-    if (!isAuthenticated) {
-      alert('Please log in to delete posts');
-      return;
-    }
-
-    setIsDeleting(true);
-    try {
-      const response = await api.delete(`/api/posts/${post._id}`);
-      if (response.data.success) {
-        // Call the callback to remove post from parent component
-        if (onPostDeleted) {
-          onPostDeleted(post._id);
-        }
-        alert('Post deleted successfully');
-      }
-    } catch (error) {
-      console.error('Error deleting post:', error);
-      alert(error.response?.data?.message || 'Failed to delete post');
     } finally {
-      setIsDeleting(false);
-      setShowDeleteConfirm(false);
+      setIsLiking(false);
     }
   };
 
-  // Check if current user is the post creator
-  const isPostCreator = currentUser && (
-    currentUser._id === post.creator._id || 
-    currentUser.id === post.creator._id ||
-    currentUser._id === post.creator.toString() ||
-    currentUser.id === post.creator.toString()
-  );
-
-  // Handle comment submission
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
     if (!comment.trim()) return;
@@ -77,59 +59,74 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
       const response = await api.post(`/api/posts/${post._id}/comment`, {
         text: comment
       });
-      
+
       if (response.data.success) {
-        setComments(prevComments => [...prevComments, response.data.comment]);
+        setComments(response.data.post.comments);
         setComment('');
+        if (onPostUpdated) {
+          onPostUpdated(response.data.post);
+        }
       }
     } catch (error) {
-      console.error('Error posting comment:', error);
-      alert('Failed to post comment');
+      console.error('Error adding comment:', error);
     }
   };
 
-  // Navigate carousel - Updated for correct data structure
+  const handleDeletePost = async () => {
+    setIsDeleting(true);
+    try {
+      const response = await api.delete(`/api/posts/${post._id}`);
+      if (response.data.success) {
+        if (onPostDeleted) {
+          onPostDeleted(post._id);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting post:', error);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  const isPostCreator = currentUser && post.creator && 
+    (currentUser._id === post.creator._id || currentUser.id === post.creator._id);
+
   const handlePrevMedia = () => {
-    if (post.content.type === 'carousel' && post.content.items?.length > 1) {
-      setCurrentMediaIndex((prev) => 
-        prev === 0 ? post.content.items.length - 1 : prev - 1
+    if (post.content.type === 'carousel' && post.content.items) {
+      setCurrentMediaIndex(prev => 
+        prev > 0 ? prev - 1 : post.content.items.length - 1
       );
     }
   };
 
   const handleNextMedia = () => {
-    if (post.content.type === 'carousel' && post.content.items?.length > 1) {
-      setCurrentMediaIndex((prev) => 
-        prev === post.content.items.length - 1 ? 0 : prev + 1
+    if (post.content.type === 'carousel' && post.content.items) {
+      setCurrentMediaIndex(prev => 
+        prev < post.content.items.length - 1 ? prev + 1 : 0
       );
     }
   };
 
-  // Format date helper
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-    });
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
+    return date.toLocaleDateString();
   };
 
-  // FIXED: Media rendering that matches your exact Post schema
   const renderMedia = () => {
-    if (!post.content) {
-      console.log('No content object found in post:', post);
-      return null;
-    }
+    if (!post.content) return null;
 
-    console.log('Post content:', post.content); // Debug log
-
-    // Handle carousel type (multiple items)
-    if (post.content.type === 'carousel' && post.content.items?.length > 0) {
-      const currentItem = post.content.items[currentMediaIndex] || post.content.items[0];
-      
+    if (post.content.type === 'carousel' && post.content.items && post.content.items.length > 0) {
+      const currentItem = post.content.items[currentMediaIndex];
       return (
-        <div className="post-media">
+        <div className="post-media carousel">
           {currentItem.type === 'video' ? (
             <video 
               src={currentItem.url} 
@@ -141,26 +138,16 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
               src={currentItem.url} 
               alt={`Post by ${post.creator.username}`}
               className="post-media-content"
-              loading="lazy"
             />
           )}
           
-          {/* Carousel controls for multiple items */}
           {post.content.items.length > 1 && (
             <>
-              <button 
-                className="carousel-nav prev" 
-                onClick={handlePrevMedia}
-                aria-label="Previous image"
-              >
-                ‹
+              <button className="carousel-nav prev" onClick={handlePrevMedia}>
+                &#8249;
               </button>
-              <button 
-                className="carousel-nav next" 
-                onClick={handleNextMedia}
-                aria-label="Next image"
-              >
-                ›
+              <button className="carousel-nav next" onClick={handleNextMedia}>
+                &#8250;
               </button>
               <div className="carousel-indicators">
                 {post.content.items.map((_, index) => (
@@ -168,7 +155,6 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
                     key={index}
                     className={`indicator ${index === currentMediaIndex ? 'active' : ''}`}
                     onClick={() => setCurrentMediaIndex(index)}
-                    aria-label={`Go to image ${index + 1}`}
                   />
                 ))}
               </div>
@@ -178,7 +164,6 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
       );
     }
     
-    // Handle single media (image or video)
     if ((post.content.type === 'image' || post.content.type === 'video') && post.content.url) {
       return (
         <div className="post-media">
@@ -194,21 +179,17 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
               src={post.content.url} 
               alt={`Post by ${post.creator.username}`}
               className="post-media-content"
-              loading="lazy"
             />
           )}
         </div>
       );
     }
     
-    // No valid media found
-    console.log('No valid media found for post:', post._id);
     return null;
   };
 
   return (
     <div className="post-card">
-      {/* Enhanced Post Header with profile navigation and delete option */}
       <div className="post-header">
         <Link to={`/profile/${post.creator.username}`} className="post-creator">
           <img 
@@ -222,13 +203,11 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
           </div>
         </Link>
         
-        {/* Delete button - only show for post creator */}
         {isPostCreator && (
           <div className="post-actions-menu">
             <button
               className="delete-post-btn"
               onClick={() => setShowDeleteConfirm(true)}
-              title="Delete post"
               disabled={isDeleting}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -242,14 +221,13 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
         )}
       </div>
 
-      {/* FIXED: Post Media with proper rendering */}
       {renderMedia()}
 
-      {/* Post Actions */}
       <div className="post-actions">
         <button 
           className={`action-btn ${liked ? 'liked' : ''}`}
           onClick={handleLike}
+          disabled={isLiking}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -268,7 +246,6 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
         </button>
       </div>
 
-      {/* Post Content */}
       <div className="post-content">
         {post.caption && (
           <p className="post-caption">
@@ -291,7 +268,6 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
         )}
       </div>
 
-      {/* Comments Section */}
       {showComments && (
         <div className="comments-section">
           <div className="comments-list">
@@ -324,21 +300,20 @@ const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDel
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="delete-modal-overlay">
           <div className="delete-modal">
             <h3>Delete Post</h3>
             <p>Are you sure you want to delete this post? This action cannot be undone.</p>
             <div className="delete-modal-actions">
-              <button
+              <button 
                 className="cancel-delete-btn"
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
               >
                 Cancel
               </button>
-              <button
+              <button 
                 className="confirm-delete-btn"
                 onClick={handleDeletePost}
                 disabled={isDeleting}

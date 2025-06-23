@@ -51,6 +51,10 @@ const postSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  likedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   comments: [commentSchema],
   linkedShopItem: {
     type: mongoose.Schema.Types.ObjectId,
@@ -64,13 +68,9 @@ const postSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for searching by tags
+// Basic indexes
 postSchema.index({ tags: 1 });
-// Index for sorting by creation date
 postSchema.index({ createdAt: -1 });
-
-const Post = mongoose.model('Post', postSchema);
-
 
 // Performance indexes for large datasets
 postSchema.index({ createdAt: -1 }); // For cursor-based pagination
@@ -82,6 +82,10 @@ postSchema.index({
 }, { 
   name: 'post_search_index' 
 }); // For text search
+
+// New indexes for like functionality
+postSchema.index({ likedBy: 1 }); // For checking if user liked post
+postSchema.index({ likes: -1 }); // For sorting by popularity
 
 // Compound indexes for common query patterns
 postSchema.index({ 
@@ -97,20 +101,47 @@ postSchema.index({
   partialFilterExpression: { 'creator': { $exists: true } } 
 }); // For following feed
 
-// Alternative: Run these directly in MongoDB
-/*
-db.posts.createIndex({ "createdAt": -1 })
-db.posts.createIndex({ "creator": 1, "createdAt": -1 })
-db.posts.createIndex({ "tags": 1, "createdAt": -1 })
-db.posts.createIndex({ 
-  "caption": "text", 
-  "tags": "text" 
-})
-db.posts.createIndex({ 
-  "creator": 1, 
-  "tags": 1, 
-  "createdAt": -1 
-})
-*/
+// Instance methods
+postSchema.methods.isLikedByUser = function(userId) {
+  return this.likedBy.some(likedUserId => likedUserId.toString() === userId.toString());
+};
 
-module.exports = mongoose.model('Post', postSchema);
+postSchema.methods.toggleLike = async function(userId) {
+  const hasLiked = this.isLikedByUser(userId);
+  
+  if (hasLiked) {
+    // Unlike: Remove user from likedBy array and decrement count
+    this.likedBy = this.likedBy.filter(likedUserId => 
+      likedUserId.toString() !== userId.toString()
+    );
+    this.likes = Math.max(0, this.likes - 1);
+    return { liked: false, likes: this.likes };
+  } else {
+    // Like: Add user to likedBy array and increment count
+    this.likedBy.push(userId);
+    this.likes = this.likes + 1;
+    return { liked: true, likes: this.likes };
+  }
+};
+
+// Virtual properties
+postSchema.virtual('likesCount').get(function() {
+  return this.likedBy ? this.likedBy.length : this.likes;
+});
+
+postSchema.virtual('commentsCount').get(function() {
+  return this.comments ? this.comments.length : 0;
+});
+
+// Middleware to ensure data consistency
+postSchema.pre('save', function(next) {
+  // Ensure likes count matches likedBy array length
+  if (this.likedBy) {
+    this.likes = this.likedBy.length;
+  }
+  next();
+});
+
+const Post = mongoose.model('Post', postSchema);
+
+module.exports = Post;
