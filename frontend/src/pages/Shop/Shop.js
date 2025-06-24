@@ -1,4 +1,4 @@
-// src/pages/Shop/Shop.js - Updated with proper artist authentication
+// src/pages/Shop/Shop.js - Updated with delete artwork functionality
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -32,9 +32,14 @@ const Shop = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
+  // ✅ Delete functionality states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [artworkToDelete, setArtworkToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const { isAuthenticated, currentUser } = useAuth();
   
-  // ✅ Check if current user is an artist (using isArtist field, not role)
+  // Check if current user is an artist (using isArtist field, not role)
   const isArtist = currentUser?.isArtist || false;
   
   console.log('Current user:', currentUser);
@@ -68,9 +73,9 @@ const Shop = () => {
         if (response.data.success) {
           setArtworks(response.data.artworks);
           setPagination({
-            currentPage: response.data.currentPage,
-            totalPages: response.data.pages,
-            count: response.data.count
+            currentPage: response.data.pagination.currentPage,
+            totalPages: response.data.pagination.totalPages,
+            count: response.data.pagination.count
           });
         } else {
           throw new Error(response.data.message || 'Failed to fetch artworks');
@@ -107,6 +112,45 @@ const Shop = () => {
       ...prev,
       currentPage: page
     }));
+  };
+
+  // ✅ Handle delete artwork
+  const handleDeleteClick = (artwork) => {
+    setArtworkToDelete(artwork);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteArtwork = async () => {
+    if (!artworkToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await artworkAPI.deleteArtwork(artworkToDelete._id);
+      
+      if (response.data.success) {
+        // Remove the artwork from the local state
+        setArtworks(prevArtworks => 
+          prevArtworks.filter(artwork => artwork._id !== artworkToDelete._id)
+        );
+        
+        // Update pagination count
+        setPagination(prev => ({
+          ...prev,
+          count: prev.count - 1
+        }));
+        
+        alert('Artwork deleted successfully!');
+      } else {
+        throw new Error(response.data.message || 'Failed to delete artwork');
+      }
+    } catch (error) {
+      console.error('Error deleting artwork:', error);
+      alert(error.response?.data?.message || error.message || 'Failed to delete artwork');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setArtworkToDelete(null);
+    }
   };
 
   // Handle adding new artwork (Artist-only)
@@ -222,7 +266,7 @@ const Shop = () => {
           <h1 className="shop-title">Uncreated Shop</h1>
           <p className="shop-subtitle">Discover and collect unique artworks from talented creators</p>
           
-          {/* ✅ Artist-only Add Product Button */}
+          {/* Artist-only Add Product Button */}
           {isAuthenticated && isArtist && (
             <button 
               className="add-item-btn artist-only-btn"
@@ -232,17 +276,10 @@ const Shop = () => {
             </button>
           )}
           
-          {/* ✅ Message for authenticated non-artists */}
+          {/* Message for authenticated non-artists */}
           {isAuthenticated && !isArtist && (
             <div className="artist-info">
-              <p>Want to sell your artwork? <a href="/profile" className="become-artist-link">Become an artist</a> to start selling!</p>
-            </div>
-          )}
-          
-          {/* ✅ Message for non-authenticated users */}
-          {!isAuthenticated && (
-            <div className="artist-info">
-              <p><a href="/login" className="become-artist-link">Login</a> or <a href="/register" className="become-artist-link">register</a> to start selling your artwork!</p>
+              <p>Want to sell your artwork? <Link to="/become-artist">Become an Artist</Link></p>
             </div>
           )}
         </div>
@@ -252,43 +289,23 @@ const Shop = () => {
       <div className="shop-filters">
         <div className="filter-group">
           <label>Category:</label>
-          <select 
-            value={filter.category} 
-            onChange={(e) => handleFilterChange('category', e.target.value)}
-          >
+          <select value={filter.category} onChange={(e) => handleFilterChange('category', e.target.value)}>
             <option value="">All Categories</option>
             <option value="painting">Painting</option>
             <option value="sculpture">Sculpture</option>
             <option value="photography">Photography</option>
             <option value="digital">Digital Art</option>
-            <option value="mixed media">Mixed Media</option>
-            <option value="other">Other</option>
+            <option value="drawing">Drawing</option>
+            <option value="mixed-media">Mixed Media</option>
           </select>
         </div>
 
         <div className="filter-group">
-          <label>Price Range:</label>
-          <select 
-            value={filter.price} 
-            onChange={(e) => handleFilterChange('price', e.target.value)}
-          >
-            <option value="">All Prices</option>
-            <option value="0-100">$0 - $100</option>
-            <option value="100-300">$100 - $300</option>
-            <option value="300-500">$300 - $500</option>
-            <option value="500-1000">$500 - $1000</option>
-            <option value="1000">$1000+</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label>Sort By:</label>
-          <select 
-            value={filter.sortBy} 
-            onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-          >
+          <label>Sort by:</label>
+          <select value={filter.sortBy} onChange={(e) => handleFilterChange('sortBy', e.target.value)}>
             <option value="latest">Latest</option>
-            <option value="popular">Most Popular</option>
+            <option value="oldest">Oldest</option>
+            <option value="popular">Popular</option>
             <option value="price-asc">Price: Low to High</option>
             <option value="price-desc">Price: High to Low</option>
           </select>
@@ -354,113 +371,61 @@ const Shop = () => {
                     type: "spring",
                     stiffness: 100 
                   }}
-                  whileHover={{ 
-                    y: -8, 
-                    scale: 1.02,
-                    transition: { duration: 0.2 }
-                  }}
-                  whileTap={{ scale: 0.98 }}
                 >
-                  {/* Main product link - everything except artist section */}
                   <Link to={`/shop/product/${artwork._id}`} className="artwork-main-link">
                     <div className="artwork-image-container">
-                      <motion.img 
+                      <img 
                         src={artwork.images[0] || '/placeholder-image.jpg'} 
                         alt={artwork.title}
                         className="artwork-image"
-                        whileHover={{ scale: 1.1 }}
-                        transition={{ duration: 0.3 }}
-                        onError={(e) => {
-                          e.target.src = '/placeholder-image.jpg';
-                        }}
                       />
-                      {artwork.isSold && (
-                        <motion.div 
-                          className="sold-overlay"
-                          initial={{ opacity: 0, scale: 0 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.5 }}
+                      {artwork.isSold && <div className="sold-overlay">SOLD</div>}
+                      
+                      {/* ✅ Delete button - only show to artwork creator */}
+                      {isAuthenticated && currentUser && artwork.creator && 
+                       currentUser._id === artwork.creator._id && (
+                        <button 
+                          className="delete-artwork-btn"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteClick(artwork);
+                          }}
+                          title="Delete Artwork"
                         >
-                          SOLD
-                        </motion.div>
+                          ×
+                        </button>
                       )}
                     </div>
                     
                     <div className="artwork-info">
-                      <motion.h3 
-                        className="artwork-title"
-                        whileHover={{ color: "#007bff", x: 2 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        {artwork.title}
-                      </motion.h3>
-                      <motion.p 
-                        className="artwork-description"
-                        whileHover={{ color: "#333" }}
-                        transition={{ duration: 0.2 }}
-                      >
+                      <h3 className="artwork-title">{artwork.title}</h3>
+                      <p className="artwork-description">
                         {artwork.description.length > 100 
                           ? `${artwork.description.substring(0, 100)}...` 
                           : artwork.description
                         }
-                      </motion.p>
+                      </p>
                       
                       <div className="artwork-meta">
-                        <motion.span 
-                          className="artwork-price"
-                          whileHover={{ scale: 1.05 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          ${artwork.price}
-                        </motion.span>
-                        <motion.span 
-                          className="artwork-category"
-                          whileHover={{ scale: 1.05, backgroundColor: "#e3f2fd" }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          {artwork.category}
-                        </motion.span>
+                        <span className="artwork-price">${artwork.price}</span>
+                        <span className="artwork-category">{artwork.category}</span>
                       </div>
+                      
+                      {artwork.creator && (
+                        <div className="artwork-creator">
+                          <Link to={`/profile/${artwork.creator.username}`} className="artwork-creator-link">
+                            <img 
+                              src={artwork.creator.profileImage || '/default-profile.jpg'} 
+                              alt={artwork.creator.username}
+                              className="creator-avatar"
+                            />
+                            <span className="creator-name">{artwork.creator.username}</span>
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   </Link>
-
-                  {/* Separate artist section - links to artist profile */}
-                  <div className="artwork-info">
-                    <Link 
-                      to={`/profile/${artwork.creator?.username || 'unknown'}`} 
-                      className="artwork-creator-link"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <motion.div 
-                        className="artwork-creator"
-                        whileHover={{ x: 4 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <motion.img 
-                          src={artwork.creator?.profileImage || '/default-profile.jpg'} 
-                          alt={artwork.creator?.username || 'Creator'}
-                          className="creator-avatar"
-                          whileHover={{ 
-                            scale: 1.2, 
-                            rotate: 5,
-                            boxShadow: "0 4px 15px rgba(0,123,255,0.3)"
-                          }}
-                          transition={{ duration: 0.2 }}
-                        />
-                        <motion.span 
-                          className="creator-name"
-                          whileHover={{ 
-                            color: "#007bff",
-                            fontWeight: 600,
-                            x: 2
-                          }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          @{artwork.creator?.username || 'Unknown'}
-                        </motion.span>
-                      </motion.div>
-                    </Link>
-                  </div>
                 </motion.div>
               ))}
             </div>
@@ -469,87 +434,56 @@ const Shop = () => {
           {/* Pagination */}
           {pagination.totalPages > 1 && (
             <div className="pagination">
-              <motion.button 
+              <button 
                 onClick={() => handlePageChange(pagination.currentPage - 1)}
                 disabled={pagination.currentPage === 1}
                 className="pagination-btn"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
               >
-                <span>Previous</span>
-              </motion.button>
+                Previous
+              </button>
               
               {getPaginationNumbers().map(number => (
-                <motion.button
+                <button
                   key={number}
                   onClick={() => handlePageChange(number)}
                   className={`pagination-btn ${pagination.currentPage === number ? 'active' : ''}`}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
                 >
-                  <span>{number}</span>
-                </motion.button>
+                  {number}
+                </button>
               ))}
               
-              <motion.button 
+              <button 
                 onClick={() => handlePageChange(pagination.currentPage + 1)}
                 disabled={pagination.currentPage === pagination.totalPages}
                 className="pagination-btn"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
               >
-                <span>Next</span>
-              </motion.button>
+                Next
+              </button>
             </div>
           )}
         </>
       )}
 
-      {/* ✅ Artist-Only Add Item Modal */}
-      {showAddItemModal && isArtist && (
+      {/* Add Item Modal */}
+      {showAddItemModal && (
         <motion.div 
-          className="modal-overlay" 
-          onClick={() => setShowAddItemModal(false)}
+          className="modal-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
         >
           <motion.div 
-            className="modal-content" 
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, scale: 0.8, y: 50 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            transition={{ duration: 0.3, type: "spring", stiffness: 300 }}
+            className="modal-content"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
           >
-            <motion.h3
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              Add New Artwork
-            </motion.h3>
-            <motion.p 
-              className="modal-subtitle"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              Share your creativity with the world
-            </motion.p>
-            
+            <h2>Add New Artwork</h2>
             {submitError && (
-              <motion.div 
-                className="error-message"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-              >
+              <div className="error-message">
                 {submitError}
-              </motion.div>
+              </div>
             )}
-            
             <form onSubmit={handleAddItem}>
               <motion.div 
                 className="form-group"
@@ -563,7 +497,6 @@ const Shop = () => {
                   value={newItem.title}
                   onChange={(e) => setNewItem(prev => ({ ...prev, title: e.target.value }))}
                   required
-                  placeholder="Enter artwork title"
                 />
               </motion.div>
               
@@ -578,8 +511,6 @@ const Shop = () => {
                   value={newItem.description}
                   onChange={(e) => setNewItem(prev => ({ ...prev, description: e.target.value }))}
                   required
-                  rows="3"
-                  placeholder="Describe your artwork"
                 />
               </motion.div>
               
@@ -592,12 +523,10 @@ const Shop = () => {
                 <label>Price ($):</label>
                 <input
                   type="number"
-                  min="0.01"
                   step="0.01"
                   value={newItem.price}
                   onChange={(e) => setNewItem(prev => ({ ...prev, price: e.target.value }))}
                   required
-                  placeholder="0.00"
                 />
               </motion.div>
               
@@ -611,14 +540,13 @@ const Shop = () => {
                 <select
                   value={newItem.category}
                   onChange={(e) => setNewItem(prev => ({ ...prev, category: e.target.value }))}
-                  required
                 >
                   <option value="painting">Painting</option>
                   <option value="sculpture">Sculpture</option>
                   <option value="photography">Photography</option>
                   <option value="digital">Digital Art</option>
-                  <option value="mixed media">Mixed Media</option>
-                  <option value="other">Other</option>
+                  <option value="drawing">Drawing</option>
+                  <option value="mixed-media">Mixed Media</option>
                 </select>
               </motion.div>
               
@@ -674,6 +602,32 @@ const Shop = () => {
             </form>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* ✅ Delete Confirmation Modal */}
+      {showDeleteConfirm && artworkToDelete && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal">
+            <h3>Delete Artwork</h3>
+            <p>Are you sure you want to delete "{artworkToDelete.title}"? This action cannot be undone.</p>
+            <div className="delete-modal-actions">
+              <button 
+                className="cancel-delete-btn"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button 
+                className="confirm-delete-btn"
+                onClick={handleDeleteArtwork}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

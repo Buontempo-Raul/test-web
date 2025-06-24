@@ -10,6 +10,7 @@ const blobServiceClient = BlobServiceClient.fromConnectionString(connectionStrin
 // Get container clients
 const imagesContainer = blobServiceClient.getContainerClient('images');
 const postsContainer = blobServiceClient.getContainerClient('posts');
+const artworksContainer = blobServiceClient.getContainerClient('artworks'); // ✅ Added artworks container
 
 // Configure multer to use memory storage
 const storage = multer.memoryStorage();
@@ -57,7 +58,21 @@ const uploadToAzure = async (file, blobName, containerName = 'images') => {
       throw new Error('Azure Storage connection string not configured');
     }
     
-    const container = containerName === 'posts' ? postsContainer : imagesContainer;
+    // Select the appropriate container
+    let container;
+    switch (containerName) {
+      case 'posts':
+        container = postsContainer;
+        break;
+      case 'artworks':
+        container = artworksContainer;
+        break;
+      case 'images':
+      default:
+        container = imagesContainer;
+        break;
+    }
+    
     console.log('Using container:', container.containerName);
     
     const blockBlobClient = container.getBlockBlobClient(blobName);
@@ -96,7 +111,21 @@ const deleteFromAzure = async (blobUrl) => {
     const containerName = urlParts[urlParts.length - 2];
     const blobName = urlParts[urlParts.length - 1];
     
-    const container = containerName === 'posts' ? postsContainer : imagesContainer;
+    // Select the appropriate container
+    let container;
+    switch (containerName) {
+      case 'posts':
+        container = postsContainer;
+        break;
+      case 'artworks':
+        container = artworksContainer;
+        break;
+      case 'images':
+      default:
+        container = imagesContainer;
+        break;
+    }
+    
     const blockBlobClient = container.getBlockBlobClient(blobName);
     await blockBlobClient.delete();
     
@@ -140,7 +169,17 @@ const uploadFilesToAzure = (containerName = 'posts') => {
 
       // Upload all files and attach URLs
       for (const file of req.files) {
-        const blobName = generateBlobName('post', req.user._id, file.originalname);
+        // Generate appropriate blob name based on container
+        let prefix = 'file';
+        if (containerName === 'artworks') {
+          prefix = 'artwork';
+        } else if (containerName === 'posts') {
+          prefix = 'post';
+        } else if (containerName === 'images') {
+          prefix = 'profile';
+        }
+        
+        const blobName = generateBlobName(prefix, req.user._id, file.originalname);
         const fileUrl = await uploadToAzure(file, blobName, containerName);
         
         // Attach the URL to the file object
@@ -163,16 +202,18 @@ const uploadFilesToAzure = (containerName = 'posts') => {
 // Create specific upload middleware instances
 const uploadProfileImage = createUploadMiddleware(false);
 const uploadPostMedia = createUploadMiddleware(true);
+const uploadArtworkImages = createUploadMiddleware(false); // ✅ Added artwork images middleware
 
 checkAzureConfig();
-
 
 module.exports = {
   uploadProfileImage,
   uploadPostMedia,
+  uploadArtworkImages, // ✅ Added to exports
   uploadFilesToAzure,
   imagesContainer,
   postsContainer,
+  artworksContainer, // ✅ Added to exports
   uploadToAzure,
   deleteFromAzure,
   generateBlobName,
