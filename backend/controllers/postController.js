@@ -172,9 +172,15 @@ const getPostById = async (req, res) => {
 // @access  Private
 const createPost = async (req, res) => {
   try {
+    console.log('Creating post...');
+    console.log('Request files:', req.files);
+    console.log('Request body:', req.body);
+
     const { caption, tags, linkedShopItem } = req.body;
 
-    if (!req.uploadedFiles || req.uploadedFiles.length === 0) {
+    // Check for uploaded files (req.files is set by multer middleware)
+    if (!req.files || req.files.length === 0) {
+      console.log('No files found in request');
       return res.status(400).json({
         success: false,
         message: 'At least one media file is required'
@@ -182,47 +188,74 @@ const createPost = async (req, res) => {
     }
 
     let content;
-    const files = req.uploadedFiles;
+    const files = req.files;
 
+    console.log(`Processing ${files.length} files`);
+
+    // Create content based on number of files
     if (files.length === 1) {
       const file = files[0];
+      console.log('Single file:', file.originalname, file.mimetype);
+      
       content = {
         type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-        url: file.url,
+        url: file.url || file.location || `/uploads/posts/${file.filename}`, // Handle different URL sources
         aspectRatio: '1:1'
       };
     } else {
+      console.log('Multiple files (carousel)');
       content = {
         type: 'carousel',
-        items: files.map(file => ({
-          type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-          url: file.url
-        }))
+        items: files.map(file => {
+          console.log('Processing file:', file.originalname, file.mimetype);
+          return {
+            type: file.mimetype.startsWith('video/') ? 'video' : 'image',
+            url: file.url || file.location || `/uploads/posts/${file.filename}`
+          };
+        })
       };
     }
 
+    console.log('Content created:', content);
+
+    // Process tags
+    let processedTags = [];
+    if (tags) {
+      if (Array.isArray(tags)) {
+        processedTags = tags;
+      } else if (typeof tags === 'string') {
+        processedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+      }
+    }
+
+    console.log('Processed tags:', processedTags);
+
+    // Create the post
     const post = new Post({
       creator: req.user._id,
       content,
       caption: caption || '',
-      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim())) : [],
+      tags: processedTags,
       linkedShopItem: linkedShopItem || null
     });
 
-    await post.save();
+    const savedPost = await post.save();
+    console.log('Post saved:', savedPost._id);
 
-    const populatedPost = await Post.findById(post._id)
-      .populate('creator', 'username profileImage')
-      .populate('linkedShopItem', 'title price images');
+    // Populate creator info for response
+    await savedPost.populate('creator', 'username profileImage');
 
     res.status(201).json({
       success: true,
-      post: populatedPost
+      message: 'Post created successfully',
+      post: savedPost
     });
+
   } catch (error) {
+    console.error('Error creating post:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message || 'Failed to create post'
     });
   }
 };

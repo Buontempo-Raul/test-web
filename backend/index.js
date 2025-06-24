@@ -1,9 +1,10 @@
-// backend/index.js
+// backend/index.js - Updated with auction routes
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
+const cron = require('node-cron');
 const connectDB = require('./config/db');
 
 // Load environment variables
@@ -30,7 +31,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Create subdirectories for different types of uploads
-const uploadDirs = ['profiles', 'artworks', 'posts'];  // Removed 'events'
+const uploadDirs = ['profiles', 'artworks', 'posts'];
 uploadDirs.forEach(dir => {
   const dirPath = path.join(uploadsDir, dir);
   if (!fs.existsSync(dirPath)) {
@@ -42,21 +43,62 @@ uploadDirs.forEach(dir => {
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const artworkRoutes = require('./routes/artworks');
+const auctionRoutes = require('./routes/auctions'); // Add auction routes
 const shopRoutes = require('./routes/shop');
 const postsRoutes = require('./routes/posts');
-// Removed event imports
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/artworks', artworkRoutes);
+app.use('/api/auctions', auctionRoutes); // Add auction routes
 app.use('/api/shop', shopRoutes);
 app.use('/api/posts', postsRoutes);
-// Removed event routes
 
 // Simple test route
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend server is running!' });
+});
+
+// Cron job to end expired auctions (runs every hour)
+cron.schedule('0 * * * *', async () => {
+  try {
+    console.log('Running expired auctions check...');
+    const Artwork = require('./models/Artwork');
+    const endedCount = await Artwork.endExpiredAuctions();
+    console.log(`Ended ${endedCount} expired auctions`);
+  } catch (error) {
+    console.error('Error in auction cron job:', error);
+  }
+});
+
+// Cron job to end expired auctions every 5 minutes (more frequent for testing)
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const Artwork = require('./models/Artwork');
+    const now = new Date();
+    
+    // Find auctions that are expired but still active
+    const expiredAuctions = await Artwork.find({
+      'auction.endTime': { $lt: now },
+      'auction.isActive': true
+    });
+    
+    if (expiredAuctions.length > 0) {
+      console.log(`Found ${expiredAuctions.length} expired auctions to end`);
+      
+      for (const artwork of expiredAuctions) {
+        try {
+          await artwork.endAuction();
+          console.log(`Ended auction for artwork: ${artwork.title}`);
+        } catch (error) {
+          console.error(`Error ending auction for ${artwork.title}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in auction cleanup cron job:', error);
+  }
 });
 
 // Error handling middleware  
@@ -66,72 +108,21 @@ app.use((err, req, res, next) => {
   res.json({
     success: false,
     message: err.message,
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    stack: process.env.NODE_ENV === 'production' ? null : err.stack
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
   });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('Auction cron jobs scheduled');
 });
-
-// Initialize admin user and default data if needed
-const initializeData = async () => {
-  try {
-    const User = require('./models/User');
-    const bcrypt = require('bcryptjs');
-    
-    // Check if admin already exists by username or role
-    const adminExists = await User.findOne({ 
-      $or: [
-        { username: 'admin' },
-        { role: 'admin' }
-      ]
-    });
-    
-    if (!adminExists) {
-      console.log('Creating admin user...');
-      
-      // Hash password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash('admin123', salt);
-      
-      // Create admin user with correct role
-      const admin = new User({
-        username: 'admin',
-        email: 'admin@uncreated.com',
-        password: hashedPassword,
-        isArtist: true,  // Can be an artist
-        role: 'admin',   // But role is admin, NOT 'artist'
-        bio: 'System administrator for Uncreated platform'
-      });
-      
-      await admin.save();
-      console.log('Admin user created successfully');
-    }
-    
-    // Check for any users with invalid roles and fix them
-    console.log('Checking for users with invalid roles...');
-    const usersWithInvalidRoles = await User.find({ 
-      role: { $nin: ['user', 'admin'] } 
-    });
-    
-    if (usersWithInvalidRoles.length > 0) {
-      console.log(`Found ${usersWithInvalidRoles.length} users with invalid roles. Fixing...`);
-      
-      for (const user of usersWithInvalidRoles) {
-        console.log(`Fixing user ${user.username}: role "${user.role}" -> "user"`);
-        user.role = 'user'; // Set to default user role
-        await user.save();
-      }
-      
-      console.log('Fixed all users with invalid roles');
-    }
-    
-  } catch (error) {
-    console.error('Error initializing data:', error);
-  }
-};
-
-// Run the initialization
-initializeData();

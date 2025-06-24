@@ -1,0 +1,16 @@
+All
+    delete all the pop ups
+    navbar
+    animiated background
+    change emojis/simbols
+
+
+Shop
+    design
+    top left (art/photography/product)
+    cropped images
+
+
+Explore
+    cropped images
+    bigger posts

@@ -1,7 +1,6 @@
-// backend/controllers/artworkController.js
+// backend/controllers/artworkController.js - Updated with auction support
 const Artwork = require('../models/Artwork');
 const User = require('../models/User');
-// ✅ Updated to use Azure storage functions instead of local file system
 const { deleteFromAzure } = require('../middleware/azureStorageMiddleware');
 
 // @desc    Get all artworks with filtering and pagination
@@ -57,12 +56,16 @@ const getArtworks = async (req, res) => {
       case 'popular':
         sortOptions = { likes: -1 };
         break;
+      case 'ending_soon':
+        sortOptions = { 'auction.endTime': 1 };
+        break;
       default:
         sortOptions = { createdAt: -1 };
     }
 
     const artworks = await Artwork.find(filter)
       .populate('creator', 'username profileImage isArtist')
+      .populate('auction.highestBidder', 'username')
       .sort(sortOptions)
       .skip(skip)
       .limit(limit);
@@ -70,16 +73,29 @@ const getArtworks = async (req, res) => {
     const count = await Artwork.countDocuments(filter);
     const totalPages = Math.ceil(count / limit);
 
-    // ✅ Images are now Azure URLs, no need to modify them
-    const artworksWithFullImageUrls = artworks.map(artwork => {
+    // Process artworks to include auction status
+    const artworksWithAuctionInfo = artworks.map(artwork => {
       const artworkObj = artwork.toObject();
-      // Images are already full Azure URLs from Azure blob storage
+      
+      // Add computed auction fields
+      if (artworkObj.auction) {
+        const now = new Date();
+        const endTime = new Date(artworkObj.auction.endTime);
+        const isExpired = now > endTime;
+        
+        artworkObj.auctionStatus = isExpired ? 'ended' : (artworkObj.auction.isActive ? 'active' : 'inactive');
+        artworkObj.timeRemaining = artwork.timeRemaining;
+        artworkObj.nextMinimumBid = artworkObj.auction.currentBid 
+          ? artworkObj.auction.currentBid + (artworkObj.auction.minimumIncrement || 5)
+          : artworkObj.auction.startingPrice + (artworkObj.auction.minimumIncrement || 5);
+      }
+      
       return artworkObj;
     });
 
     res.json({
       success: true,
-      artworks: artworksWithFullImageUrls,
+      artworks: artworksWithAuctionInfo,
       pagination: {
         currentPage: page,
         totalPages,
@@ -103,7 +119,9 @@ const getArtworks = async (req, res) => {
 const getArtworkById = async (req, res) => {
   try {
     const artwork = await Artwork.findById(req.params.id)
-      .populate('creator', 'username profileImage bio isArtist followers');
+      .populate('creator', 'username profileImage bio isArtist followers')
+      .populate('auction.bids.bidder', 'username')
+      .populate('auction.highestBidder', 'username');
 
     if (!artwork) {
       return res.status(404).json({ 
@@ -112,14 +130,50 @@ const getArtworkById = async (req, res) => {
       });
     }
 
+    // Increment view count
+    artwork.views += 1;
+    await artwork.save();
+
     const artworkObj = artwork.toObject();
-    // ✅ Images are already Azure URLs, no need to modify them
     
+    // Add computed auction fields
+    if (artworkObj.auction) {
+      const now = new Date();
+      const endTime = new Date(artworkObj.auction.endTime);
+      const isExpired = now > endTime;
+      
+      // If auction expired but still active, end it
+      if (isExpired && artwork.auction.isActive) {
+        await artwork.endAuction();
+        await artwork.populate('auction.winner', 'username');
+      }
+      
+      artworkObj.auctionStatus = isExpired ? 'ended' : (artworkObj.auction.isActive ? 'active' : 'inactive');
+      artworkObj.timeRemaining = artwork.timeRemaining;
+      artworkObj.nextMinimumBid = artworkObj.auction.currentBid 
+        ? artworkObj.auction.currentBid + (artworkObj.auction.minimumIncrement || 5)
+        : artworkObj.auction.startingPrice + (artworkObj.auction.minimumIncrement || 5);
+        
+      // Format bid history for response
+      if (artworkObj.auction.bids) {
+        artworkObj.auction.bids = artworkObj.auction.bids.slice(0, 10).map(bid => ({
+          id: bid._id,
+          amount: bid.amount,
+          bidder: {
+            username: bid.bidder.username,
+            _id: bid.bidder._id
+          },
+          timestamp: bid.timestamp
+        }));
+      }
+    }
+
     res.json({
       success: true,
       artwork: artworkObj
     });
   } catch (error) {
+    console.error('Error fetching artwork:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -127,35 +181,7 @@ const getArtworkById = async (req, res) => {
   }
 };
 
-// @desc    Upload artwork images
-// @route   POST /api/artworks/upload
-// @access  Private (Artists only)
-const uploadArtworkImages = async (req, res) => {
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No files uploaded'
-      });
-    }
-
-    // ✅ Get Azure URLs from the uploaded files (added by uploadFilesToAzure middleware)
-    const fileUrls = req.files.map(file => file.url);
-
-    res.status(200).json({
-      success: true,
-      message: 'Files uploaded successfully',
-      filePaths: fileUrls  // ✅ Now returns Azure URLs instead of local paths
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// @desc    Create a new artwork
+// @desc    Create new artwork with auction
 // @route   POST /api/artworks
 // @access  Private (Artists only)
 const createArtwork = async (req, res) => {
@@ -163,35 +189,74 @@ const createArtwork = async (req, res) => {
     const {
       title,
       description,
-      images,
       price,
       category,
       medium,
       dimensions,
-      forSale,
-      tags
+      tags,
+      images,
+      auctionDuration = 7 // days
     } = req.body;
+
+    // Validate required fields
+    if (!title || !description || !price || !category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, price, and category are required'
+      });
+    }
+
+    if (!images || images.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one image is required'
+      });
+    }
+
+    // Check if user is an artist
+    if (!req.user.isArtist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only artists can create artworks'
+      });
+    }
+
+    // Create auction end time
+    const auctionEndTime = new Date();
+    auctionEndTime.setDate(auctionEndTime.getDate() + parseInt(auctionDuration));
 
     const artwork = new Artwork({
       title,
       description,
-      images, // ✅ These are now Azure URLs
-      price,
+      price: parseFloat(price),
       category,
       medium,
       dimensions,
+      tags: tags || [],
+      images,
       creator: req.user._id,
-      forSale,
-      tags: tags && tags.length > 0 ? tags : []
+      auction: {
+        startTime: new Date(),
+        endTime: auctionEndTime,
+        startingPrice: parseFloat(price),
+        minimumIncrement: 5,
+        isActive: true,
+        bids: []
+      }
     });
 
-    const createdArtwork = await artwork.save();
+    const savedArtwork = await artwork.save();
+    
+    // Populate creator info
+    await savedArtwork.populate('creator', 'username profileImage isArtist');
 
     res.status(201).json({
       success: true,
-      artwork: createdArtwork
+      artwork: savedArtwork,
+      message: 'Artwork created successfully with auction'
     });
   } catch (error) {
+    console.error('Error creating artwork:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -221,24 +286,12 @@ const updateArtwork = async (req, res) => {
       });
     }
 
-    // Handle file uploads if present
-    if (req.files && req.files.length > 0) {
-      // ✅ Get Azure URLs from uploaded files
-      const newImageUrls = req.files.map(file => file.url);
-      
-      // If replacing all images, remove old ones from Azure
-      if (req.body.replaceImages === 'true') {
-        // ✅ Delete old images from Azure blob storage
-        for (const imageUrl of artwork.images) {
-          await deleteFromAzure(imageUrl);
-        }
-        
-        // Update with new images
-        req.body.images = newImageUrls;
-      } else {
-        // Add new images to existing ones
-        req.body.images = [...artwork.images, ...newImageUrls];
-      }
+    // Don't allow updates to artworks with active auctions that have bids
+    if (artwork.auction && artwork.auction.isActive && artwork.auction.bids.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot update artwork with active bids'
+      });
     }
 
     // Update fields
@@ -258,11 +311,16 @@ const updateArtwork = async (req, res) => {
       updatedFields.images = req.body.images;
     }
 
+    // Update auction starting price if price changed and no bids yet
+    if (req.body.price && artwork.auction && artwork.auction.bids.length === 0) {
+      updatedFields['auction.startingPrice'] = parseFloat(req.body.price);
+    }
+
     const updatedArtwork = await Artwork.findByIdAndUpdate(
       req.params.id,
       updatedFields,
       { new: true }
-    );
+    ).populate('creator', 'username profileImage isArtist');
 
     res.json({
       success: true,
@@ -298,14 +356,21 @@ const deleteArtwork = async (req, res) => {
       });
     }
 
-    // ✅ Delete images from Azure blob storage instead of local filesystem
+    // Don't allow deletion of artworks with active auctions that have bids
+    if (artwork.auction && artwork.auction.isActive && artwork.auction.bids.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete artwork with active bids'
+      });
+    }
+
+    // Delete images from Azure blob storage
     for (const imageUrl of artwork.images) {
       try {
         await deleteFromAzure(imageUrl);
         console.log(`Successfully deleted image from Azure: ${imageUrl}`);
       } catch (deleteError) {
         console.log(`Warning: Could not delete image from Azure: ${imageUrl}`, deleteError);
-        // Don't fail the deletion if we can't delete the image
       }
     }
 
@@ -347,6 +412,42 @@ const likeArtwork = async (req, res) => {
       likes: artwork.likes
     });
   } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Upload artwork images
+// @route   POST /api/artworks/upload
+// @access  Private (Artists only)
+const uploadArtworkImages = async (req, res) => {
+  try {
+    if (!req.user.isArtist) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only artists can upload artwork images'
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No images uploaded'
+      });
+    }
+
+    // Image URLs are already processed by Azure middleware
+    const imageUrls = req.files.map(file => file.location);
+
+    res.json({
+      success: true,
+      images: imageUrls,
+      message: 'Images uploaded successfully'
+    });
+  } catch (error) {
+    console.error('Error uploading images:', error);
     res.status(500).json({
       success: false,
       message: error.message

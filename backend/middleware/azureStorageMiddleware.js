@@ -1,4 +1,4 @@
-// backend/middleware/azureStorageMiddleware.js
+// backend/middleware/azureStorageMiddleware.js - Add this middleware function
 const multer = require('multer');
 const { BlobServiceClient } = require('@azure/storage-blob');
 require('dotenv').config();
@@ -10,7 +10,7 @@ const blobServiceClient = BlobServiceClient.fromConnectionString(connectionStrin
 // Get container clients
 const imagesContainer = blobServiceClient.getContainerClient('images');
 const postsContainer = blobServiceClient.getContainerClient('posts');
-const artworksContainer = blobServiceClient.getContainerClient('artworks'); // ✅ Added artworks container
+const artworksContainer = blobServiceClient.getContainerClient('artworks');
 
 // Configure multer to use memory storage
 const storage = multer.memoryStorage();
@@ -38,115 +38,43 @@ const createUploadMiddleware = (allowVideo = false) => {
         cb(null, true);
       } else {
         console.log("File rejected: Invalid type");
-        cb(new Error(`Invalid file type. Allowed types: ${allowVideo ? 'images and videos' : 'images only'}`), false);
+        cb(new Error(`Invalid file type. Allowed types: ${allowVideo ? 'Images and Videos' : 'Images only'}`));
       }
     }
   });
 };
 
-// Helper function to upload a file to Azure Blob Storage
-const uploadToAzure = async (file, blobName, containerName = 'images') => {
+// Upload file to Azure Blob Storage
+const uploadToAzure = async (file, blobName, containerName = 'posts') => {
   try {
-    console.log('=== Azure Upload Debug ===');
-    console.log('Container name:', containerName);
-    console.log('Blob name:', blobName);
-    console.log('File size:', file.size || file.buffer?.length);
-    console.log('File mimetype:', file.mimetype);
+    let containerClient;
     
-    // Check if connection string is available
-    if (!connectionString) {
-      throw new Error('Azure Storage connection string not configured');
-    }
-    
-    // Select the appropriate container
-    let container;
     switch (containerName) {
-      case 'posts':
-        container = postsContainer;
-        break;
       case 'artworks':
-        container = artworksContainer;
+        containerClient = artworksContainer;
         break;
       case 'images':
-      default:
-        container = imagesContainer;
+        containerClient = imagesContainer;
         break;
+      default:
+        containerClient = postsContainer;
     }
+
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     
-    console.log('Using container:', container.containerName);
-    
-    const blockBlobClient = container.getBlockBlobClient(blobName);
-    
-    // Use the file buffer if available, otherwise use the file itself
-    const fileData = file.buffer || file;
-    const fileSize = file.size || file.buffer?.length;
-    
-    console.log('Starting Azure blob upload...');
-    
-    await blockBlobClient.upload(fileData, fileSize, {
+    // Upload file buffer to Azure
+    await blockBlobClient.upload(file.buffer, file.buffer.length, {
       blobHTTPHeaders: {
         blobContentType: file.mimetype
       }
     });
-    
-    console.log('Azure upload successful. URL:', blockBlobClient.url);
+
+    // Return the URL of the uploaded file
     return blockBlobClient.url;
   } catch (error) {
-    console.error('=== Azure Upload Error ===');
-    console.error('Error details:', error);
-    console.error('Error message:', error.message);
-    
-    // Re-throw with more context
-    throw new Error(`Azure storage upload failed: ${error.message}`);
+    console.error('Azure upload error:', error);
+    throw new Error(`Failed to upload file to Azure: ${error.message}`);
   }
-};
-
-// Helper function to delete a blob
-const deleteFromAzure = async (blobUrl) => {
-  try {
-    if (!blobUrl || !blobUrl.includes('blob.core.windows.net')) return;
-    
-    // Extract container and blob name from the URL
-    const urlParts = blobUrl.split('/');
-    const containerName = urlParts[urlParts.length - 2];
-    const blobName = urlParts[urlParts.length - 1];
-    
-    // Select the appropriate container
-    let container;
-    switch (containerName) {
-      case 'posts':
-        container = postsContainer;
-        break;
-      case 'artworks':
-        container = artworksContainer;
-        break;
-      case 'images':
-      default:
-        container = imagesContainer;
-        break;
-    }
-    
-    const blockBlobClient = container.getBlockBlobClient(blobName);
-    await blockBlobClient.delete();
-    
-    return true;
-  } catch (error) {
-    console.error('Error deleting blob:', error);
-    return false;
-  }
-};
-
-const checkAzureConfig = () => {
-  console.log('=== Azure Storage Configuration Check ===');
-  console.log('Connection string available:', !!connectionString);
-  
-  if (!connectionString) {
-    console.error('ERROR: AZURE_STORAGE_CONNECTION_STRING not found in environment variables');
-    return false;
-  }
-  
-  console.log('Azure Storage configured successfully');
-  return true;
 };
 
 // Helper function to generate unique blob names
@@ -161,7 +89,12 @@ const generateBlobName = (prefix, userId, originalName) => {
 const uploadFilesToAzure = (containerName = 'posts') => {
   return async (req, res, next) => {
     try {
+      console.log('=== Azure Upload Middleware ===');
+      console.log('Files to process:', req.files ? req.files.length : 0);
+      
+      // If no files, continue to next middleware
       if (!req.files || req.files.length === 0) {
+        console.log('No files to upload, continuing...');
         return next();
       }
 
@@ -169,6 +102,8 @@ const uploadFilesToAzure = (containerName = 'posts') => {
 
       // Upload all files and attach URLs
       for (const file of req.files) {
+        console.log(`Processing file: ${file.originalname}`);
+        
         // Generate appropriate blob name based on container
         let prefix = 'file';
         if (containerName === 'artworks') {
@@ -180,14 +115,23 @@ const uploadFilesToAzure = (containerName = 'posts') => {
         }
         
         const blobName = generateBlobName(prefix, req.user._id, file.originalname);
-        const fileUrl = await uploadToAzure(file, blobName, containerName);
+        console.log(`Generated blob name: ${blobName}`);
         
-        // Attach the URL to the file object
-        file.url = fileUrl;
-        
-        console.log(`File uploaded successfully: ${file.originalname} -> ${fileUrl}`);
+        try {
+          const fileUrl = await uploadToAzure(file, blobName, containerName);
+          
+          // Attach the URL to the file object
+          file.url = fileUrl;
+          file.location = fileUrl; // Also set location for compatibility
+          
+          console.log(`File uploaded successfully: ${file.originalname} -> ${fileUrl}`);
+        } catch (uploadError) {
+          console.error(`Failed to upload ${file.originalname}:`, uploadError);
+          throw uploadError;
+        }
       }
 
+      console.log('All files uploaded successfully');
       next();
     } catch (error) {
       console.error('Azure upload middleware error:', error);
@@ -199,21 +143,67 @@ const uploadFilesToAzure = (containerName = 'posts') => {
   };
 };
 
+// Delete file from Azure
+const deleteFromAzure = async (fileUrl) => {
+  try {
+    // Extract blob name from URL
+    const url = new URL(fileUrl);
+    const pathParts = url.pathname.split('/');
+    const containerName = pathParts[1];
+    const blobName = pathParts.slice(2).join('/');
+
+    let containerClient;
+    switch (containerName) {
+      case 'artworks':
+        containerClient = artworksContainer;
+        break;
+      case 'images':
+        containerClient = imagesContainer;
+        break;
+      default:
+        containerClient = postsContainer;
+    }
+
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    await blockBlobClient.deleteIfExists();
+    
+    console.log(`Successfully deleted file from Azure: ${blobName}`);
+  } catch (error) {
+    console.error('Error deleting file from Azure:', error);
+    throw error;
+  }
+};
+
+// Check Azure configuration
+const checkAzureConfig = () => {
+  console.log('Checking Azure Storage configuration...');
+  console.log('Connection string available:', !!connectionString);
+  
+  if (!connectionString) {
+    console.error('ERROR: AZURE_STORAGE_CONNECTION_STRING not found in environment variables');
+    return false;
+  }
+  
+  console.log('Azure Storage configured successfully');
+  return true;
+};
+
 // Create specific upload middleware instances
 const uploadProfileImage = createUploadMiddleware(false);
 const uploadPostMedia = createUploadMiddleware(true);
-const uploadArtworkImages = createUploadMiddleware(false); // ✅ Added artwork images middleware
+const uploadArtworkImages = createUploadMiddleware(false);
 
+// Check configuration on startup
 checkAzureConfig();
 
 module.exports = {
   uploadProfileImage,
   uploadPostMedia,
-  uploadArtworkImages, // ✅ Added to exports
+  uploadArtworkImages,
   uploadFilesToAzure,
   imagesContainer,
   postsContainer,
-  artworksContainer, // ✅ Added to exports
+  artworksContainer,
   uploadToAzure,
   deleteFromAzure,
   generateBlobName,

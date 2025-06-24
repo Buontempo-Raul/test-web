@@ -1,4 +1,4 @@
-// frontend/src/components/explore/CreatePostModal/CreatePostModal.js
+// frontend/src/components/explore/CreatePostModal/CreatePostModal.js - Fixed
 import React, { useState } from 'react';
 import api from '../../../services/api';
 import './CreatePostModal.css';
@@ -18,6 +18,8 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
     
+    console.log('Files selected:', selectedFiles.length);
+    
     // Validate file count
     if (selectedFiles.length > 10) {
       setError('You can upload a maximum of 10 files');
@@ -25,26 +27,28 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
     }
 
     // Validate file types and sizes
-    const validFiles = selectedFiles.filter(file => {
+    const validFiles = [];
+    for (const file of selectedFiles) {
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
       const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024; // 50MB for videos, 10MB for images
       
       if (!isImage && !isVideo) {
-        setError('Only image and video files are allowed');
-        return false;
+        setError(`File ${file.name} is not a valid image or video file`);
+        return;
       }
       
       if (file.size > maxSize) {
         setError(`File ${file.name} is too large. Max size: ${isVideo ? '50MB' : '10MB'}`);
-        return false;
+        return;
       }
       
-      return true;
-    });
+      validFiles.push(file);
+    }
 
+    console.log('Valid files:', validFiles.length);
     setFiles(validFiles);
-    setError('');
+    setError(''); // Clear any previous errors
 
     // Determine content type
     if (validFiles.length === 1) {
@@ -57,20 +61,35 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
         ...prev,
         contentType: 'carousel'
       }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        contentType: 'image'
+      }));
     }
 
     // Create previews
     const newPreviews = [];
-    validFiles.forEach(file => {
+    let loadedCount = 0;
+    
+    if (validFiles.length === 0) {
+      setPreviews([]);
+      return;
+    }
+    
+    validFiles.forEach((file, index) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        newPreviews.push({
+        newPreviews[index] = {
           url: reader.result,
           type: file.type.startsWith('video/') ? 'video' : 'image',
           name: file.name
-        });
-        if (newPreviews.length === validFiles.length) {
+        };
+        loadedCount++;
+        
+        if (loadedCount === validFiles.length) {
           setPreviews(newPreviews);
+          console.log('Previews created:', newPreviews.length);
         }
       };
       reader.readAsDataURL(file);
@@ -81,6 +100,11 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    console.log('Form submission started');
+    console.log('Files:', files.length);
+    console.log('Form data:', formData);
+
+    // Validate files
     if (files.length === 0) {
       setError('Please select at least one file to upload');
       return;
@@ -92,8 +116,9 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
     try {
       const formDataToSend = new FormData();
       
-      // Add files
-      files.forEach(file => {
+      // Add files to FormData
+      files.forEach((file, index) => {
+        console.log(`Adding file ${index}:`, file.name, file.type);
         formDataToSend.append('media', file);
       });
 
@@ -102,20 +127,29 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
       formDataToSend.append('tags', formData.tags);
       formDataToSend.append('contentType', formData.contentType);
 
+      console.log('Sending request to create post...');
+
       const response = await api.post('/api/posts', formDataToSend, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
 
+      console.log('Post creation response:', response.data);
+
       if (response.data.success) {
+        console.log('Post created successfully');
         onPostCreated(response.data.post);
+        onClose();
       } else {
-        setError(response.data.message || 'Failed to create post');
+        throw new Error(response.data.message || 'Failed to create post');
       }
     } catch (err) {
       console.error('Error creating post:', err);
-      setError(err.response?.data?.message || 'Failed to create post. Please try again.');
+      console.error('Error response:', err.response?.data);
+      
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to create post. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -132,6 +166,7 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
 
   // Remove a file from selection
   const removeFile = (index) => {
+    console.log('Removing file at index:', index);
     const newFiles = files.filter((_, i) => i !== index);
     const newPreviews = previews.filter((_, i) => i !== index);
     

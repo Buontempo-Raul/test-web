@@ -1,210 +1,228 @@
-// src/pages/Shop/ProductDetail.js - Updated part with useCart
+// src/pages/Shop/ProductDetail.js - Replace emojis with proper icons
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import './ProductDetail.css';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
-import { useCart } from '../../hooks/useCart'; // Import useCart hook
+import { artworkAPI, auctionAPI } from '../../services/api';
+import './ProductDetail.css';
 
 const ProductDetail = () => {
   const { id } = useParams();
-  const { isAuthenticated } = useAuth();
-  const { addToCart } = useCart(); // Use the cart context
   const navigate = useNavigate();
-  const [product, setProduct] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState(0);
-  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const { isAuthenticated, currentUser } = useAuth();
   
-  // Mock products data (this would come from your API in a real application)
-  const mockProducts = [
-    {
-      id: '1',
-      title: 'Abstract Harmony',
-      description: 'A vibrant exploration of color and form. This original abstract painting features dynamic brushstrokes and a harmonious color palette that creates a sense of movement and emotion. Each element in this composition works together to create a visually striking piece that will be a focal point in any space.',
-      longDescription: 'This original abstract painting explores the relationship between color, form, and emotion. Created with high-quality acrylic paints on stretched canvas, the artwork features vibrant colors and expressive brushstrokes that convey a sense of energy and harmony. The artist has layered various hues to create depth and visual interest, making it a captivating piece from any viewing angle. The painting comes ready to hang, with finished edges and a protective varnish to ensure its longevity.',
-      price: 299.99,
-      discountPrice: null,
-      images: [
-        'https://via.placeholder.com/600x800?text=Abstract+Harmony+1',
-        'https://via.placeholder.com/600x800?text=Abstract+Harmony+2',
-        'https://via.placeholder.com/600x800?text=Abstract+Harmony+3'
-      ],
-      category: 'painting',
-      tags: ['abstract', 'original', 'acrylic', 'contemporary'],
-      dimensions: {
-        width: 36,
-        height: 48,
-        depth: 1.5,
-        unit: 'in'
-      },
-      weight: 5.2,
-      materials: ['Acrylic paint', 'Canvas', 'Wood stretcher bars'],
-      stock: 1,
-      sku: 'AH-001',
-      creator: {
-        id: '1',
-        name: 'Sophia Reynolds',
-        username: 'artistic_soul',
-        profileImage: 'https://via.placeholder.com/50x50',
-        bio: 'Contemporary artist specializing in abstract expressionism'
-      },
-      reviews: [
-        {
-          id: '101',
-          user: 'Emily W.',
-          rating: 5,
-          comment: 'Absolutely stunning piece! The colors are even more vibrant in person.',
-          date: '2025-02-15'
-        },
-        {
-          id: '102',
-          user: 'Michael T.',
-          rating: 4,
-          comment: 'Beautiful artwork, exactly as described. Arrived well-packaged.',
-          date: '2025-03-03'
-        }
-      ],
-      avgRating: 4.5,
-      reviewCount: 2,
-      related: ['2', '5', '7']
-    },
-    {
-      id: '2',
-      title: 'Handmade Ceramic Vase',
-      description: 'Elegant handmade ceramic vase, perfect for any home.',
-      longDescription: 'This handcrafted ceramic vase showcases the beauty of traditional pottery techniques with a modern aesthetic. Each piece is individually thrown on a potter\'s wheel, giving it unique character and subtle variations that make it one-of-a-kind. The matte finish highlights the natural texture of the clay, while the minimalist design allows it to complement any interior style. Perfect for displaying fresh or dried flower arrangements, or simply as a standalone decorative piece.',
-      price: 79.99,
-      discountPrice: 69.99,
-      images: [
-        'https://via.placeholder.com/600x800?text=Ceramic+Vase+1',
-        'https://via.placeholder.com/600x800?text=Ceramic+Vase+2'
-      ],
-      category: 'crafts',
-      tags: ['ceramic', 'handmade', 'pottery', 'home decor'],
-      dimensions: {
-        width: 6,
-        height: 12,
-        depth: 6,
-        unit: 'in'
-      },
-      weight: 3.0,
-      materials: ['Stoneware clay', 'Glaze'],
-      stock: 8,
-      sku: 'CV-002',
-      creator: {
-        id: '5',
-        name: 'Elena Martinez',
-        username: 'ceramic_studio',
-        profileImage: 'https://via.placeholder.com/50x50',
-        bio: 'Ceramicist specializing in functional pottery and decorative pieces'
-      },
-      reviews: [
-        {
-          id: '201',
-          user: 'Sarah L.',
-          rating: 5,
-          comment: 'Beautiful craftsmanship! This vase is even more gorgeous in person.',
-          date: '2025-03-18'
-        }
-      ],
-      avgRating: 5.0,
-      reviewCount: 1,
-      related: ['4', '8', '12']
-    }
-  ];
+  // State management
+  const [artwork, setArtwork] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeImage, setActiveImage] = useState(0);
+  
+  // Auction states
+  const [bidAmount, setBidAmount] = useState('');
+  const [isPlacingBid, setIsPlacingBid] = useState(false);
+  const [bidHistory, setBidHistory] = useState([]);
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const [isAuctionActive, setIsAuctionActive] = useState(true);
 
+  // Fetch artwork data
   useEffect(() => {
-    // In a real app, fetch product data from API
-    // This simulates an API call with our mock data
-    setIsLoading(true);
-    
-    setTimeout(() => {
-      const foundProduct = mockProducts.find(product => product.id === id);
-      
-      if (foundProduct) {
-        setProduct(foundProduct);
-        document.title = `${foundProduct.title} | Uncreated`;
-      } else {
-        // If product not found, navigate to 404 page
-        navigate('/not-found');
+    const fetchArtwork = async () => {
+      if (!id) {
+        setError('No artwork ID provided');
+        setIsLoading(false);
+        return;
       }
-      
-      setIsLoading(false);
-    }, 800);
+
+      try {
+        setIsLoading(true);
+        const response = await artworkAPI.getArtworkById(id);
+        
+        if (response.data.success) {
+          const artworkData = response.data.artwork;
+          setArtwork(artworkData);
+          
+          // Set initial bid amount to starting price + minimum increment
+          const nextMinBid = artworkData.currentBid ? artworkData.currentBid + 5 : artworkData.price + 5;
+          setBidAmount(nextMinBid.toFixed(2));
+          
+          // Update page title
+          document.title = `${artworkData.title} | Uncreated Auction`;
+          
+          // If artwork has auction data, process it
+          if (artworkData.auction) {
+            setBidHistory(artworkData.auction.bids || []);
+            checkAuctionStatus(artworkData.auction.endTime);
+            
+            // Fetch latest bid history from API
+            try {
+              const bidResponse = await auctionAPI.getBidHistory(id, { limit: 10 });
+              if (bidResponse.data.success) {
+                setBidHistory(bidResponse.data.bids);
+              }
+            } catch (bidError) {
+              console.log('Could not fetch bid history:', bidError);
+            }
+          } else {
+            // Create initial auction data (7 days from now)
+            const endTime = new Date();
+            endTime.setDate(endTime.getDate() + 7);
+            checkAuctionStatus(endTime);
+          }
+        } else {
+          throw new Error(response.data.message || 'Artwork not found');
+        }
+      } catch (error) {
+        console.error('Error fetching artwork:', error);
+        setError(error.response?.data?.message || error.message || 'Failed to load artwork');
+        
+        // Navigate to 404 if artwork not found
+        if (error.response?.status === 404) {
+          navigate('/not-found');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchArtwork();
   }, [id, navigate]);
 
-  const handleQuantityChange = (amount) => {
-    const newQuantity = quantity + amount;
-    if (newQuantity >= 1 && newQuantity <= (product?.stock || 10)) {
-      setQuantity(newQuantity);
+  // Auction timer
+  useEffect(() => {
+    if (!artwork?.auction?.endTime) return;
+
+    const timer = setInterval(() => {
+      checkAuctionStatus(artwork.auction.endTime);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [artwork?.auction?.endTime]);
+
+  const checkAuctionStatus = (endTime) => {
+    const now = new Date().getTime();
+    const end = new Date(endTime).getTime();
+    const difference = end - now;
+
+    if (difference > 0) {
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+      setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+      setIsAuctionActive(true);
+    } else {
+      setTimeRemaining('Auction Ended');
+      setIsAuctionActive(false);
     }
   };
 
-  const handleAddToCart = () => {
+  const handleBidSubmit = async (e) => {
+    e.preventDefault();
+    
     if (!isAuthenticated) {
-      alert('Please log in to add items to your cart');
+      alert('Please log in to place a bid');
       return;
     }
-    
-    setIsAddingToCart(true);
-    
-    // Create a cart item object from the product
-    const cartItem = {
-      id: product.id,
-      title: product.title,
-      price: product.discountPrice || product.price,
-      image: product.images[0],
-      quantity: quantity
-    };
-    
-    // Add to cart using our context function
-    addToCart(cartItem);
-    
-    // Simulate a small delay for user feedback
-    setTimeout(() => {
-      setIsAddingToCart(false);
-      alert(`Added ${quantity} ${quantity === 1 ? 'item' : 'items'} to your cart!`);
-    }, 500);
+
+    if (!isAuctionActive) {
+      alert('This auction has ended');
+      return;
+    }
+
+    const bidValue = parseFloat(bidAmount);
+    const currentHighest = artwork.currentBid || artwork.price;
+
+    console.log('Submitting bid:', { bidValue, currentHighest, artworkId: id });
+
+    if (bidValue <= currentHighest) {
+      alert(`Bid must be higher than $${currentHighest.toFixed(2)}`);
+      return;
+    }
+
+    if (bidValue < currentHighest + 5) {
+      alert('Bid must be at least $5 higher than current bid');
+      return;
+    }
+
+    setIsPlacingBid(true);
+
+    try {
+      console.log('Making API call to place bid...');
+      const response = await auctionAPI.placeBid(id, bidValue);
+      console.log('Bid response:', response.data);
+      
+      if (response.data.success) {
+        // Update local state with real response data
+        setBidHistory(response.data.bidHistory || []);
+        setArtwork(prev => ({
+          ...prev,
+          currentBid: response.data.currentBid,
+          highestBidder: currentUser._id,
+          auction: {
+            ...prev.auction,
+            currentBid: response.data.currentBid,
+            highestBidder: currentUser._id,
+            bids: response.data.bidHistory || []
+          }
+        }));
+
+        // Set next minimum bid
+        setBidAmount((response.data.currentBid + 5).toFixed(2));
+        
+        alert('Bid placed successfully!');
+      } else {
+        throw new Error(response.data.message || 'Failed to place bid');
+      }
+    } catch (error) {
+      console.error('Error placing bid:', error);
+      console.error('Error details:', error.response?.data);
+      alert(error.response?.data?.message || error.message || 'Failed to place bid. Please try again.');
+    } finally {
+      setIsPlacingBid(false);
+    }
   };
 
-  const handleBuyNow = () => {
-    if (!isAuthenticated) {
-      alert('Please log in to purchase items');
-      return;
-    }
-    
-    // Add to cart first
-    const cartItem = {
-      id: product.id,
-      title: product.title,
-      price: product.discountPrice || product.price,
-      image: product.images[0],
-      quantity: quantity
-    };
-    
-    addToCart(cartItem);
-    
-    // Then navigate to checkout
-    alert(`Proceeding to checkout with ${quantity} ${quantity === 1 ? 'item' : 'items'}!`);
-    // navigate('/checkout'); // Uncomment when you have a checkout page
+  const getCurrentPrice = () => {
+    return artwork.currentBid || artwork.price;
+  };
+
+  const getNextMinimumBid = () => {
+    return getCurrentPrice() + 5;
+  };
+
+  const isHighestBidder = () => {
+    return isAuthenticated && artwork.highestBidder === currentUser?._id;
+  };
+
+  const isArtworkOwner = () => {
+    return isAuthenticated && artwork.creator._id === currentUser?._id;
   };
 
   if (isLoading) {
     return (
       <div className="product-loading">
-        <div className="spinner"></div>
-        <p>Loading product details...</p>
+        <div className="loading-spinner"></div>
+        <p>Loading artwork details...</p>
       </div>
     );
   }
 
-  if (!product) {
+  if (error) {
+    return (
+      <div className="product-error">
+        <h2>Error Loading Artwork</h2>
+        <p>{error}</p>
+        <Link to="/shop" className="back-to-shop">Back to Shop</Link>
+      </div>
+    );
+  }
+
+  if (!artwork) {
     return (
       <div className="product-not-found">
-        <h2>Product Not Found</h2>
-        <p>The product you're looking for doesn't exist or has been removed.</p>
+        <h2>Artwork Not Found</h2>
+        <p>The artwork you're looking for doesn't exist or has been removed.</p>
         <Link to="/shop" className="back-to-shop">Back to Shop</Link>
       </div>
     );
@@ -212,267 +230,286 @@ const ProductDetail = () => {
 
   return (
     <div className="product-detail-container">
-      <div className="product-breadcrumbs">
-        <Link to="/">Home</Link> / 
-        <Link to="/shop">Shop</Link> / 
-        <Link to={`/shop/category/${product.category}`}>{product.category.charAt(0).toUpperCase() + product.category.slice(1)}</Link> / 
-        <span>{product.title}</span>
-      </div>
+      {/* Breadcrumbs */}
+      <nav className="product-breadcrumbs">
+        <Link to="/">Home</Link>
+        <span>/</span>
+        <Link to="/shop">Shop</Link>
+        <span>/</span>
+        <Link to={`/shop?category=${artwork.category}`}>
+          {artwork.category.charAt(0).toUpperCase() + artwork.category.slice(1)}
+        </Link>
+        <span>/</span>
+        <span>{artwork.title}</span>
+      </nav>
       
       <div className="product-main">
+        {/* Image Gallery */}
         <div className="product-gallery">
           <div className="main-image-container">
             <motion.img 
-              src={product.images[activeImage]} 
-              alt={product.title}
+              src={artwork.images[activeImage] || '/api/placeholder/600/600'} 
+              alt={artwork.title}
               className="main-image"
               key={activeImage}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
+              onError={(e) => {
+                e.target.src = '/api/placeholder/600/600';
+              }}
             />
+            
+            {artwork.isSold && (
+              <div className="sold-overlay-large">
+                <span>SOLD</span>
+              </div>
+            )}
           </div>
           
-          {product.images.length > 1 && (
+          {artwork.images && artwork.images.length > 1 && (
             <div className="image-thumbnails">
-              {product.images.map((image, index) => (
+              {artwork.images.map((image, index) => (
                 <div 
                   key={index}
                   className={`thumbnail ${index === activeImage ? 'active' : ''}`}
                   onClick={() => setActiveImage(index)}
                 >
-                  <img src={image} alt={`${product.title} thumbnail ${index + 1}`} />
+                  <img 
+                    src={image || '/api/placeholder/100/100'} 
+                    alt={`${artwork.title} ${index + 1}`}
+                    onError={(e) => {
+                      e.target.src = '/api/placeholder/100/100';
+                    }}
+                  />
                 </div>
               ))}
             </div>
           )}
         </div>
-        
+
+        {/* Product Information */}
         <div className="product-info">
-          <h1 className="product-title">{product.title}</h1>
-          
-          <div className="product-creator">
-            <Link to={`/profile/${product.creator.username}`} className="creator-link">
-              <img 
-                src={product.creator.profileImage} 
-                alt={product.creator.name} 
-                className="creator-image"
-              />
-              <span className="creator-name">By {product.creator.name}</span>
-            </Link>
-          </div>
-          
-          <div className="product-rating">
-            <div className="stars">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <span 
-                  key={star} 
-                  className={`star ${star <= Math.round(product.avgRating) ? 'filled' : ''}`}
-                >
-                  ★
-                </span>
-              ))}
+          <div className="product-header">
+            <h1 className="product-title">{artwork.title}</h1>
+            <div className="product-artist">
+              <span>by </span>
+              <Link to={`/profile/${artwork.creator.username}`} className="artist-link">
+                {artwork.creator.username}
+              </Link>
+              {artwork.creator.isArtist && (
+                <svg className="verified-artist-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 12l2 2 4-4"/>
+                  <path d="M21 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M3 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M12 21c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M12 3c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                </svg>
+              )}
             </div>
-            <span className="review-count">
-              {product.reviewCount} {product.reviewCount === 1 ? 'review' : 'reviews'}
-            </span>
           </div>
-          
-          <div className="product-price">
-            {product.discountPrice ? (
-              <>
-                <span className="original-price">${product.price.toFixed(2)}</span>
-                <span className="discount-price">${product.discountPrice.toFixed(2)}</span>
-              </>
-            ) : (
-              <span className="current-price">${product.price.toFixed(2)}</span>
-            )}
-          </div>
-          
-          <p className="product-description">{product.description}</p>
-          
-          <div className="product-actions">
-            <div className="quantity-selector">
-              <span>Quantity:</span>
-              <div className="quantity-controls">
-                <button 
-                  onClick={() => handleQuantityChange(-1)}
-                  disabled={quantity <= 1}
-                  className="quantity-button"
-                >
-                  -
-                </button>
-                <span className="quantity-value">{quantity}</span>
-                <button 
-                  onClick={() => handleQuantityChange(1)}
-                  disabled={quantity >= product.stock}
-                  className="quantity-button"
-                >
-                  +
-                </button>
+
+          {artwork.description && (
+            <div className="product-description">
+              <h3>Description</h3>
+              <p>{artwork.description}</p>
+            </div>
+          )}
+
+          {/* Auction Section */}
+          <div className="auction-section">
+            <div className="auction-header">
+              <h2>Live Auction</h2>
+              <div className={`auction-status ${isAuctionActive ? 'active' : 'ended'}`}>
+                <svg className="auction-status-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="12" r="10"/>
+                </svg>
+                {isAuctionActive ? 'Live' : 'Ended'}
               </div>
-              <span className="stock-info">
-                {product.stock > 0 ? (
-                  product.stock < 5 ? (
-                    <span className="low-stock">Only {product.stock} left in stock!</span>
-                  ) : (
-                    <span className="in-stock">In stock</span>
-                  )
-                ) : (
-                  <span className="out-of-stock">Out of stock</span>
-                )}
+            </div>
+
+            <div className="auction-timer">
+              <span className="timer-label">Time Remaining:</span>
+              <span className={`timer-value ${!isAuctionActive ? 'ended' : ''}`}>
+                {timeRemaining}
               </span>
             </div>
-            
-            <div className="purchase-buttons">
-              <button 
-                className="add-to-cart-button"
-                onClick={handleAddToCart}
-                disabled={isAddingToCart || product.stock === 0}
-              >
-                {isAddingToCart ? 'Adding...' : 'Add to Cart'}
-              </button>
-              <button 
-                className="buy-now-button"
-                onClick={handleBuyNow}
-                disabled={product.stock === 0}
-              >
-                Buy Now
-              </button>
+
+            <div className="price-section">
+              <div className="current-price">
+                <span className="price-label">Current Bid:</span>
+                <span className="price-value">${getCurrentPrice().toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Bidding Form */}
+            {isAuctionActive && !isArtworkOwner() && (
+              <form onSubmit={handleBidSubmit} className="bid-form">
+                <div className="bid-input-group">
+                  <label htmlFor="bidAmount">Your Bid ($):</label>
+                  <input
+                    type="number"
+                    id="bidAmount"
+                    value={bidAmount}
+                    onChange={(e) => setBidAmount(e.target.value)}
+                    min={getNextMinimumBid()}
+                    step="0.01"
+                    disabled={isPlacingBid}
+                    required
+                  />
+                </div>
+                
+                <button 
+                  type="submit" 
+                  className={`bid-button ${isHighestBidder() ? 'highest-bidder' : ''}`}
+                  disabled={isPlacingBid || !isAuthenticated}
+                >
+                  {isPlacingBid ? 'Placing Bid...' : 
+                   isHighestBidder() ? 'Increase Your Bid' : 'Place Bid'}
+                </button>
+                
+                {!isAuthenticated && (
+                  <p className="login-prompt">
+                    <Link to="/login">Log in</Link> to place a bid
+                  </p>
+                )}
+                
+                {isHighestBidder() && (
+                  <p className="highest-bidder-notice">
+                    <svg className="crown-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C6 4 6 6 6 6s0-2 1.5-2 1.5 2 1.5 2 0-2 1.5-2 1.5 2 1.5 2 0-2 1.5-2 1.5 2 1.5 2 0-2 1.5-2a2.5 2.5 0 0 1 0 5H18l-1.5 9H7.5L6 9Z"/>
+                    </svg>
+                    You are currently the highest bidder!
+                  </p>
+                )}
+              </form>
+            )}
+
+            {isArtworkOwner() && (
+              <div className="owner-notice">
+                <svg className="info-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                This is your artwork. You cannot bid on your own items.
+              </div>
+            )}
+
+            {!isAuctionActive && (
+              <div className="auction-ended">
+                <h3>Auction Ended</h3>
+                {bidHistory.length > 0 ? (
+                  <p>
+                    <svg className="trophy-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C6 4 6 6 6 6s0-2 1.5-2 1.5 2 1.5 2 0-2 1.5-2 1.5 2 1.5 2 0-2 1.5-2 1.5 2 1.5 2 0-2 1.5-2a2.5 2.5 0 0 1 0 5H18l-1.5 9H7.5L6 9Z"/>
+                    </svg>
+                    Winner: <strong>{bidHistory[0].bidder.username}</strong> 
+                    with a bid of <strong>${bidHistory[0].amount.toFixed(2)}</strong>
+                  </p>
+                ) : (
+                  <p>No bids were placed for this auction.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Bid History */}
+          <div className="bid-history">
+            <h3>Bid History</h3>
+            {bidHistory.length > 0 ? (
+              <div className="bid-list">
+                <AnimatePresence>
+                  {bidHistory.slice(0, 10).map((bid, index) => (
+                    <motion.div
+                      key={bid.id}
+                      className={`bid-item ${index === 0 ? 'highest' : ''}`}
+                      initial={{ opacity: 0, y: -20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <div className="bid-info">
+                        <span className="bidder">{bid.bidder.username}</span>
+                        <span className="bid-amount">${bid.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="bid-time">
+                        {new Date(bid.timestamp).toLocaleString()}
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <p className="no-bids">No bids yet. Be the first to bid!</p>
+            )}
+          </div>
+
+          {/* Artwork Details */}
+          <div className="artwork-details">
+            <h3>Artwork Details</h3>
+            <div className="details-grid">
+              <div className="detail-item">
+                <span className="detail-label">Category:</span>
+                <span className="detail-value">
+                  {artwork.category.charAt(0).toUpperCase() + artwork.category.slice(1)}
+                </span>
+              </div>
+              
+              {artwork.medium && (
+                <div className="detail-item">
+                  <span className="detail-label">Medium:</span>
+                  <span className="detail-value">{artwork.medium}</span>
+                </div>
+              )}
+              
+              <div className="detail-item">
+                <span className="detail-label">Views:</span>
+                <span className="detail-value">
+                  <svg className="views-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  {artwork.views || 0}
+                </span>
+              </div>
+              
+              <div className="detail-item">
+                <span className="detail-label">Likes:</span>
+                <span className="detail-value">
+                  <svg className="likes-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                  </svg>
+                  {artwork.likes || 0}
+                </span>
+              </div>
+              
+              <div className="detail-item">
+                <span className="detail-label">Listed:</span>
+                <span className="detail-value">
+                  {new Date(artwork.createdAt).toLocaleDateString()}
+                </span>
+              </div>
             </div>
           </div>
-          
-          <div className="product-meta">
-            <div className="meta-item">
-              <span className="meta-label">SKU:</span>
-              <span className="meta-value">{product.sku}</span>
-            </div>
-            <div className="meta-item">
-              <span className="meta-label">Category:</span>
-              <Link to={`/shop/category/${product.category}`} className="meta-value category-link">
-                {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-              </Link>
-            </div>
-            <div className="meta-item tags">
-              <span className="meta-label">Tags:</span>
+
+          {/* Tags */}
+          {artwork.tags && artwork.tags.length > 0 && (
+            <div className="artwork-tags">
+              <h3>Tags</h3>
               <div className="tag-list">
-                {product.tags.map((tag, index) => (
-                  <Link key={index} to={`/shop?tag=${tag}`} className="tag">
+                {artwork.tags.map((tag, index) => (
+                  <Link 
+                    key={index} 
+                    to={`/shop?search=${tag}`} 
+                    className="tag"
+                  >
                     {tag}
                   </Link>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="product-details">
-        <div className="details-tabs">
-          <button className="tab-button active">Description</button>
-          <button className="tab-button">Specifications</button>
-          <button className="tab-button">Reviews ({product.reviewCount})</button>
-        </div>
-        
-        <div className="tab-content">
-          <div className="description-tab">
-            <h2>About this item</h2>
-            <p>{product.longDescription}</p>
-          </div>
-          
-          <div className="specifications-section">
-            <h3>Specifications</h3>
-            <div className="specifications-grid">
-              <div className="spec-item">
-                <h4>Dimensions</h4>
-                <p>{product.dimensions.width} × {product.dimensions.height} × {product.dimensions.depth} {product.dimensions.unit}</p>
-              </div>
-              <div className="spec-item">
-                <h4>Weight</h4>
-                <p>{product.weight} lbs</p>
-              </div>
-              <div className="spec-item">
-                <h4>Materials</h4>
-                <ul>
-                  {product.materials.map((material, index) => (
-                    <li key={index}>{material}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="customer-reviews">
-        <h3>Customer Reviews</h3>
-        
-        {product.reviews.length > 0 ? (
-          <div className="reviews-list">
-            {product.reviews.map((review) => (
-              <div key={review.id} className="review-item">
-                <div className="review-header">
-                  <div className="review-user">{review.user}</div>
-                  <div className="review-rating">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <span 
-                        key={star} 
-                        className={`star ${star <= review.rating ? 'filled' : ''}`}
-                      >
-                        ★
-                      </span>
-                    ))}
-                  </div>
-                  <div className="review-date">{review.date}</div>
-                </div>
-                <div className="review-content">
-                  <p>{review.comment}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="no-reviews">
-            <p>This product has not been reviewed yet. Be the first to leave a review!</p>
-          </div>
-        )}
-        
-        {isAuthenticated && (
-          <button className="write-review-button">
-            Write a Review
-          </button>
-        )}
-      </div>
-      
-      <div className="related-products">
-        <h3>You May Also Like</h3>
-        <div className="related-products-grid">
-          {mockProducts.filter(relatedProduct => 
-            relatedProduct.id !== product.id
-          ).map((relatedProduct) => (
-            <Link 
-              key={relatedProduct.id} 
-              to={`/shop/product/${relatedProduct.id}`}
-              className="related-product-card"
-            >
-              <div className="related-product-image">
-                <img src={relatedProduct.images[0]} alt={relatedProduct.title} />
-              </div>
-              <div className="related-product-info">
-                <h4>{relatedProduct.title}</h4>
-                <div className="related-product-price">
-                  {relatedProduct.discountPrice ? (
-                    <>
-                      <span className="original-price">${relatedProduct.price.toFixed(2)}</span>
-                      <span className="discount-price">${relatedProduct.discountPrice.toFixed(2)}</span>
-                    </>
-                  ) : (
-                    <span className="current-price">${relatedProduct.price.toFixed(2)}</span>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))}
+          )}
         </div>
       </div>
     </div>

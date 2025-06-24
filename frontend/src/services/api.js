@@ -1,7 +1,7 @@
-// frontend/src/services/api.js
+// src/services/api.js - Updated with auction endpoints
 import axios from 'axios';
 
-// Create an axios instance with default configs
+// Create axios instance with base configuration
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
   headers: {
@@ -9,7 +9,7 @@ const api = axios.create({
   }
 });
 
-// Add a request interceptor to add auth token to all requests
+// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,19 +23,15 @@ api.interceptors.request.use(
   }
 );
 
-// Add a response interceptor to handle common errors
+// Response interceptor to handle token expiration
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    // Handle token expiration
-    if (error.response && error.response.status === 401 && 
-        error.response.data && error.response.data.message === 'Token expired') {
+    if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      window.location.href = '/login';
     }
-    
     return Promise.reject(error);
   }
 );
@@ -150,6 +146,24 @@ export const artworkAPI = {
   }
 };
 
+// Auction API service (now using artwork endpoints)
+export const auctionAPI = {
+  // Place a bid on an artwork
+  placeBid: (artworkId, amount) => {
+    return api.post(`/api/artworks/${artworkId}/bid`, { amount });
+  },
+  
+  // Get bid history for an artwork
+  getBidHistory: (artworkId, params = {}) => {
+    return api.get(`/api/artworks/${artworkId}/bids`, { params });
+  },
+  
+  // Get auction info for an artwork (using regular artwork endpoint)
+  getAuctionInfo: (artworkId) => {
+    return api.get(`/api/artworks/${artworkId}`);
+  }
+};
+
 // Shop API service
 export const shopAPI = {
   getFeaturedArtworks: () => {
@@ -225,7 +239,5 @@ export const postAPI = {
     return api.delete(`/api/posts/${postId}/comment/${commentId}`);
   }
 };
-
-// Removed event-related API services
 
 export default api;

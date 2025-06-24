@@ -1,64 +1,16 @@
-// backend/routes/artworks.js - Updated with bidding functionality
-const express = require('express');
-const router = express.Router();
-const { 
-  getArtworks,
-  getArtworkById,
-  createArtwork,
-  updateArtwork,
-  deleteArtwork,
-  likeArtwork,
-  uploadArtworkImages
-} = require('../controllers/artworkController');
-const { protect, isArtist } = require('../middleware/authMiddleware');
-const { uploadArtworkImages: uploadMiddleware, uploadFilesToAzure } = require('../middleware/azureStorageMiddleware');
+// backend/controllers/auctionController.js
 const Artwork = require('../models/Artwork');
 
-// Get all artworks
-router.get('/', getArtworks);
-
-// Get single artwork
-router.get('/:id', getArtworkById);
-
-// Create new artwork
-router.post('/', protect, isArtist, createArtwork);
-
-// Upload artwork images
-router.post(
-  '/upload', 
-  protect, 
-  isArtist, 
-  uploadMiddleware.array('images', 5),
-  uploadFilesToAzure('artworks'),
-  uploadArtworkImages
-);
-
-// Update artwork
-router.put('/:id', protect, updateArtwork);
-
-// Update artwork with images
-router.put(
-  '/:id/upload',
-  protect,
-  uploadMiddleware.array('images', 5),
-  uploadFilesToAzure('artworks'),
-  updateArtwork
-);
-
-// Delete artwork
-router.delete('/:id', protect, deleteArtwork);
-
-// Like artwork
-router.post('/:id/like', protect, likeArtwork);
-
-// **NEW: Place a bid on an artwork**
-router.post('/:id/bid', protect, async (req, res) => {
+// @desc    Place a bid on an artwork
+// @route   POST /api/auctions/:artworkId/bid
+// @access  Private
+const placeBid = async (req, res) => {
   try {
+    const { artworkId } = req.params;
     const { amount } = req.body;
-    const artworkId = req.params.id;
     const bidderId = req.user._id;
 
-    console.log('Placing bid:', { artworkId, amount, bidderId: bidderId.toString() });
+    console.log('Placing bid:', { artworkId, amount, bidderId });
 
     // Validate bid amount
     if (!amount || amount <= 0) {
@@ -68,8 +20,9 @@ router.post('/:id/bid', protect, async (req, res) => {
       });
     }
 
-    // Find artwork and populate creator
-    const artwork = await Artwork.findById(artworkId).populate('creator', 'username');
+    // Find artwork
+    const artwork = await Artwork.findById(artworkId)
+      .populate('creator', 'username');
 
     if (!artwork) {
       return res.status(404).json({
@@ -104,12 +57,10 @@ router.post('/:id/bid', protect, async (req, res) => {
     const currentHighest = artwork.currentBid || artwork.price;
     const minimumBid = currentHighest + 5; // $5 minimum increment
 
-    console.log('Bid validation:', { currentHighest, minimumBid, amount });
-
     if (amount < minimumBid) {
       return res.status(400).json({
         success: false,
-        message: `Bid must be at least $${minimumBid.toFixed(2)}. Current bid is $${currentHighest.toFixed(2)}.`
+        message: `Bid must be at least $${minimumBid.toFixed(2)}`
       });
     }
 
@@ -149,9 +100,6 @@ router.post('/:id/bid', protect, async (req, res) => {
     };
 
     // Add bid to history (at the beginning for latest first)
-    if (!artwork.auction.bids) {
-      artwork.auction.bids = [];
-    }
     artwork.auction.bids.unshift(newBid);
 
     // Update current bid and highest bidder
@@ -163,11 +111,11 @@ router.post('/:id/bid', protect, async (req, res) => {
     // Save the artwork
     await artwork.save();
 
-    console.log('Bid placed successfully');
-
-    // Format bid history for response (populate bidder info)
+    // Populate user data for response
     await artwork.populate('auction.bids.bidder', 'username');
-    
+    await artwork.populate('auction.highestBidder', 'username');
+
+    // Format bid history for response
     const bidHistory = artwork.auction.bids.slice(0, 10).map(bid => ({
       id: bid._id,
       amount: bid.amount,
@@ -187,7 +135,7 @@ router.post('/:id/bid', protect, async (req, res) => {
         timestamp: new Date()
       },
       currentBid: artwork.currentBid,
-      highestBidder: req.user.username,
+      highestBidder: artwork.auction.highestBidder?.username,
       bidHistory: bidHistory
     });
 
@@ -195,15 +143,17 @@ router.post('/:id/bid', protect, async (req, res) => {
     console.error('Error placing bid:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error while placing bid: ' + error.message
+      message: 'Server error while placing bid'
     });
   }
-});
+};
 
-// **NEW: Get bid history for an artwork**
-router.get('/:id/bids', async (req, res) => {
+// @desc    Get bid history for an artwork
+// @route   GET /api/auctions/:artworkId/bids
+// @access  Public
+const getBidHistory = async (req, res) => {
   try {
-    const artworkId = req.params.id;
+    const { artworkId } = req.params;
     const { limit = 20, page = 1 } = req.query;
 
     const artwork = await Artwork.findById(artworkId)
@@ -255,6 +205,67 @@ router.get('/:id/bids', async (req, res) => {
       message: 'Server error while fetching bid history'
     });
   }
-});
+};
 
-module.exports = router;
+// @desc    Get auction info for an artwork
+// @route   GET /api/auctions/:artworkId/info
+// @access  Public
+const getAuctionInfo = async (req, res) => {
+  try {
+    const { artworkId } = req.params;
+
+    const artwork = await Artwork.findById(artworkId)
+      .populate('auction.highestBidder', 'username')
+      .populate('creator', 'username');
+
+    if (!artwork) {
+      return res.status(404).json({
+        success: false,
+        message: 'Artwork not found'
+      });
+    }
+
+    if (!artwork.auction) {
+      return res.json({
+        success: true,
+        auctionInfo: null,
+        message: 'No auction configured for this artwork'
+      });
+    }
+
+    const now = new Date();
+    const endTime = new Date(artwork.auction.endTime);
+    const isActive = artwork.auction.isActive && now <= endTime;
+
+    const auctionInfo = {
+      artworkId: artwork._id,
+      title: artwork.title,
+      creator: artwork.creator.username,
+      startTime: artwork.auction.startTime,
+      endTime: artwork.auction.endTime,
+      startingPrice: artwork.auction.startingPrice,
+      currentBid: artwork.auction.currentBid,
+      highestBidder: artwork.auction.highestBidder?.username,
+      isActive: isActive,
+      minimumIncrement: artwork.auction.minimumIncrement || 5,
+      totalBids: artwork.auction.bids ? artwork.auction.bids.length : 0
+    };
+
+    res.json({
+      success: true,
+      auctionInfo
+    });
+  } catch (error) {
+    console.error('Error getting auction info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching auction info'
+    });
+  }
+};
+
+module.exports = {
+  placeBid,
+  getBidHistory,
+  getAuctionInfo
+};
