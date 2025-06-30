@@ -385,7 +385,7 @@ const deleteArtwork = async (req, res) => {
       });
     }
 
-    // Don't allow deletion of artworks with active auctions that have bids
+    // Don't allow deletion if artwork has active auction with bids
     if (artwork.auction && artwork.auction.isActive && artwork.auction.bids.length > 0) {
       return res.status(400).json({
         success: false,
@@ -394,10 +394,12 @@ const deleteArtwork = async (req, res) => {
     }
 
     // Remove artwork reference from linked posts
-    await Post.updateMany(
-      { linkedShopItem: artwork._id },
-      { $unset: { linkedShopItem: 1 } }
-    );
+    if (artwork.linkedPosts && artwork.linkedPosts.length > 0) {
+      await Post.updateMany(
+        { _id: { $in: artwork.linkedPosts } },
+        { $unset: { linkedShopItem: 1 } }
+      );
+    }
 
     await artwork.deleteOne();
 
@@ -413,7 +415,7 @@ const deleteArtwork = async (req, res) => {
   }
 };
 
-// @desc    Like/Unlike artwork
+// @desc    Like/unlike artwork
 // @route   POST /api/artworks/:id/like
 // @access  Private
 const likeArtwork = async (req, res) => {
@@ -427,7 +429,6 @@ const likeArtwork = async (req, res) => {
       });
     }
 
-    // For now, just increment likes (you can add user tracking later)
     artwork.likes += 1;
     await artwork.save();
 
@@ -470,20 +471,32 @@ const uploadArtworkImages = async (req, res) => {
 };
 
 // @desc    Get user's posts (for linking to artworks)
-// @route   GET /api/artworks/user-posts
+// @route   GET /api/artworks/user/posts
 // @access  Private (Artists only)
 const getUserPosts = async (req, res) => {
   try {
+    console.log('=== getUserPosts called ===');
+    console.log('User ID:', req.user._id);
+    console.log('User isArtist:', req.user.isArtist);
+    
     const posts = await Post.find({ creator: req.user._id })
       .select('_id content caption createdAt linkedShopItem')
       .sort({ createdAt: -1 })
-      .populate('linkedShopItem', 'title');
+      .populate('linkedShopItem', 'title price currentBid'); // ← FIXED: Include price fields
+
+    console.log('Posts found:', posts.length);
+    console.log('Posts:', posts.map(p => ({ 
+      id: p._id, 
+      caption: p.caption, 
+      hasLinkedItem: !!p.linkedShopItem 
+    })));
 
     res.json({
       success: true,
       posts
     });
   } catch (error) {
+    console.error('Error fetching user posts:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -498,5 +511,6 @@ module.exports = {
   updateArtwork,
   deleteArtwork,
   likeArtwork,
-  uploadArtworkImages
+  uploadArtworkImages,
+  getUserPosts  // FIXED: Added the missing export!
 };

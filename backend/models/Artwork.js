@@ -1,4 +1,4 @@
-// backend/models/Artwork.js - Updated with linkedPosts functionality
+// backend/models/Artwork.js - FIXED VERSION with safe virtuals
 const mongoose = require('mongoose');
 
 const bidSchema = new mongoose.Schema({
@@ -141,41 +141,57 @@ const artworkSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Virtual for formatted price
+// FIXED: Virtual for formatted price - now safe from undefined values
 artworkSchema.virtual('formattedPrice').get(function() {
   const price = this.currentBid || this.price;
-  return `$${price.toFixed(2)}`;
+  // Add safety check to prevent toFixed error
+  if (price === null || price === undefined || isNaN(price)) {
+    return '$0.00';
+  }
+  return `$${Number(price).toFixed(2)}`;
 });
 
-// Virtual for auction status
+// FIXED: Virtual for auction status - now safe from undefined values
 artworkSchema.virtual('auctionStatus').get(function() {
   if (!this.auction) return 'no_auction';
   
-  const now = new Date();
-  const endTime = new Date(this.auction.endTime);
-  
-  if (now > endTime) return 'ended';
-  if (this.auction.isActive) return 'active';
-  return 'inactive';
+  try {
+    const now = new Date();
+    const endTime = new Date(this.auction.endTime);
+    
+    if (isNaN(endTime.getTime())) return 'invalid_date';
+    if (now > endTime) return 'ended';
+    if (this.auction.isActive) return 'active';
+    return 'inactive';
+  } catch (error) {
+    console.error('Error in auctionStatus virtual:', error);
+    return 'error';
+  }
 });
 
-// Virtual for time remaining
+// FIXED: Virtual for time remaining - now safe from undefined values
 artworkSchema.virtual('timeRemaining').get(function() {
-  if (!this.auction) return null;
+  if (!this.auction || !this.auction.endTime) return null;
   
-  const now = new Date();
-  const endTime = new Date(this.auction.endTime);
-  
-  if (endTime <= now) return 'Auction ended';
-  
-  const diff = endTime - now;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  try {
+    const now = new Date();
+    const endTime = new Date(this.auction.endTime);
+    
+    if (isNaN(endTime.getTime())) return 'Invalid date';
+    if (endTime <= now) return 'Auction ended';
+    
+    const diff = endTime - now;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  } catch (error) {
+    console.error('Error in timeRemaining virtual:', error);
+    return 'Error calculating time';
+  }
 });
 
 // Method to add linked post

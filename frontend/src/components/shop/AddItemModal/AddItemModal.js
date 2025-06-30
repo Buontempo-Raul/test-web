@@ -37,12 +37,19 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }) => {
   const fetchUserPosts = async () => {
     setLoadingPosts(true);
     try {
+      console.log('Fetching user posts...');
       const response = await artworkAPI.getUserPosts();
+      console.log('User posts response:', response.data);
+      
       if (response.data.success) {
         setUserPosts(response.data.posts);
+        console.log('User posts loaded:', response.data.posts.length);
+      } else {
+        console.error('Failed to fetch posts:', response.data.message);
       }
     } catch (error) {
       console.error('Error fetching user posts:', error);
+      console.error('Error response:', error.response?.data);
     } finally {
       setLoadingPosts(false);
     }
@@ -208,6 +215,8 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }) => {
         }
       });
 
+      console.log('Submitting artwork data:', artworkData);
+
       const response = await artworkAPI.createArtwork(artworkData);
 
       if (response.data.success) {
@@ -233,47 +242,50 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }) => {
       <div 
         key={post._id} 
         className={`post-option ${isSelected ? 'selected' : ''} ${hasLinkedItem ? 'has-linked-item' : ''}`}
-        onClick={() => !hasLinkedItem && handlePostSelection(post._id)}
+        onClick={() => handlePostSelection(post._id)}
       >
-        <div className="post-option-content">
-          {post.content?.url && (
-            <img 
-              src={post.content.url} 
-              alt="Post preview" 
-              className="post-option-image"
-            />
-          )}
-          <div className="post-option-details">
-            <p className="post-option-caption">
-              {post.caption || 'No caption'}
-            </p>
-            <span className="post-option-date">
-              {new Date(post.createdAt).toLocaleDateString()}
-            </span>
-            {hasLinkedItem && (
-              <span className="already-linked-indicator">
-                Already linked to: {hasLinkedItem.title}
-              </span>
-            )}
-          </div>
+        <div className="post-option-checkbox">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => handlePostSelection(post._id)}
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
-        {!hasLinkedItem && (
-          <div className="post-option-checkbox">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => handlePostSelection(post._id)}
-              onClick={(e) => e.stopPropagation()}
-            />
+        
+        <div className="post-option-content">
+          <div className="post-caption">
+            {post.caption || 'No caption'}
           </div>
-        )}
+          
+          {post.content && (
+            <div className="post-preview">
+              {post.content.type === 'image' && post.content.url && (
+                <img src={post.content.url} alt="Post preview" />
+              )}
+              {post.content.type === 'carousel' && post.content.items?.[0] && (
+                <img src={post.content.items[0].url} alt="Post preview" />
+              )}
+            </div>
+          )}
+          
+          <div className="post-date">
+            {new Date(post.createdAt).toLocaleDateString()}
+          </div>
+          
+          {hasLinkedItem && (
+            <div className="linked-item-indicator">
+              Already linked to: {post.linkedShopItem.title}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="add-item-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Add New Artwork</h2>
           <button className="close-button" onClick={onClose}>&times;</button>
@@ -285,7 +297,7 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }) => {
           </div>
         )}
 
-        <form className="add-item-form" onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit}>
           {/* Basic Information */}
           <div className="form-section">
             <h3>Basic Information</h3>
@@ -495,33 +507,29 @@ const AddItemModal = ({ isOpen, onClose, onItemAdded }) => {
             )}
           </div>
 
-          {/* Sales Options */}
+          {/* For Sale Checkbox */}
           <div className="form-section">
-            <h3>Sales Options</h3>
             <div className="form-group checkbox-group">
-              <label className="checkbox-label">
+              <label htmlFor="forSale" className="checkbox-label">
                 <input
                   type="checkbox"
+                  id="forSale"
                   name="forSale"
                   checked={formData.forSale}
                   onChange={handleInputChange}
                 />
-                <span>Available for sale</span>
+                Available for sale
               </label>
             </div>
           </div>
 
-          {/* Form Actions */}
-          <div className="form-actions">
-            <button type="button" onClick={onClose} className="cancel-button">
+          {/* Submit Buttons */}
+          <div className="modal-actions">
+            <button type="button" onClick={onClose} disabled={loading}>
               Cancel
             </button>
-            <button 
-              type="submit" 
-              className="submit-button" 
-              disabled={loading}
-            >
-              {loading ? 'Creating...' : 'Create Artwork'}
+            <button type="submit" disabled={loading || images.length === 0}>
+              {loading ? 'Creating...' : 'Add Artwork'}
             </button>
           </div>
         </form>
