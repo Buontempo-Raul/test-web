@@ -1,4 +1,4 @@
-// backend/models/Post.js
+// backend/models/Post.js - Updated for multiple artwork linking
 const mongoose = require('mongoose');
 
 const commentSchema = new mongoose.Schema({
@@ -56,6 +56,12 @@ const postSchema = new mongoose.Schema({
     ref: 'User'
   }],
   comments: [commentSchema],
+  // UPDATED: Changed from single artwork to multiple artworks
+  linkedShopItems: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Artwork'
+  }],
+  // DEPRECATED: Keep for migration compatibility (will be removed later)
   linkedShopItem: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'
@@ -86,6 +92,9 @@ postSchema.index({
 // New indexes for like functionality
 postSchema.index({ likedBy: 1 }); // For checking if user liked post
 postSchema.index({ likes: -1 }); // For sorting by popularity
+
+// NEW: Index for multiple artwork linking
+postSchema.index({ linkedShopItems: 1 }); // For finding posts linked to specific artworks
 
 // Compound indexes for common query patterns
 postSchema.index({ 
@@ -124,6 +133,25 @@ postSchema.methods.toggleLike = async function(userId) {
   }
 };
 
+// NEW: Method to add linked artwork
+postSchema.methods.addLinkedArtwork = function(artworkId) {
+  if (!this.linkedShopItems.includes(artworkId)) {
+    this.linkedShopItems.push(artworkId);
+  }
+};
+
+// NEW: Method to remove linked artwork
+postSchema.methods.removeLinkedArtwork = function(artworkId) {
+  this.linkedShopItems = this.linkedShopItems.filter(id => 
+    id.toString() !== artworkId.toString()
+  );
+};
+
+// NEW: Method to check if artwork is linked
+postSchema.methods.isArtworkLinked = function(artworkId) {
+  return this.linkedShopItems.some(id => id.toString() === artworkId.toString());
+};
+
 // Virtual properties
 postSchema.virtual('likesCount').get(function() {
   return this.likedBy ? this.likedBy.length : this.likes;
@@ -133,12 +161,24 @@ postSchema.virtual('commentsCount').get(function() {
   return this.comments ? this.comments.length : 0;
 });
 
+// NEW: Virtual for linked artworks count
+postSchema.virtual('linkedArtworksCount').get(function() {
+  return this.linkedShopItems ? this.linkedShopItems.length : 0;
+});
+
 // Middleware to ensure data consistency
 postSchema.pre('save', function(next) {
   // Ensure likes count matches likedBy array length
   if (this.likedBy) {
     this.likes = this.likedBy.length;
   }
+  
+  // Migration helper: Move single linkedShopItem to linkedShopItems array
+  if (this.linkedShopItem && (!this.linkedShopItems || this.linkedShopItems.length === 0)) {
+    this.linkedShopItems = [this.linkedShopItem];
+    this.linkedShopItem = undefined; // Clear the old field
+  }
+  
   next();
 });
 

@@ -1,4 +1,4 @@
-// frontend/src/components/explore/CreatePostModal/CreatePostModal.js
+// frontend/src/components/explore/CreatePostModal/CreatePostModal.js - Updated for multiple artwork linking
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
 import { postAPI } from '../../../services/api';
@@ -9,7 +9,7 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
   const [formData, setFormData] = useState({
     caption: '',
     tags: '',
-    linkedShopItem: '' // For linking to artwork
+    linkedShopItems: [] // UPDATED: Changed from single to multiple
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +66,7 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
       setFormData({
         caption: '',
         tags: '',
-        linkedShopItem: ''
+        linkedShopItems: [] // UPDATED: Reset to empty array
       });
       setError('');
       setUserArtworks([]);
@@ -166,9 +166,9 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
       formDataToSend.append('caption', formData.caption);
       formDataToSend.append('tags', formData.tags);
       
-      // Add linked shop item if selected
-      if (formData.linkedShopItem) {
-        formDataToSend.append('linkedShopItem', formData.linkedShopItem);
+      // UPDATED: Add multiple linked artworks
+      if (formData.linkedShopItems.length > 0) {
+        formDataToSend.append('linkedShopItems', JSON.stringify(formData.linkedShopItems));
       }
 
       console.log('Sending request to create post...');
@@ -208,6 +208,16 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
     }));
   };
 
+  // UPDATED: Handle artwork selection (multiple)
+  const handleArtworkSelection = (artworkId) => {
+    setFormData(prev => ({
+      ...prev,
+      linkedShopItems: prev.linkedShopItems.includes(artworkId)
+        ? prev.linkedShopItems.filter(id => id !== artworkId)
+        : [...prev.linkedShopItems, artworkId]
+    }));
+  };
+
   // Remove a file from selection
   const removeFile = (index) => {
     console.log('Removing file at index:', index);
@@ -216,6 +226,53 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
     
     setFiles(newFiles);
     setPreviews(newPreviews);
+  };
+
+  // UPDATED: Render artwork option for selection
+  const renderArtworkOption = (artwork) => {
+    const isSelected = formData.linkedShopItems.includes(artwork._id);
+    const linkedPostsCount = artwork.linkedPosts?.length || 0;
+
+    return (
+      <div 
+        key={artwork._id} 
+        style={{
+          ...artworkOptionStyle,
+          backgroundColor: isSelected ? '#f0f2ff' : 'white',
+          borderColor: isSelected ? '#667eea' : '#e5e7eb'
+        }}
+        onClick={() => handleArtworkSelection(artwork._id)}
+      >
+        <div style={artworkContentStyle}>
+          {artwork.images?.[0] && (
+            <img 
+              src={artwork.images[0]} 
+              alt={artwork.title} 
+              style={artworkImageStyle}
+            />
+          )}
+          <div style={artworkDetailsStyle}>
+            <p style={artworkTitleStyle}>
+              {artwork.title}
+            </p>
+            <p style={artworkPriceStyle}>
+              ${artwork.price}
+            </p>
+            {linkedPostsCount > 0 && (
+              <span style={linkedPostsIndicatorStyle}>
+                {linkedPostsCount} post{linkedPostsCount > 1 ? 's' : ''} linked
+              </span>
+            )}
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => handleArtworkSelection(artwork._id)}
+          style={checkboxStyle}
+        />
+      </div>
+    );
   };
 
   return (
@@ -301,43 +358,44 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
             />
           </div>
 
-          {/* Link to Artwork (only for artists) */}
+          {/* UPDATED: Link to Multiple Artworks (only for artists) */}
           {isArtist && (
             <div style={formGroupStyle}>
-              <label htmlFor="linkedShopItem">Link to Your Artwork (Optional)</label>
+              <label>Link to Your Artworks (Optional)</label>
+              <p style={hintStyle}>
+                Select artworks to link to this post. Viewers will see buttons to view these products.
+              </p>
+              
               {loadingArtworks ? (
-                <div>Loading your artworks...</div>
+                <div style={loadingStyle}>Loading your artworks...</div>
+              ) : userArtworks.length > 0 ? (
+                <div style={artworksSelectionStyle}>
+                  {userArtworks.map(renderArtworkOption)}
+                  {formData.linkedShopItems.length > 0 && (
+                    <div style={selectionSummaryStyle}>
+                      {formData.linkedShopItems.length} artwork{formData.linkedShopItems.length > 1 ? 's' : ''} selected
+                    </div>
+                  )}
+                </div>
               ) : (
-                <select
-                  id="linkedShopItem"
-                  name="linkedShopItem"
-                  value={formData.linkedShopItem}
-                  onChange={handleInputChange}
-                  style={selectStyle}
-                >
-                  <option value="">No artwork linked</option>
-                  {userArtworks.map(artwork => (
-                    <option key={artwork._id} value={artwork._id}>
-                      {artwork.title} - ${artwork.price}
-                      {artwork.linkedPosts?.length > 0 && ` (${artwork.linkedPosts.length} post${artwork.linkedPosts.length > 1 ? 's' : ''})`}
-                    </option>
-                  ))}
-                </select>
+                <div style={noArtworksStyle}>
+                  You don't have any artworks for sale. Create some artworks first to link them to your posts.
+                </div>
               )}
-              <div style={hintStyle}>
-                Link this post to one of your artworks so users can easily find and purchase it
-              </div>
             </div>
           )}
 
-          {/* Submit Button */}
+          {/* Submit Actions */}
           <div style={actionsStyle}>
             <button type="button" onClick={onClose} style={cancelButtonStyle}>
               Cancel
             </button>
             <button 
               type="submit" 
-              style={{...submitButtonStyle, opacity: loading || files.length === 0 ? 0.6 : 1}}
+              style={{
+                ...submitButtonStyle,
+                opacity: loading || files.length === 0 ? 0.6 : 1
+              }}
               disabled={loading || files.length === 0}
             >
               {loading ? 'Creating Post...' : 'Create Post'}
@@ -367,7 +425,7 @@ const modalContentStyle = {
   backgroundColor: 'white',
   borderRadius: '12px',
   width: '90%',
-  maxWidth: '600px',
+  maxWidth: '700px', // Increased for artwork selection
   maxHeight: '90vh',
   overflowY: 'auto',
   padding: '0'
@@ -416,10 +474,6 @@ const textareaStyle = {
   minHeight: '80px'
 };
 
-const selectStyle = {
-  ...inputStyle
-};
-
 const fileInputStyle = {
   ...inputStyle,
   padding: '0.5rem'
@@ -429,6 +483,13 @@ const hintStyle = {
   fontSize: '0.8rem',
   color: '#6b7280',
   marginTop: '0.25rem'
+};
+
+const loadingStyle = {
+  textAlign: 'center',
+  padding: '2rem',
+  color: '#6b7280',
+  fontStyle: 'italic'
 };
 
 const previewSectionStyle = {
@@ -467,6 +528,93 @@ const removeButtonStyle = {
   padding: '0.25rem 0.5rem',
   cursor: 'pointer',
   fontSize: '0.8rem'
+};
+
+// NEW: Styles for artwork selection
+const artworksSelectionStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.75rem',
+  maxHeight: '300px',
+  overflowY: 'auto',
+  border: '1px solid #e5e7eb',
+  borderRadius: '8px',
+  padding: '1rem'
+};
+
+const artworkOptionStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0.75rem',
+  border: '2px solid',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease'
+};
+
+const artworkContentStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+  flex: 1
+};
+
+const artworkImageStyle = {
+  width: '50px',
+  height: '50px',
+  objectFit: 'cover',
+  borderRadius: '4px',
+  border: '1px solid #e5e7eb'
+};
+
+const artworkDetailsStyle = {
+  flex: 1
+};
+
+const artworkTitleStyle = {
+  margin: '0 0 0.25rem 0',
+  fontWeight: '500',
+  color: '#374151'
+};
+
+const artworkPriceStyle = {
+  margin: '0 0 0.25rem 0',
+  color: '#059669',
+  fontWeight: '600'
+};
+
+const linkedPostsIndicatorStyle = {
+  fontSize: '0.8rem',
+  color: '#6b7280',
+  fontStyle: 'italic'
+};
+
+const checkboxStyle = {
+  width: '16px',
+  height: '16px',
+  margin: '0'
+};
+
+const selectionSummaryStyle = {
+  textAlign: 'center',
+  padding: '0.75rem',
+  backgroundColor: 'rgba(102, 126, 234, 0.1)',
+  border: '1px solid rgba(102, 126, 234, 0.2)',
+  borderRadius: '6px',
+  color: '#667eea',
+  fontWeight: '500',
+  fontSize: '0.9rem'
+};
+
+const noArtworksStyle = {
+  textAlign: 'center',
+  padding: '2rem',
+  color: '#6b7280',
+  fontStyle: 'italic',
+  backgroundColor: '#f9fafb',
+  border: '1px solid #e5e7eb',
+  borderRadius: '8px'
 };
 
 const actionsStyle = {

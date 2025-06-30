@@ -480,15 +480,16 @@ const getUserPosts = async (req, res) => {
     console.log('User isArtist:', req.user.isArtist);
     
     const posts = await Post.find({ creator: req.user._id })
-      .select('_id content caption createdAt linkedShopItem')
+      .select('_id content caption createdAt linkedShopItems linkedShopItem') // UPDATED: Include both fields for compatibility
       .sort({ createdAt: -1 })
-      .populate('linkedShopItem', 'title price currentBid'); // ← FIXED: Include price fields
+      .populate('linkedShopItems', 'title price currentBid') // UPDATED: Multiple artworks
+      .populate('linkedShopItem', 'title price currentBid'); // Keep for backward compatibility
 
     console.log('Posts found:', posts.length);
     console.log('Posts:', posts.map(p => ({ 
       id: p._id, 
       caption: p.caption, 
-      hasLinkedItem: !!p.linkedShopItem 
+      hasLinkedItems: (p.linkedShopItems?.length || 0) + (p.linkedShopItem ? 1 : 0)
     })));
 
     res.json({

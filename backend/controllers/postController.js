@@ -1,4 +1,4 @@
-// backend/controllers/postController.js - Updated with artwork linking functionality
+// backend/controllers/postController.js - Updated with multiple artwork linking
 const Post = require('../models/Post');
 const Artwork = require('../models/Artwork');
 const User = require('../models/User');
@@ -59,7 +59,7 @@ const getPosts = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(pageSize)
         .populate('creator', 'username profileImage')
-        .populate('linkedShopItem', 'title price images')
+        .populate('linkedShopItems', 'title price images') // UPDATED: Multiple artworks
         .populate({
           path: 'comments',
           populate: {
@@ -70,7 +70,7 @@ const getPosts = async (req, res) => {
 
       hasMore = posts.length === pageSize;
     } else {
-      currentPage = parseInt(page);
+      currentPage = parseInt(page) || 1;
       const skip = (currentPage - 1) * pageSize;
 
       count = await Post.countDocuments(query);
@@ -81,7 +81,7 @@ const getPosts = async (req, res) => {
         .skip(skip)
         .limit(pageSize)
         .populate('creator', 'username profileImage')
-        .populate('linkedShopItem', 'title price images')
+        .populate('linkedShopItems', 'title price images') // UPDATED: Multiple artworks
         .populate({
           path: 'comments',
           populate: {
@@ -115,6 +115,275 @@ const getPosts = async (req, res) => {
   }
 };
 
+// @desc    Create a new post
+// @route   POST /api/posts
+// @access  Private
+const createPost = async (req, res) => {
+  try {
+    console.log('Creating post with body:', req.body);
+    console.log('Files received:', req.files?.length || 0);
+
+    const { caption, tags, linkedShopItems } = req.body; // UPDATED: Multiple artworks
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one media file is required'
+      });
+    }
+
+    // UPDATED: Validate multiple linked artworks if provided
+    let artworkIds = [];
+    if (linkedShopItems) {
+      // Handle both string and array formats
+      if (typeof linkedShopItems === 'string') {
+        try {
+          artworkIds = JSON.parse(linkedShopItems);
+        } catch {
+          artworkIds = [linkedShopItems]; // Single ID as string
+        }
+      } else if (Array.isArray(linkedShopItems)) {
+        artworkIds = linkedShopItems;
+      }
+
+      // Validate that all artworks exist and belong to the user
+      if (artworkIds.length > 0) {
+        const artworks = await Artwork.find({
+          _id: { $in: artworkIds },
+          creator: req.user._id
+        });
+
+        if (artworks.length !== artworkIds.length) {
+          return res.status(400).json({
+            success: false,
+            message: 'Some selected artworks not found or do not belong to you'
+          });
+        }
+      }
+    }
+
+    // Process content based on number of files
+    let content;
+    if (files.length === 1) {
+      const file = files[0];
+      console.log('Single file:', file.originalname, file.mimetype);
+      content = {
+        type: file.mimetype.startsWith('video/') ? 'video' : 'image',
+        url: file.url || file.location || `/uploads/posts/${file.filename}`,
+        aspectRatio: '1:1'
+      };
+    } else {
+      console.log('Multiple files (carousel)');
+      content = {
+        type: 'carousel',
+        items: files.map(file => {
+          console.log('Processing file:', file.originalname, file.mimetype);
+          return {
+            type: file.mimetype.startsWith('video/') ? 'video' : 'image',
+            url: file.url || file.location || `/uploads/posts/${file.filename}`
+          };
+        })
+      };
+    }
+
+    console.log('Content created:', content);
+
+    // Process tags
+    let processedTags = [];
+    if (tags) {
+      if (Array.isArray(tags)) {
+        processedTags = tags;
+      } else if (typeof tags === 'string') {
+        processedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+      }
+    }
+
+    console.log('Processed tags:', processedTags);
+
+    // Create the post
+    const post = new Post({
+      creator: req.user._id,
+      content,
+      caption: caption || '',
+      tags: processedTags,
+      linkedShopItems: artworkIds || [] // UPDATED: Multiple artworks
+    });
+
+    const savedPost = await post.save();
+    console.log('Post saved:', savedPost._id);
+
+    // UPDATED: Add this post to all linked artworks' linkedPosts arrays
+    if (artworkIds.length > 0) {
+      await Artwork.updateMany(
+        { _id: { $in: artworkIds } },
+        { $addToSet: { linkedPosts: savedPost._id } }
+      );
+    }
+
+    // Populate creator info and linked artworks for response
+    await savedPost.populate('creator', 'username profileImage');
+    await savedPost.populate('linkedShopItems', 'title price images'); // UPDATED: Multiple artworks
+
+    res.status(201).json({
+      success: true,
+      message: 'Post created successfully',
+      post: savedPost
+    });
+
+  } catch (error) {
+    console.error('Error creating post:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create post'
+    });
+  }
+};
+
+// @desc    Update a post
+// @route   PUT /api/posts/:id
+// @access  Private
+const updatePost = async (req, res) => {
+  try {
+    const { caption, tags, linkedShopItems } = req.body; // UPDATED: Multiple artworks
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
+    if (post.creator.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only edit your own posts'
+      });
+    }
+
+    // UPDATED: Validate multiple linked artworks if provided
+    let artworkIds = [];
+    if (linkedShopItems !== undefined) {
+      if (Array.isArray(linkedShopItems)) {
+        artworkIds = linkedShopItems;
+      } else if (typeof linkedShopItems === 'string' && linkedShopItems) {
+        artworkIds = [linkedShopItems];
+      }
+
+      // Validate that all artworks exist and belong to the user
+      if (artworkIds.length > 0) {
+        const artworks = await Artwork.find({
+          _id: { $in: artworkIds },
+          creator: req.user._id
+        });
+
+        if (artworks.length !== artworkIds.length) {
+          return res.status(400).json({
+            success: false,
+            message: 'Some selected artworks not found or do not belong to you'
+          });
+        }
+      }
+
+      // UPDATED: Handle linked artworks changes
+      const oldLinkedArtworks = post.linkedShopItems || [];
+      
+      // Remove post from previously linked artworks
+      if (oldLinkedArtworks.length > 0) {
+        await Artwork.updateMany(
+          { _id: { $in: oldLinkedArtworks } },
+          { $pull: { linkedPosts: post._id } }
+        );
+      }
+
+      // Add post to newly linked artworks
+      if (artworkIds.length > 0) {
+        await Artwork.updateMany(
+          { _id: { $in: artworkIds } },
+          { $addToSet: { linkedPosts: post._id } }
+        );
+      }
+
+      post.linkedShopItems = artworkIds;
+    }
+
+    // Update other fields
+    post.caption = caption || post.caption;
+    
+    if (tags) {
+      post.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
+    }
+
+    await post.save();
+
+    const updatedPost = await Post.findById(post._id)
+      .populate('creator', 'username profileImage')
+      .populate('linkedShopItems', 'title price images'); // UPDATED: Multiple artworks
+
+    res.json({
+      success: true,
+      post: updatedPost
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Delete a post
+// @route   DELETE /api/posts/:id
+// @access  Private
+const deletePost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
+    if (post.creator.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only delete your own posts'
+      });
+    }
+
+    // UPDATED: Remove post reference from all linked artworks
+    if (post.linkedShopItems && post.linkedShopItems.length > 0) {
+      await Artwork.updateMany(
+        { _id: { $in: post.linkedShopItems } },
+        { $pull: { linkedPosts: post._id } }
+      );
+    }
+
+    // Handle legacy single linkedShopItem for backward compatibility
+    if (post.linkedShopItem) {
+      await Artwork.findByIdAndUpdate(
+        post.linkedShopItem,
+        { $pull: { linkedPosts: post._id } }
+      );
+    }
+
+    await post.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Post deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // @desc    Get a single post
 // @route   GET /api/posts/:id
 // @access  Public
@@ -122,7 +391,7 @@ const getPostById = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
       .populate('creator', 'username profileImage')
-      .populate('linkedShopItem', 'title price images description category')
+      .populate('linkedShopItems', 'title price images description category') // UPDATED: Multiple artworks
       .populate({
         path: 'comments',
         populate: {
@@ -172,7 +441,7 @@ const getUserPosts = async (req, res) => {
       .skip(skip)
       .limit(pageSize)
       .populate('creator', 'username profileImage')
-      .populate('linkedShopItem', 'title price images');
+      .populate('linkedShopItems', 'title price images'); // UPDATED: Multiple artworks
 
     const pages = Math.ceil(count / pageSize);
 
@@ -190,240 +459,6 @@ const getUserPosts = async (req, res) => {
       pages,
       currentPage: parseInt(page),
       posts: postsWithLikeStatus
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// @desc    Create a new post
-// @route   POST /api/posts
-// @access  Private
-const createPost = async (req, res) => {
-  try {
-    console.log('Creating post with body:', req.body);
-    console.log('Files received:', req.files?.length || 0);
-
-    const { caption, tags, linkedShopItem } = req.body;
-    const files = req.files;
-
-    if (!files || files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'At least one media file is required'
-      });
-    }
-
-    // Validate linked shop item if provided
-    if (linkedShopItem) {
-      const artwork = await Artwork.findOne({
-        _id: linkedShopItem,
-        creator: req.user._id
-      });
-
-      if (!artwork) {
-        return res.status(400).json({
-          success: false,
-          message: 'Selected artwork not found or does not belong to you'
-        });
-      }
-    }
-
-    // Process content based on number of files
-    let content;
-    if (files.length === 1) {
-      const file = files[0];
-      console.log('Single file:', file.originalname, file.mimetype);
-      content = {
-        type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-        url: file.url || file.location || `/uploads/posts/${file.filename}`,
-        aspectRatio: '1:1'
-      };
-    } else {
-      console.log('Multiple files (carousel)');
-      content = {
-        type: 'carousel',
-        items: files.map(file => {
-          console.log('Processing file:', file.originalname, file.mimetype);
-          return {
-            type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-            url: file.url || file.location || `/uploads/posts/${file.filename}`
-          };
-        })
-      };
-    }
-
-    console.log('Content created:', content);
-
-    // Process tags
-    let processedTags = [];
-    if (tags) {
-      if (Array.isArray(tags)) {
-        processedTags = tags;
-      } else if (typeof tags === 'string') {
-        processedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-      }
-    }
-
-    console.log('Processed tags:', processedTags);
-
-    // Create the post
-    const post = new Post({
-      creator: req.user._id,
-      content,
-      caption: caption || '',
-      tags: processedTags,
-      linkedShopItem: linkedShopItem || null
-    });
-
-    const savedPost = await post.save();
-    console.log('Post saved:', savedPost._id);
-
-    // If linked to an artwork, add this post to the artwork's linkedPosts array
-    if (linkedShopItem) {
-      await Artwork.findByIdAndUpdate(
-        linkedShopItem,
-        { $addToSet: { linkedPosts: savedPost._id } }
-      );
-    }
-
-    // Populate creator info for response
-    await savedPost.populate('creator', 'username profileImage');
-    await savedPost.populate('linkedShopItem', 'title price images');
-
-    res.status(201).json({
-      success: true,
-      message: 'Post created successfully',
-      post: savedPost
-    });
-
-  } catch (error) {
-    console.error('Error creating post:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to create post'
-    });
-  }
-};
-
-// @desc    Update a post
-// @route   PUT /api/posts/:id
-// @access  Private
-const updatePost = async (req, res) => {
-  try {
-    const { caption, tags, linkedShopItem } = req.body;
-    const post = await Post.findById(req.params.id);
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found'
-      });
-    }
-
-    if (post.creator.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only edit your own posts'
-      });
-    }
-
-    // Validate linked shop item if provided
-    if (linkedShopItem) {
-      const artwork = await Artwork.findOne({
-        _id: linkedShopItem,
-        creator: req.user._id
-      });
-
-      if (!artwork) {
-        return res.status(400).json({
-          success: false,
-          message: 'Selected artwork not found or does not belong to you'
-        });
-      }
-    }
-
-    // Handle linked shop item changes
-    const oldLinkedShopItem = post.linkedShopItem;
-    
-    // Remove post from old linked artwork
-    if (oldLinkedShopItem && oldLinkedShopItem.toString() !== linkedShopItem) {
-      await Artwork.findByIdAndUpdate(
-        oldLinkedShopItem,
-        { $pull: { linkedPosts: post._id } }
-      );
-    }
-
-    // Add post to new linked artwork
-    if (linkedShopItem && linkedShopItem !== oldLinkedShopItem?.toString()) {
-      await Artwork.findByIdAndUpdate(
-        linkedShopItem,
-        { $addToSet: { linkedPosts: post._id } }
-      );
-    }
-
-    post.caption = caption || post.caption;
-    post.linkedShopItem = linkedShopItem || null;
-    
-    if (tags) {
-      post.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
-    }
-
-    await post.save();
-
-    const updatedPost = await Post.findById(post._id)
-      .populate('creator', 'username profileImage')
-      .populate('linkedShopItem', 'title price images');
-
-    res.json({
-      success: true,
-      post: updatedPost
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// @desc    Delete a post
-// @route   DELETE /api/posts/:id
-// @access  Private
-const deletePost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.id);
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found'
-      });
-    }
-
-    if (post.creator.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only delete your own posts'
-      });
-    }
-
-    // Remove post reference from linked artwork
-    if (post.linkedShopItem) {
-      await Artwork.findByIdAndUpdate(
-        post.linkedShopItem,
-        { $pull: { linkedPosts: post._id } }
-      );
-    }
-
-    await post.deleteOne();
-
-    res.json({
-      success: true,
-      message: 'Post deleted successfully'
     });
   } catch (error) {
     res.status(500).json({
@@ -476,7 +511,7 @@ const likePost = async (req, res) => {
   }
 };
 
-// @desc    Add comment to post
+// @desc    Comment on a post
 // @route   POST /api/posts/:id/comment
 // @access  Private
 const commentOnPost = async (req, res) => {
@@ -500,28 +535,23 @@ const commentOnPost = async (req, res) => {
 
     const comment = {
       user: req.user._id,
-      text: text.trim(),
-      createdAt: new Date()
+      text: text.trim()
     };
 
     post.comments.push(comment);
     await post.save();
 
-    // Populate the new comment for response
-    const updatedPost = await Post.findById(post._id)
+    // Populate the new comment with user info
+    const populatedPost = await Post.findById(post._id)
       .populate({
-        path: 'comments',
-        populate: {
-          path: 'user',
-          select: 'username profileImage'
-        }
+        path: 'comments.user',
+        select: 'username profileImage'
       });
 
-    const newComment = updatedPost.comments[updatedPost.comments.length - 1];
+    const newComment = populatedPost.comments[populatedPost.comments.length - 1];
 
     res.status(201).json({
       success: true,
-      message: 'Comment added successfully',
       comment: newComment
     });
   } catch (error) {
@@ -532,7 +562,7 @@ const commentOnPost = async (req, res) => {
   }
 };
 
-// @desc    Delete comment from post
+// @desc    Delete a comment
 // @route   DELETE /api/posts/:id/comment/:commentId
 // @access  Private
 const deleteComment = async (req, res) => {
@@ -555,12 +585,12 @@ const deleteComment = async (req, res) => {
       });
     }
 
-    // Check if user is comment author or post author
+    // Check if user owns the comment or the post
     if (comment.user.toString() !== req.user._id.toString() && 
         post.creator.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to delete this comment'
+        message: 'You can only delete your own comments or comments on your posts'
       });
     }
 
