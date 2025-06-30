@@ -1,4 +1,4 @@
-// frontend/src/components/explore/PostCard/PostCard.js - Updated for multiple artwork display
+// frontend/src/components/explore/PostCard/PostCard.js - FIXED VERSION
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './PostCard.css';
@@ -34,8 +34,9 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
     : linkedArtworks.slice(0, maxArtworksToShow);
   const hasMoreArtworks = linkedArtworks.length > maxArtworksToShow;
 
+  // 🔧 FIXED: Navigate to the correct route that matches App.js
   const handleArtworkClick = (artworkId) => {
-    navigate(`/shop/${artworkId}`);
+    navigate(`/shop/product/${artworkId}`);  // ✅ Fixed route
   };
 
   const handleProfileClick = () => {
@@ -165,19 +166,10 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
             <div className="carousel">
               {post.content.items.map((item, index) => (
                 <div key={index} className="carousel-item">
-                  {item.type === 'image' ? (
-                    <img 
-                      src={item.url} 
-                      alt={`Carousel item ${index + 1}`}
-                      onError={(e) => {
-                        e.target.src = '/api/placeholder/400/400';
-                      }}
-                    />
-                  ) : (
-                    <video controls>
-                      <source src={item.url} type="video/mp4" />
-                    </video>
-                  )}
+                  {item.type === 'image' ? 
+                    <img src={item.url} alt={`Slide ${index + 1}`} /> :
+                    <video controls><source src={item.url} type="video/mp4" /></video>
+                  }
                 </div>
               ))}
             </div>
@@ -187,8 +179,7 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
         {/* Caption */}
         {post.caption && (
           <div className="post-caption">
-            <span className="username">{post.creator.username}</span>
-            <span className="caption-text">{post.caption}</span>
+            <p>{post.caption}</p>
           </div>
         )}
 
@@ -207,9 +198,9 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
         <div className="linked-artworks-section">
           <div className="section-header">
             <span className="section-title">
-              {linkedArtworks.length === 1 ? 'Featured Artwork' : `Featured Artworks (${linkedArtworks.length})`}
+              Shop Items ({linkedArtworks.length})
             </span>
-            {linkedArtworks.length > 1 && !showAllArtworks && (
+            {linkedArtworks.length > 1 && (
               <button 
                 className="toggle-view-button"
                 onClick={() => setShowAllArtworks(!showAllArtworks)}
@@ -218,14 +209,12 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
               </button>
             )}
           </div>
-
+          
           {linkedArtworks.length === 1 ? (
-            // Single artwork - show as button
             <div className="single-artwork">
               {renderArtworkButton(linkedArtworks[0], 0)}
             </div>
           ) : (
-            // Multiple artworks - show as grid
             renderArtworkGrid()
           )}
         </div>
@@ -234,39 +223,23 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
       {/* Post Actions */}
       <div className="post-actions">
         <button 
-          className={`action-button like-button ${post.isLikedByCurrentUser ? 'liked' : ''}`}
+          className={`action-button ${post.likedBy?.includes(currentUser?._id) ? 'liked' : ''}`}
           onClick={handleLike}
         >
-          <span className="icon">❤️</span>
-          <span className="count">{post.likes || 0}</span>
+          <span>❤️</span>
+          <span>{post.likes || 0}</span>
         </button>
-
-        <button className="action-button comment-button">
-          <span className="icon">💬</span>
-          <span className="count">{post.comments?.length || 0}</span>
+        
+        <button className="action-button">
+          <span>💬</span>
+          <span>{post.comments?.length || 0}</span>
         </button>
-
-        <button className="action-button share-button">
-          <span className="icon">📤</span>
+        
+        <button className="action-button">
+          <span>📤</span>
+          <span>Share</span>
         </button>
       </div>
-
-      {/* Comments Preview */}
-      {post.comments && post.comments.length > 0 && (
-        <div className="comments-preview">
-          {post.comments.slice(0, 2).map((comment, index) => (
-            <div key={index} className="comment">
-              <span className="comment-username">{comment.user.username}</span>
-              <span className="comment-text">{comment.text}</span>
-            </div>
-          ))}
-          {post.comments.length > 2 && (
-            <button className="view-all-comments">
-              View all {post.comments.length} comments
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

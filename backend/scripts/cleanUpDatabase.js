@@ -1,216 +1,254 @@
-// backend/scripts/cleanupDatabase.js - FIXED VERSION with better connection handling
+// backend/scripts/cleanUpDatabase.js - FIXED VERSION (No admin permissions required)
 
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 
-// Load environment variables from the correct path
+// Load environment variables
 const envPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
   console.log('✅ Loaded .env file from:', envPath);
 } else {
-  console.log('⚠️ No .env file found, using default environment variables');
+  console.log('⚠️ No .env file found, using system environment variables');
   dotenv.config();
 }
 
-// Display connection info for debugging
-const showConnectionInfo = () => {
-  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/your-db-name';
-  console.log('\n🔍 Connection Information:');
-  console.log('MONGODB_URI:', mongoUri);
-  console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
-  
-  // Mask password in URI for security
-  const maskedUri = mongoUri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
-  console.log('Using connection string:', maskedUri);
-};
+// Import models - order matters for dependencies
+const User = require('../models/User');
+const Post = require('../models/Post');
+const Artwork = require('../models/Artwork');
+const Order = require('../models/Order');
 
-// Enhanced connection function with better error handling
+// Simple connection function without admin operations
 const connectDB = async () => {
   try {
-    showConnectionInfo();
-    
-    // Try multiple possible MongoDB URI environment variables
     const mongoUri = 
       process.env.MONGODB_URI || 
       process.env.MONGO_URI || 
-      process.env.DATABASE_URL ||
-      'mongodb://localhost:27017/your-db-name';
+      'mongodb://localhost:27017/uncreated';
 
-    console.log('\n🔄 Attempting to connect to MongoDB...');
+    console.log('\n🔄 Connecting to MongoDB...');
+    
+    // Mask password for security when logging
+    const maskedUri = mongoUri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
+    console.log('Connection string:', maskedUri);
 
-    const connectionOptions = {
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // 5 second timeout
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-    };
-
-    await mongoose.connect(mongoUri, connectionOptions);
+    });
     
     console.log('✅ MongoDB connected successfully');
-    
-    // Test the connection by getting database info
-    const db = mongoose.connection.db;
-    const admin = db.admin();
-    const info = await admin.serverStatus();
-    console.log('📊 MongoDB Server Info:');
-    console.log(`   Version: ${info.version}`);
-    console.log(`   Host: ${info.host}`);
-    console.log(`   Database: ${db.databaseName}`);
+    console.log('📊 Database:', mongoose.connection.db.databaseName);
     
   } catch (error) {
-    console.error('\n❌ MongoDB connection failed:');
-    console.error('Error:', error.message);
+    console.error('❌ MongoDB connection failed:', error.message);
     
-    // Provide specific troubleshooting based on error type
-    if (error.message.includes('ECONNREFUSED')) {
-      console.log('\n🔧 Troubleshooting Steps:');
-      console.log('1. Check if MongoDB is running:');
-      console.log('   - Local: brew services start mongodb/brew/mongodb-community');
-      console.log('   - Local: sudo systemctl start mongod');
-      console.log('   - Docker: docker run -d -p 27017:27017 mongo');
-      console.log('');
-      console.log('2. Verify your connection string in .env file:');
-      console.log('   MONGODB_URI=mongodb://localhost:27017/your-database-name');
-      console.log('   or');
-      console.log('   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database');
-    } else if (error.message.includes('authentication failed')) {
+    if (error.message.includes('authentication failed')) {
       console.log('\n🔧 Authentication Issue:');
-      console.log('Check your username/password in the connection string');
-    } else if (error.message.includes('ServerSelectionTimeoutError')) {
-      console.log('\n🔧 Network/Firewall Issue:');
-      console.log('Check if MongoDB Atlas IP whitelist includes your IP');
-      console.log('Or check if local MongoDB is bound to the correct interface');
+      console.log('- Check your username/password in MONGODB_URI');
+      console.log('- Verify user exists in MongoDB Atlas');
+      console.log('- Check if user has read/write permissions');
+    } else if (error.message.includes('ECONNREFUSED')) {
+      console.log('\n🔧 Connection Issue:');
+      console.log('- Check if MongoDB is running (local)');
+      console.log('- Verify network connectivity (Atlas)');
     }
     
-    process.exit(1);
+    throw error;
   }
 };
 
-// Test MongoDB connection without doing anything else
-const testConnection = async () => {
+// Safe collection count function
+const getCollectionStats = async () => {
+  try {
+    const stats = {
+      users: await User.countDocuments(),
+      posts: await Post.countDocuments(),
+      artworks: await Artwork.countDocuments(),
+      orders: await Order.countDocuments()
+    };
+    
+    console.log('\n📋 Current Database Stats:');
+    Object.entries(stats).forEach(([collection, count]) => {
+      console.log(`   ${collection}: ${count} documents`);
+    });
+    
+    return stats;
+  } catch (error) {
+    console.error('Error getting collection stats:', error.message);
+    return {};
+  }
+};
+
+// Clean up posts and their relationships
+const cleanupPosts = async () => {
+  try {
+    console.log('\n🧹 Cleaning up posts...');
+    
+    // Get posts with linked artworks for cleanup
+    const postsWithArtworks = await Post.find({
+      $or: [
+        { linkedShopItems: { $exists: true, $ne: [] } },
+        { linkedShopItem: { $exists: true, $ne: null } }
+      ]
+    }).select('_id linkedShopItems linkedShopItem');
+    
+    console.log(`Found ${postsWithArtworks.length} posts with linked artworks`);
+    
+    // Remove post references from artworks
+    for (const post of postsWithArtworks) {
+      const artworkIds = [];
+      
+      if (post.linkedShopItems?.length > 0) {
+        artworkIds.push(...post.linkedShopItems);
+      }
+      if (post.linkedShopItem) {
+        artworkIds.push(post.linkedShopItem);
+      }
+      
+      if (artworkIds.length > 0) {
+        await Artwork.updateMany(
+          { _id: { $in: artworkIds } },
+          { $pull: { linkedPosts: post._id } }
+        );
+      }
+    }
+    
+    // Delete all posts
+    const result = await Post.deleteMany({});
+    console.log(`✅ Deleted ${result.deletedCount} posts`);
+    
+    return result.deletedCount;
+  } catch (error) {
+    console.error('❌ Error cleaning up posts:', error.message);
+    throw error;
+  }
+};
+
+// Clean up artworks and their relationships
+const cleanupArtworks = async () => {
+  try {
+    console.log('\n🧹 Cleaning up artworks...');
+    
+    // Get artworks with linked posts for cleanup
+    const artworksWithPosts = await Artwork.find({
+      linkedPosts: { $exists: true, $ne: [] }
+    }).select('_id linkedPosts');
+    
+    console.log(`Found ${artworksWithPosts.length} artworks with linked posts`);
+    
+    // Remove artwork references from posts (if any posts still exist)
+    for (const artwork of artworksWithPosts) {
+      if (artwork.linkedPosts?.length > 0) {
+        await Post.updateMany(
+          { _id: { $in: artwork.linkedPosts } },
+          { 
+            $unset: { linkedShopItem: 1 },
+            $pull: { linkedShopItems: artwork._id }
+          }
+        );
+      }
+    }
+    
+    // Delete all artworks
+    const result = await Artwork.deleteMany({});
+    console.log(`✅ Deleted ${result.deletedCount} artworks`);
+    
+    return result.deletedCount;
+  } catch (error) {
+    console.error('❌ Error cleaning up artworks:', error.message);
+    throw error;
+  }
+};
+
+// Clean up orders
+const cleanupOrders = async () => {
+  try {
+    console.log('\n🧹 Cleaning up orders...');
+    
+    const result = await Order.deleteMany({});
+    console.log(`✅ Deleted ${result.deletedCount} orders`);
+    
+    return result.deletedCount;
+  } catch (error) {
+    console.error('❌ Error cleaning up orders:', error.message);
+    throw error;
+  }
+};
+
+// Main cleanup function
+const performCleanup = async (options = {}) => {
   try {
     await connectDB();
     
-    // Get basic collection counts
-    const db = mongoose.connection.db;
-    const collections = await db.listCollections().toArray();
+    console.log('\n📊 Database state before cleanup:');
+    await getCollectionStats();
     
-    console.log('\n📋 Available Collections:');
-    for (const collection of collections) {
-      try {
-        const count = await db.collection(collection.name).countDocuments();
-        console.log(`   ${collection.name}: ${count} documents`);
-      } catch (err) {
-        console.log(`   ${collection.name}: Error counting documents`);
-      }
+    let deletedCounts = {};
+    
+    if (options.posts !== false) {
+      deletedCounts.posts = await cleanupPosts();
     }
     
-    console.log('\n✅ Connection test successful!');
+    if (options.artworks !== false) {
+      deletedCounts.artworks = await cleanupArtworks();
+    }
+    
+    if (options.orders !== false) {
+      deletedCounts.orders = await cleanupOrders();
+    }
+    
+    console.log('\n📊 Database state after cleanup:');
+    await getCollectionStats();
+    
+    console.log('\n✅ Cleanup completed successfully!');
+    console.log('📋 Summary:');
+    Object.entries(deletedCounts).forEach(([type, count]) => {
+      console.log(`   Deleted ${count} ${type}`);
+    });
     
   } catch (error) {
-    console.error('❌ Connection test failed:', error.message);
+    console.error('\n❌ Cleanup failed:', error);
+    throw error;
   } finally {
     await mongoose.connection.close();
   }
 };
 
-// Check if MongoDB is accessible and show environment
-const checkEnvironment = () => {
-  console.log('🔍 Environment Check:');
-  console.log('Current directory:', process.cwd());
-  console.log('Script location:', __filename);
-  
-  // Check for .env file
-  const envPaths = [
-    path.join(__dirname, '..', '.env'),
-    path.join(process.cwd(), '.env'),
-    path.join(__dirname, '.env')
-  ];
-  
-  console.log('\n📁 Checking for .env files:');
-  envPaths.forEach(envPath => {
-    if (fs.existsSync(envPath)) {
-      console.log(`✅ Found: ${envPath}`);
-      
-      // Read and show relevant environment variables (without passwords)
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      const mongoLines = envContent.split('\n').filter(line => 
-        line.includes('MONGO') || line.includes('DATABASE_URL')
-      );
-      
-      if (mongoLines.length > 0) {
-        console.log('   MongoDB-related variables:');
-        mongoLines.forEach(line => {
-          // Mask passwords for security
-          const maskedLine = line.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
-          console.log(`   ${maskedLine}`);
-        });
-      }
-    } else {
-      console.log(`❌ Not found: ${envPath}`);
-    }
-  });
-  
-  console.log('\n🌍 Environment Variables:');
-  console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
-  console.log('PORT:', process.env.PORT || 'not set');
-  
-  // Show MongoDB URI (masked)
-  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || 'not set';
-  if (mongoUri !== 'not set') {
-    const maskedUri = mongoUri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
-    console.log('MONGODB_URI:', maskedUri);
-  } else {
-    console.log('MONGODB_URI: not set');
-  }
-};
-
-// Create a simple connection test script
-const createConnectionTest = () => {
-  const testScript = `
-// Quick MongoDB connection test
-const mongoose = require('mongoose');
-require('dotenv').config();
-
+// Test connection only
 const testConnection = async () => {
   try {
-    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/test';
-    console.log('Testing connection to:', uri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@'));
-    
-    await mongoose.connect(uri);
-    console.log('✅ MongoDB connection successful!');
-    
-    const collections = await mongoose.connection.db.listCollections().toArray();
-    console.log('Collections:', collections.map(c => c.name));
-    
+    await connectDB();
+    await getCollectionStats();
+    console.log('\n✅ Connection test successful!');
   } catch (error) {
-    console.error('❌ Connection failed:', error.message);
+    console.error('\n❌ Connection test failed:', error);
   } finally {
     await mongoose.connection.close();
-    process.exit(0);
   }
 };
 
-testConnection();
-`;
-
-  const testFilePath = path.join(__dirname, 'testConnection.js');
-  fs.writeFileSync(testFilePath, testScript);
-  console.log(`✅ Created connection test file: ${testFilePath}`);
-  console.log('Run with: node testConnection.js');
+// Show environment info
+const showEnvironment = () => {
+  console.log('\n🔍 Environment Information:');
+  console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
+  console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'set' : 'not set');
+  console.log('MONGO_URI:', process.env.MONGO_URI ? 'set' : 'not set');
+  
+  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  if (mongoUri) {
+    const maskedUri = mongoUri.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:***@');
+    console.log('Connection string:', maskedUri);
+  }
 };
 
-// Rest of the original script functions would go here...
-// (I'm keeping this short to focus on the connection issue)
-
-// Main execution with enhanced error handling
+// Main script execution
 const main = async () => {
   const command = process.argv[2];
+  const force = process.argv.includes('--force');
 
   switch (command) {
     case 'test':
@@ -218,46 +256,63 @@ const main = async () => {
       break;
 
     case 'env':
-    case 'check':
-      checkEnvironment();
+      showEnvironment();
       break;
 
-    case 'create-test':
-      createConnectionTest();
+    case 'posts':
+      if (!force) {
+        console.log('⚠️ This will delete ALL posts!');
+        console.log('Add --force flag to confirm: node cleanUpDatabase.js posts --force');
+        return;
+      }
+      await performCleanup({ artworks: false, orders: false });
       break;
 
-    case 'fix':
-      console.log('🔧 MongoDB Connection Fix Guide:');
-      console.log('\n1. Check if MongoDB is running:');
-      console.log('   Local MongoDB:');
-      console.log('   - macOS: brew services start mongodb/brew/mongodb-community');
-      console.log('   - Ubuntu: sudo systemctl start mongod');
-      console.log('   - Windows: net start MongoDB');
-      console.log('   - Docker: docker run -d -p 27017:27017 --name mongodb mongo');
-      console.log('\n2. Check your .env file:');
-      console.log('   Create or update backend/.env with:');
-      console.log('   MONGODB_URI=mongodb://localhost:27017/your-database-name');
-      console.log('\n3. If using MongoDB Atlas:');
-      console.log('   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database');
-      console.log('\n4. Test the connection:');
-      console.log('   node cleanupDatabase.js test');
+    case 'artworks':
+      if (!force) {
+        console.log('⚠️ This will delete ALL artworks!');
+        console.log('Add --force flag to confirm: node cleanUpDatabase.js artworks --force');
+        return;
+      }
+      await performCleanup({ posts: false, orders: false });
+      break;
+
+    case 'orders':
+      if (!force) {
+        console.log('⚠️ This will delete ALL orders!');
+        console.log('Add --force flag to confirm: node cleanUpDatabase.js orders --force');
+        return;
+      }
+      await performCleanup({ posts: false, artworks: false });
+      break;
+
+    case 'all':
+      if (!force) {
+        console.log('⚠️ This will delete ALL posts, artworks, and orders!');
+        console.log('Add --force flag to confirm: node cleanUpDatabase.js all --force');
+        return;
+      }
+      await performCleanup();
       break;
 
     default:
-      console.log('🔧 MongoDB Connection Troubleshooter');
-      console.log('\nCommands:');
-      console.log('  node cleanupDatabase.js test        - Test MongoDB connection');
-      console.log('  node cleanupDatabase.js env         - Check environment variables');
-      console.log('  node cleanupDatabase.js fix         - Show connection fix guide');
-      console.log('  node cleanupDatabase.js create-test - Create simple connection test');
-      console.log('\n⚠️ Fix your MongoDB connection before running cleanup commands!');
+      console.log('🧹 Database Cleanup Tool');
+      console.log('\nUsage:');
+      console.log('  node cleanUpDatabase.js test           - Test database connection');
+      console.log('  node cleanUpDatabase.js env            - Show environment info');
+      console.log('  node cleanUpDatabase.js posts --force  - Delete all posts');
+      console.log('  node cleanUpDatabase.js artworks --force - Delete all artworks');
+      console.log('  node cleanUpDatabase.js orders --force - Delete all orders');
+      console.log('  node cleanUpDatabase.js all --force    - Delete everything');
+      console.log('\n⚠️ Always use --force flag for destructive operations');
+      console.log('💡 Run "test" command first to verify connection');
       break;
   }
 };
 
-// Handle process termination gracefully
+// Handle process interruption
 process.on('SIGINT', async () => {
-  console.log('\n\n⚠️ Process interrupted.');
+  console.log('\n\n⚠️ Process interrupted');
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.close();
   }
