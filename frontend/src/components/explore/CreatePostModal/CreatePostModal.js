@@ -1,87 +1,127 @@
-// frontend/src/components/explore/CreatePostModal/CreatePostModal.js - Fixed
-import React, { useState } from 'react';
+// frontend/src/components/explore/CreatePostModal/CreatePostModal.js
+import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
-import './CreatePostModal.css';
+import { postAPI } from '../../../services/api';
 
-const CreatePostModal = ({ onClose, onPostCreated }) => {
+const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [formData, setFormData] = useState({
     caption: '',
     tags: '',
-    contentType: 'image'
+    linkedShopItem: '' // For linking to artwork
   });
-  const [files, setFiles] = useState([]);
-  const [previews, setPreviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [userArtworks, setUserArtworks] = useState([]);
+  const [loadingArtworks, setLoadingArtworks] = useState(false);
+
+  // Get current user info
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (error) {
+      console.error('Error parsing user from localStorage:', error);
+      return null;
+    }
+  };
+
+  const currentUser = getCurrentUser();
+  const isArtist = currentUser?.isArtist;
+
+  // Fetch user's artworks for linking (only for artists)
+  useEffect(() => {
+    if (isOpen && isArtist) {
+      fetchUserArtworks();
+    }
+  }, [isOpen, isArtist]);
+
+  const fetchUserArtworks = async () => {
+    setLoadingArtworks(true);
+    try {
+      console.log('Fetching user artworks...');
+      const response = await postAPI.getUserArtworks();
+      console.log('User artworks response:', response.data);
+      
+      if (response.data.success) {
+        setUserArtworks(response.data.artworks);
+        console.log('User artworks loaded:', response.data.artworks.length);
+      } else {
+        console.error('Failed to fetch artworks:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching user artworks:', error);
+      console.error('Error response:', error.response?.data);
+    } finally {
+      setLoadingArtworks(false);
+    }
+  };
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFiles([]);
+      setPreviews([]);
+      setFormData({
+        caption: '',
+        tags: '',
+        linkedShopItem: ''
+      });
+      setError('');
+      setUserArtworks([]);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   // Handle file selection
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
-    
     console.log('Files selected:', selectedFiles.length);
-    
-    // Validate file count
-    if (selectedFiles.length > 10) {
-      setError('You can upload a maximum of 10 files');
-      return;
-    }
 
-    // Validate file types and sizes
-    const validFiles = [];
-    for (const file of selectedFiles) {
-      const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
-      const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024; // 50MB for videos, 10MB for images
-      
-      if (!isImage && !isVideo) {
-        setError(`File ${file.name} is not a valid image or video file`);
-        return;
-      }
-      
-      if (file.size > maxSize) {
-        setError(`File ${file.name} is too large. Max size: ${isVideo ? '50MB' : '10MB'}`);
-        return;
-      }
-      
-      validFiles.push(file);
-    }
+    if (selectedFiles.length === 0) return;
 
-    console.log('Valid files:', validFiles.length);
+    // Validate files
+    const validFiles = selectedFiles.filter(file => {
+      const isValidImage = file.type.startsWith('image/');
+      const isValidVideo = file.type.startsWith('video/');
+      const isValidSize = file.size <= 50 * 1024 * 1024; // 50MB limit
+
+      if (!isValidImage && !isValidVideo) {
+        setError('Please select only image or video files');
+        return false;
+      }
+
+      if (!isValidSize) {
+        setError('File size must be less than 50MB');
+        return false;
+      }
+
+      return true;
+    });
+
+    if (validFiles.length === 0) return;
+
     setFiles(validFiles);
-    setError(''); // Clear any previous errors
-
-    // Determine content type
-    if (validFiles.length === 1) {
-      setFormData(prev => ({
-        ...prev,
-        contentType: validFiles[0].type.startsWith('video/') ? 'video' : 'image'
-      }));
-    } else if (validFiles.length > 1) {
-      setFormData(prev => ({
-        ...prev,
-        contentType: 'carousel'
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        contentType: 'image'
-      }));
-    }
+    setError('');
 
     // Create previews
+    createPreviews(validFiles);
+  };
+
+  // Create file previews
+  const createPreviews = (validFiles) => {
+    console.log('Creating previews for', validFiles.length, 'files');
+    
     const newPreviews = [];
     let loadedCount = 0;
-    
-    if (validFiles.length === 0) {
-      setPreviews([]);
-      return;
-    }
-    
+
     validFiles.forEach((file, index) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onload = (e) => {
         newPreviews[index] = {
-          url: reader.result,
+          url: e.target.result,
           type: file.type.startsWith('video/') ? 'video' : 'image',
           name: file.name
         };
@@ -125,7 +165,11 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
       // Add other form data
       formDataToSend.append('caption', formData.caption);
       formDataToSend.append('tags', formData.tags);
-      formDataToSend.append('contentType', formData.contentType);
+      
+      // Add linked shop item if selected
+      if (formData.linkedShopItem) {
+        formDataToSend.append('linkedShopItem', formData.linkedShopItem);
+      }
 
       console.log('Sending request to create post...');
 
@@ -172,68 +216,56 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
     
     setFiles(newFiles);
     setPreviews(newPreviews);
-
-    // Update content type if needed
-    if (newFiles.length === 1) {
-      setFormData(prev => ({
-        ...prev,
-        contentType: newFiles[0].type.startsWith('video/') ? 'video' : 'image'
-      }));
-    } else if (newFiles.length === 0) {
-      setFormData(prev => ({
-        ...prev,
-        contentType: 'image'
-      }));
-    }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={modalHeaderStyle}>
           <h2>Create New Post</h2>
-          <button className="close-button" onClick={onClose}>&times;</button>
+          <button style={closeButtonStyle} onClick={onClose}>&times;</button>
         </div>
+
+        {error && (
+          <div style={errorStyle}>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           {/* File Upload Section */}
-          <div className="form-group">
-            <label htmlFor="media">Upload Images or Videos</label>
+          <div style={formGroupStyle}>
+            <label>Select Media</label>
             <input
               type="file"
-              id="media"
               multiple
               accept="image/*,video/*"
               onChange={handleFileChange}
-              disabled={loading}
+              style={fileInputStyle}
             />
-            <p className="file-info">
-              Max 10 files. Images: 10MB max, Videos: 50MB max
-            </p>
+            <div style={hintStyle}>
+              Select images or videos (max 50MB each)
+            </div>
           </div>
 
-          {/* Preview Section */}
+          {/* File Previews */}
           {previews.length > 0 && (
-            <div className="preview-section">
-              <h3>Preview</h3>
-              <div className="preview-grid">
+            <div style={previewSectionStyle}>
+              <h4>Preview ({previews.length} file{previews.length > 1 ? 's' : ''})</h4>
+              <div style={previewGridStyle}>
                 {previews.map((preview, index) => (
-                  <div key={index} className="preview-item">
-                    {preview.type === 'image' ? (
-                      <img src={preview.url} alt={`Preview ${index + 1}`} />
+                  <div key={index} style={previewItemStyle}>
+                    {preview.type === 'video' ? (
+                      <video src={preview.url} controls style={previewMediaStyle} />
                     ) : (
-                      <video controls>
-                        <source src={preview.url} type="video/mp4" />
-                        Your browser does not support the video tag.
-                      </video>
+                      <img src={preview.url} alt={`Preview ${index + 1}`} style={previewMediaStyle} />
                     )}
                     <button
                       type="button"
-                      className="remove-preview"
+                      style={removeButtonStyle}
                       onClick={() => removeFile(index)}
-                      disabled={loading}
                     >
-                      &times;
+                      Remove
                     </button>
                   </div>
                 ))}
@@ -242,62 +274,224 @@ const CreatePostModal = ({ onClose, onPostCreated }) => {
           )}
 
           {/* Caption */}
-          <div className="form-group">
+          <div style={formGroupStyle}>
             <label htmlFor="caption">Caption</label>
             <textarea
               id="caption"
               name="caption"
               value={formData.caption}
               onChange={handleInputChange}
-              placeholder="Write a caption..."
+              placeholder="Write a caption for your post..."
               rows="3"
-              disabled={loading}
+              style={textareaStyle}
             />
           </div>
 
           {/* Tags */}
-          <div className="form-group">
-            <label htmlFor="tags">Tags (comma-separated)</label>
+          <div style={formGroupStyle}>
+            <label htmlFor="tags">Tags</label>
             <input
               type="text"
               id="tags"
               name="tags"
               value={formData.tags}
               onChange={handleInputChange}
-              placeholder="art, photography, design..."
-              disabled={loading}
+              placeholder="Enter tags separated by commas (e.g., art, painting, portrait)"
+              style={inputStyle}
             />
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="error-message">
-              {error}
+          {/* Link to Artwork (only for artists) */}
+          {isArtist && (
+            <div style={formGroupStyle}>
+              <label htmlFor="linkedShopItem">Link to Your Artwork (Optional)</label>
+              {loadingArtworks ? (
+                <div>Loading your artworks...</div>
+              ) : (
+                <select
+                  id="linkedShopItem"
+                  name="linkedShopItem"
+                  value={formData.linkedShopItem}
+                  onChange={handleInputChange}
+                  style={selectStyle}
+                >
+                  <option value="">No artwork linked</option>
+                  {userArtworks.map(artwork => (
+                    <option key={artwork._id} value={artwork._id}>
+                      {artwork.title} - ${artwork.price}
+                      {artwork.linkedPosts?.length > 0 && ` (${artwork.linkedPosts.length} post${artwork.linkedPosts.length > 1 ? 's' : ''})`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div style={hintStyle}>
+                Link this post to one of your artworks so users can easily find and purchase it
+              </div>
             </div>
           )}
 
-          {/* Submit Buttons */}
-          <div className="modal-footer">
-            <button
-              type="button"
-              className="cancel-button"
-              onClick={onClose}
-              disabled={loading}
-            >
+          {/* Submit Button */}
+          <div style={actionsStyle}>
+            <button type="button" onClick={onClose} style={cancelButtonStyle}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="submit-button"
+            <button 
+              type="submit" 
+              style={{...submitButtonStyle, opacity: loading || files.length === 0 ? 0.6 : 1}}
               disabled={loading || files.length === 0}
             >
-              {loading ? 'Creating...' : 'Create Post'}
+              {loading ? 'Creating Post...' : 'Create Post'}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+};
+
+// Inline styles for compatibility
+const modalOverlayStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000
+};
+
+const modalContentStyle = {
+  backgroundColor: 'white',
+  borderRadius: '12px',
+  width: '90%',
+  maxWidth: '600px',
+  maxHeight: '90vh',
+  overflowY: 'auto',
+  padding: '0'
+};
+
+const modalHeaderStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '1.5rem',
+  borderBottom: '1px solid #e5e7eb'
+};
+
+const closeButtonStyle = {
+  background: 'none',
+  border: 'none',
+  fontSize: '1.5rem',
+  cursor: 'pointer'
+};
+
+const errorStyle = {
+  backgroundColor: '#fef2f2',
+  border: '1px solid #fecaca',
+  color: '#dc2626',
+  padding: '1rem',
+  margin: '1rem 1.5rem',
+  borderRadius: '8px'
+};
+
+const formGroupStyle = {
+  marginBottom: '1rem',
+  padding: '0 1.5rem'
+};
+
+const inputStyle = {
+  width: '100%',
+  padding: '0.75rem',
+  border: '1px solid #d1d5db',
+  borderRadius: '6px',
+  fontSize: '0.9rem'
+};
+
+const textareaStyle = {
+  ...inputStyle,
+  resize: 'vertical',
+  minHeight: '80px'
+};
+
+const selectStyle = {
+  ...inputStyle
+};
+
+const fileInputStyle = {
+  ...inputStyle,
+  padding: '0.5rem'
+};
+
+const hintStyle = {
+  fontSize: '0.8rem',
+  color: '#6b7280',
+  marginTop: '0.25rem'
+};
+
+const previewSectionStyle = {
+  margin: '1rem 1.5rem'
+};
+
+const previewGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+  gap: '1rem',
+  marginTop: '1rem'
+};
+
+const previewItemStyle = {
+  position: 'relative',
+  borderRadius: '8px',
+  overflow: 'hidden',
+  border: '2px solid #e5e7eb'
+};
+
+const previewMediaStyle = {
+  width: '100%',
+  height: '120px',
+  objectFit: 'cover',
+  display: 'block'
+};
+
+const removeButtonStyle = {
+  position: 'absolute',
+  top: '0.5rem',
+  right: '0.5rem',
+  background: 'rgba(0, 0, 0, 0.7)',
+  color: 'white',
+  border: 'none',
+  borderRadius: '4px',
+  padding: '0.25rem 0.5rem',
+  cursor: 'pointer',
+  fontSize: '0.8rem'
+};
+
+const actionsStyle = {
+  display: 'flex',
+  gap: '1rem',
+  justifyContent: 'flex-end',
+  padding: '1.5rem',
+  borderTop: '1px solid #e5e7eb'
+};
+
+const cancelButtonStyle = {
+  padding: '0.75rem 1.5rem',
+  borderRadius: '6px',
+  border: '1px solid #d1d5db',
+  background: 'white',
+  cursor: 'pointer'
+};
+
+const submitButtonStyle = {
+  padding: '0.75rem 1.5rem',
+  borderRadius: '6px',
+  border: 'none',
+  background: '#667eea',
+  color: 'white',
+  cursor: 'pointer'
 };
 
 export default CreatePostModal;

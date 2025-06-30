@@ -1,86 +1,95 @@
-// src/pages/Shop/Shop.js - Updated with product navigation
+// frontend/src/pages/Shop/Shop.js - Enhanced with post linking functionality
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import './Shop.css';
-import { useAuth } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import { artworkAPI } from '../../services/api';
+import './Shop.css';
 
 const Shop = () => {
   const navigate = useNavigate();
+  
+  // State management
   const [artworks, setArtworks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState({
     category: '',
-    price: '',
-    sortBy: 'latest'
+    minPrice: '',
+    maxPrice: '',
+    search: ''
   });
+  
+  // Pagination
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
     count: 0
   });
+
+  // Modal states
   const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [artworkToDelete, setArtworkToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Form states for adding artwork
   const [newItem, setNewItem] = useState({
     title: '',
     description: '',
     price: '',
     category: 'painting',
-    imageFile: null
+    medium: '',
+    tags: '',
+    linkedPostIds: [] // NEW: Array of linked post IDs
   });
-  const [previewImage, setPreviewImage] = useState(null);
+  const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
+  const [submitError, setSubmitError] = useState('');
+  const [userPosts, setUserPosts] = useState([]); // NEW: User's posts for linking
+  const [loadingPosts, setLoadingPosts] = useState(false);
 
-  // Delete functionality states
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [artworkToDelete, setArtworkToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  // Authentication
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (error) {
+      console.error('Error parsing user from localStorage:', error);
+      return null;
+    }
+  };
 
-  const { isAuthenticated, currentUser } = useAuth();
-  
-  // Check if current user is an artist
-  const isArtist = currentUser?.isArtist || false;
+  const currentUser = getCurrentUser();
+  const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
+  const isArtist = currentUser?.isArtist;
 
-  // Fetch artworks from database
+  // Fetch artworks
   useEffect(() => {
     const fetchArtworks = async () => {
-      setLoading(true);
-      setError(null);
-      
       try {
-        const queryParams = {
+        setLoading(true);
+        setError(null);
+
+        const params = {
           page: pagination.currentPage,
           limit: 12,
-          forSale: true, // Only show artworks that are for sale
-          ...filter
+          ...(filter.category && { category: filter.category }),
+          ...(filter.minPrice && { minPrice: filter.minPrice }),
+          ...(filter.maxPrice && { maxPrice: filter.maxPrice }),
+          ...(filter.search && { search: filter.search })
         };
 
-        // Remove empty filters
-        Object.keys(queryParams).forEach(key => {
-          if (queryParams[key] === '' || queryParams[key] === null) {
-            delete queryParams[key];
-          }
-        });
+        const response = await artworkAPI.getArtworks(params);
 
-        console.log('Fetching artworks with params:', queryParams);
-        
-        const response = await artworkAPI.getArtworks(queryParams);
-        
         if (response.data.success) {
-          setArtworks(response.data.artworks);
-          setPagination({
-            currentPage: response.data.pagination.currentPage,
-            totalPages: response.data.pagination.totalPages,
-            count: response.data.pagination.count
-          });
+          setArtworks(response.data.artworks || []);
+          setPagination(response.data.pagination || { currentPage: 1, totalPages: 1, count: 0 });
         } else {
           throw new Error(response.data.message || 'Failed to fetch artworks');
         }
-      } catch (error) {
-        console.error('Error fetching artworks:', error);
-        setError(error.response?.data?.message || error.message || 'Failed to load artworks');
+      } catch (err) {
+        console.error('Error fetching artworks:', err);
+        setError(err.response?.data?.message || err.message || 'Failed to load artworks');
         setArtworks([]);
         setPagination({ currentPage: 1, totalPages: 1, count: 0 });
       } finally {
@@ -90,6 +99,50 @@ const Shop = () => {
 
     fetchArtworks();
   }, [filter, pagination.currentPage]);
+
+  // NEW: Fetch user's posts for linking
+  const fetchUserPosts = async () => {
+    if (!isArtist) {
+      console.log('User is not an artist, skipping post fetch');
+      return;
+    }
+    
+    setLoadingPosts(true);
+    try {
+      console.log('=== Testing artwork API endpoints ===');
+      console.log('User:', currentUser);
+      console.log('Is Artist:', isArtist);
+      
+      // First, test the simple test endpoint
+      try {
+        console.log('Testing simple endpoint...');
+        const testResponse = await artworkAPI.testGetPosts();
+        console.log('Test endpoint response:', testResponse.data);
+      } catch (testError) {
+        console.error('Test endpoint failed:', testError);
+        console.error('Test error response:', testError.response?.data);
+      }
+      
+      // Then try the actual endpoint
+      console.log('Testing actual getUserPosts endpoint...');
+      const response = await artworkAPI.getUserPosts();
+      console.log('getUserPosts response:', response.data);
+      
+      if (response.data.success) {
+        setUserPosts(response.data.posts);
+        console.log('Posts loaded successfully:', response.data.posts.length);
+      } else {
+        console.error('getUserPosts failed:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      console.error('Error config:', error.config);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
 
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
@@ -115,6 +168,167 @@ const Shop = () => {
   // Handle product click - navigate to product detail page
   const handleProductClick = (artwork) => {
     navigate(`/shop/product/${artwork._id}`);
+  };
+
+  // Handle opening add item modal
+  const handleAddItemClick = () => {
+    if (!isAuthenticated) {
+      alert('Please log in to add artworks');
+      return;
+    }
+
+    if (!isArtist) {
+      alert('Only artists can add artworks.');
+      return;
+    }
+
+    // Reset form
+    setNewItem({
+      title: '',
+      description: '',
+      price: '',
+      category: 'painting',
+      medium: '',
+      tags: '',
+      linkedPostIds: []
+    });
+    setImages([]);
+    setImagePreviews([]);
+    setSubmitError('');
+    
+    // Fetch user posts and open modal
+    fetchUserPosts();
+    setShowAddItemModal(true);
+  };
+
+  // Handle image upload
+  const handleImageChange = async (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length === 0) return;
+
+    // Validate files
+    const validFiles = files.filter(file => {
+      const isValidImage = file.type.startsWith('image/');
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB limit
+
+      if (!isValidImage) {
+        setSubmitError('Please select only image files');
+        return false;
+      }
+
+      if (!isValidSize) {
+        setSubmitError('Image size must be less than 10MB');
+        return false;
+      }
+
+      return true;
+    });
+
+    if (validFiles.length === 0) return;
+
+    setSubmitError('');
+
+    try {
+      // Upload images
+      const uploadFormData = new FormData();
+      validFiles.forEach(file => {
+        uploadFormData.append('images', file);
+      });
+
+      setIsSubmitting(true);
+      const response = await artworkAPI.uploadImages(uploadFormData);
+      
+      if (response.data.success) {
+        const newImages = response.data.images;
+        setImages(prev => [...prev, ...newImages]);
+        
+        // Create previews
+        const newPreviews = validFiles.map(file => URL.createObjectURL(file));
+        setImagePreviews(prev => [...prev, ...newPreviews]);
+      }
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      setSubmitError('Failed to upload images. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Remove image
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // NEW: Handle post selection
+  const handlePostSelection = (postId) => {
+    setNewItem(prev => ({
+      ...prev,
+      linkedPostIds: prev.linkedPostIds.includes(postId)
+        ? prev.linkedPostIds.filter(id => id !== postId)
+        : [...prev.linkedPostIds, postId]
+    }));
+  };
+
+  // Handle adding new artwork
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    
+    // Validate required fields
+    if (!newItem.title || !newItem.description || !newItem.price) {
+      setSubmitError('Please fill in all required fields');
+      return;
+    }
+
+    if (images.length === 0) {
+      setSubmitError('Please upload at least one image');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      // Process tags
+      const tags = newItem.tags
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(tag => tag.length > 0);
+
+      // Prepare artwork data
+      const artworkData = {
+        ...newItem,
+        price: parseFloat(newItem.price),
+        images,
+        tags,
+        linkedPostIds: newItem.linkedPostIds
+      };
+
+      const response = await artworkAPI.createArtwork(artworkData);
+
+      if (response.data.success) {
+        // Add new artwork to the list
+        setArtworks(prev => [response.data.artwork, ...prev]);
+        
+        // Update pagination count
+        setPagination(prev => ({
+          ...prev,
+          count: prev.count + 1
+        }));
+        
+        // Close modal and reset form
+        setShowAddItemModal(false);
+        alert('Artwork added successfully!');
+      } else {
+        setSubmitError(response.data.message || 'Failed to add artwork');
+      }
+    } catch (error) {
+      console.error('Error adding artwork:', error);
+      setSubmitError(error.response?.data?.message || 'Failed to add artwork. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle delete artwork
@@ -155,140 +369,94 @@ const Shop = () => {
     }
   };
 
-  // Handle adding new artwork (Artist-only)
-  const handleAddItem = async (e) => {
-    e.preventDefault();
-    
-    if (!isAuthenticated) {
-      alert('Please log in to add artworks');
-      return;
-    }
+  // Render post option for selection
+  const renderPostOption = (post) => {
+    const isSelected = newItem.linkedPostIds.includes(post._id);
+    const hasLinkedItem = post.linkedShopItem;
 
-    if (!isArtist) {
-      alert('Only artists can add artworks. You need to become an artist first.');
-      return;
-    }
-
-    if (!newItem.imageFile) {
-      setSubmitError('Please select an image for your artwork');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      // First upload the image
-      const formData = new FormData();
-      formData.append('images', newItem.imageFile); // Changed from 'image' to 'images'
-
-      const uploadResponse = await artworkAPI.uploadArtworkImages(formData);
-      
-      if (!uploadResponse.data.success) {
-        throw new Error(uploadResponse.data.message || 'Failed to upload image');
-      }
-
-      // Then create the artwork with the uploaded image URL
-      const artworkData = {
-        title: newItem.title,
-        description: newItem.description,
-        price: parseFloat(newItem.price),
-        category: newItem.category,
-        images: uploadResponse.data.filePaths // Changed from 'images' to 'filePaths'
-      };
-
-      const response = await artworkAPI.createArtwork(artworkData);
-      
-      if (response.data.success) {
-        // Reset form
-        setNewItem({
-          title: '',
-          description: '',
-          price: '',
-          category: 'painting',
-          imageFile: null
-        });
-        setPreviewImage(null);
-        setShowAddItemModal(false);
-        
-        // Refresh artworks list
-        setFilter(prev => ({ ...prev }));
-        
-        alert('Artwork added successfully!');
-      } else {
-        throw new Error(response.data.message || 'Failed to add artwork');
-      }
-    } catch (error) {
-      console.error('Error adding artwork:', error);
-      setSubmitError(error.response?.data?.message || error.message || 'Failed to add artwork');
-    } finally {
-      setIsSubmitting(false);
-    }
+    return (
+      <div 
+        key={post._id} 
+        style={{
+          ...postOptionStyle,
+          backgroundColor: isSelected ? '#f0f2ff' : 'white',
+          borderColor: isSelected ? '#667eea' : hasLinkedItem ? '#fbbf24' : '#e5e7eb',
+          opacity: hasLinkedItem ? 0.6 : 1,
+          cursor: hasLinkedItem ? 'not-allowed' : 'pointer'
+        }}
+        onClick={() => !hasLinkedItem && handlePostSelection(post._id)}
+      >
+        <div style={postContentStyle}>
+          {post.content?.url && (
+            <img 
+              src={post.content.url} 
+              alt="Post preview" 
+              style={postImageStyle}
+            />
+          )}
+          <div style={postDetailsStyle}>
+            <p style={postCaptionStyle}>
+              {post.caption || 'No caption'}
+            </p>
+            <span style={postDateStyle}>
+              {new Date(post.createdAt).toLocaleDateString()}
+            </span>
+            {hasLinkedItem && (
+              <span style={linkedIndicatorStyle}>
+                Already linked to: {hasLinkedItem.title}
+              </span>
+            )}
+          </div>
+        </div>
+        {!hasLinkedItem && (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => handlePostSelection(post._id)}
+            style={checkboxStyle}
+          />
+        )}
+      </div>
+    );
   };
 
-  // Handle image file selection
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setNewItem(prev => ({ ...prev, imageFile: file }));
-      
-      const reader = new FileReader();
-      reader.onload = (e) => setPreviewImage(e.target.result);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // Generate pagination numbers
-  const getPaginationNumbers = () => {
-    const numbers = [];
-    const maxVisible = 5;
-    let start = Math.max(1, pagination.currentPage - Math.floor(maxVisible / 2));
-    let end = Math.min(pagination.totalPages, start + maxVisible - 1);
-    
-    if (end - start < maxVisible - 1) {
-      start = Math.max(1, end - maxVisible + 1);
-    }
-    
-    for (let i = start; i <= end; i++) {
-      numbers.push(i);
-    }
-    
-    return numbers;
-  };
+  if (loading) {
+    return (
+      <div className="shop-loading">
+        <div className="spinner"></div>
+        <p>Loading artworks...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="shop-container">
-      <header className="shop-header">
-        <div className="shop-header-content">
-          <h1 className="shop-title">Uncreated Shop</h1>
-          <p className="shop-subtitle">Discover and collect unique artworks from talented creators</p>
-          
-          {/* Artist-only Add Product Button */}
-          {isAuthenticated && isArtist && (
-            <button 
-              className="add-item-btn artist-only-btn"
-              onClick={() => setShowAddItemModal(true)}
-            >
-              Add Your Artwork +
-            </button>
-          )}
-          
-          {/* Message for authenticated non-artists */}
-          {isAuthenticated && !isArtist && (
-            <div className="artist-info">
-              <p>Want to sell your artwork? <Link to="/profile">Become an artist</Link></p>
-            </div>
-          )}
-        </div>
-      </header>
+      <div className="shop-header">
+        <h1 className="shop-title">Art Shop</h1>
+        {isArtist && (
+          <button className="add-item-btn" onClick={handleAddItemClick}>
+            Add New Artwork
+          </button>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="shop-filters">
         <div className="filter-group">
-          <label>Category:</label>
-          <select 
-            value={filter.category} 
+          <input
+            type="text"
+            placeholder="Search artworks..."
+            value={filter.search}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
+            className="search-input"
+          />
+        </div>
+        
+        <div className="filter-group">
+          <select
+            value={filter.category}
             onChange={(e) => handleFilterChange('category', e.target.value)}
+            className="filter-select"
           >
             <option value="">All Categories</option>
             <option value="painting">Painting</option>
@@ -301,168 +469,108 @@ const Shop = () => {
         </div>
 
         <div className="filter-group">
-          <label>Sort By:</label>
-          <select 
-            value={filter.sortBy} 
-            onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-          >
-            <option value="latest">Latest</option>
-            <option value="oldest">Oldest</option>
-            <option value="popular">Most Popular</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-          </select>
+          <input
+            type="number"
+            placeholder="Min Price"
+            value={filter.minPrice}
+            onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+            className="price-input"
+          />
+          <input
+            type="number"
+            placeholder="Max Price"
+            value={filter.maxPrice}
+            onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+            className="price-input"
+          />
         </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="shop-loading">
-          <div className="loading-spinner"></div>
-          <p>Loading artworks...</p>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="shop-error">
-          <p>Error: {error}</p>
-          <button onClick={() => window.location.reload()}>Try Again</button>
-        </div>
-      )}
-
-      {/* Products Grid */}
-      {!loading && !error && (
-        <div className="shop-content">
-          <div className="products-grid">
-            {artworks.length > 0 ? (
-              artworks.map((artwork) => (
-                <motion.div
+      {/* Content */}
+      <div className="shop-content">
+        {error ? (
+          <div className="shop-error">
+            <h2>Error</h2>
+            <p>{error}</p>
+          </div>
+        ) : artworks.length === 0 ? (
+          <div className="no-artworks">
+            <h3>No artworks found</h3>
+            <p>Try adjusting your search criteria</p>
+          </div>
+        ) : (
+          <>
+            <div className="products-grid">
+              {artworks.map((artwork) => (
+                <div
                   key={artwork._id}
                   className="product-card"
                   onClick={() => handleProductClick(artwork)}
-                  whileHover={{ y: -5 }}
-                  transition={{ duration: 0.2 }}
-                  style={{ cursor: 'pointer' }}
                 >
                   <div className="product-image">
-                    <img 
-                      src={artwork.images && artwork.images[0] ? artwork.images[0] : '/api/placeholder/300/300'} 
+                    <img
+                      src={artwork.images?.[0] || '/placeholder-image.jpg'}
                       alt={artwork.title}
-                      onError={(e) => {
-                        e.target.src = '/api/placeholder/300/300';
-                      }}
                     />
-                    {artwork.isSold && (
-                      <div className="sold-overlay">
-                        <span>SOLD</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="product-info">
-                    <h3 className="product-title">{artwork.title}</h3>
-                    <p className="product-artist">by {artwork.creator?.username || 'Unknown Artist'}</p>
-                    <p className="product-description">
-                      {artwork.description.length > 100 
-                        ? `${artwork.description.substring(0, 100)}...` 
-                        : artwork.description
-                      }
-                    </p>
-                    
-                    <div className="product-footer">
-                      <div className="product-price">
-                        <span className="price">Starting at ${artwork.price.toFixed(2)}</span>
-                        <span className="auction-label">Auction</span>
-                      </div>
-                      
-                      <div className="product-stats">
-                        <span className="likes">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                          </svg>
-                          {artwork.likes || 0}
-                        </span>
-                        <span className="views">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
-                          {artwork.views || 0}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Delete button for artwork owner */}
-                    {isAuthenticated && currentUser && artwork.creator._id === currentUser._id && (
-                      <button 
-                        className="delete-artwork-btn"
+                    {isArtist && artwork.creator._id === currentUser._id && (
+                      <button
+                        className="delete-btn"
                         onClick={(e) => handleDeleteClick(artwork, e)}
-                        title="Delete Artwork"
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3,6 5,6 21,6"/>
-                          <path d="M19,6V20a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6M8,6V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2V6"/>
-                          <line x1="10" y1="11" x2="10" y2="17"/>
-                          <line x1="14" y1="11" x2="14" y2="17"/>
-                        </svg>
+                        🗑️
                       </button>
                     )}
                   </div>
-                </motion.div>
-              ))
-            ) : (
-              <div className="no-products">
-                <p>No artworks found matching your criteria.</p>
-                {isAuthenticated && isArtist && (
-                  <button 
-                    className="add-first-artwork-btn"
-                    onClick={() => setShowAddItemModal(true)}
+                  <div className="product-info">
+                    <h3 className="product-title">{artwork.title}</h3>
+                    <p className="product-artist">by {artwork.creator.username}</p>
+                    <div className="product-footer">
+                      <span className="product-price">${artwork.price}</span>
+                      <span className="product-category">{artwork.category}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {pagination.totalPages > 1 && (
+              <div className="shop-pagination">
+                <button 
+                  onClick={() => handlePageChange(pagination.currentPage - 1)}
+                  disabled={pagination.currentPage === 1}
+                  className="pagination-btn"
+                >
+                  Previous
+                </button>
+                
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(number => (
+                  <button
+                    key={number}
+                    onClick={() => handlePageChange(number)}
+                    className={`pagination-btn ${pagination.currentPage === number ? 'active' : ''}`}
                   >
-                    Add Your First Artwork
+                    {number}
                   </button>
-                )}
+                ))}
+                
+                <button 
+                  onClick={() => handlePageChange(pagination.currentPage + 1)}
+                  disabled={pagination.currentPage === pagination.totalPages}
+                  className="pagination-btn"
+                >
+                  Next
+                </button>
               </div>
             )}
-          </div>
+          </>
+        )}
+      </div>
 
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <div className="shop-pagination">
-              <button 
-                onClick={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={pagination.currentPage === 1}
-                className="pagination-btn"
-              >
-                Previous
-              </button>
-              
-              {getPaginationNumbers().map(number => (
-                <button
-                  key={number}
-                  onClick={() => handlePageChange(number)}
-                  className={`pagination-btn ${pagination.currentPage === number ? 'active' : ''}`}
-                >
-                  {number}
-                </button>
-              ))}
-              
-              <button 
-                onClick={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={pagination.currentPage === pagination.totalPages}
-                className="pagination-btn"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Add Item Modal */}
+      {/* Enhanced Add Item Modal with Post Linking */}
       {showAddItemModal && (
         <div className="modal-overlay" onClick={() => setShowAddItemModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content enhanced-modal" onClick={(e) => e.stopPropagation()}>
             <h2>Add New Artwork</h2>
             
             {submitError && (
@@ -470,70 +578,146 @@ const Shop = () => {
             )}
             
             <form onSubmit={handleAddItem}>
-              <div className="form-group">
-                <label>Title:</label>
-                <input
-                  type="text"
-                  value={newItem.title}
-                  onChange={(e) => setNewItem({...newItem, title: e.target.value})}
-                  required
-                />
+              {/* Basic Information */}
+              <div className="form-section">
+                <h3>Basic Information</h3>
+                
+                <div className="form-group">
+                  <label>Title *</label>
+                  <input
+                    type="text"
+                    value={newItem.title}
+                    onChange={(e) => setNewItem({...newItem, title: e.target.value})}
+                    required
+                    placeholder="Enter artwork title"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Description *</label>
+                  <textarea
+                    value={newItem.description}
+                    onChange={(e) => setNewItem({...newItem, description: e.target.value})}
+                    required
+                    rows="4"
+                    placeholder="Describe your artwork"
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Price ($) *</label>
+                    <input
+                      type="number"
+                      value={newItem.price}
+                      onChange={(e) => setNewItem({...newItem, price: e.target.value})}
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Category *</label>
+                    <select
+                      value={newItem.category}
+                      onChange={(e) => setNewItem({...newItem, category: e.target.value})}
+                      required
+                    >
+                      <option value="painting">Painting</option>
+                      <option value="sculpture">Sculpture</option>
+                      <option value="photography">Photography</option>
+                      <option value="digital">Digital Art</option>
+                      <option value="mixed media">Mixed Media</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Medium</label>
+                  <input
+                    type="text"
+                    value={newItem.medium}
+                    onChange={(e) => setNewItem({...newItem, medium: e.target.value})}
+                    placeholder="e.g., Oil on canvas, Digital print, Bronze"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Tags</label>
+                  <input
+                    type="text"
+                    value={newItem.tags}
+                    onChange={(e) => setNewItem({...newItem, tags: e.target.value})}
+                    placeholder="Enter tags separated by commas"
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label>Description:</label>
-                <textarea
-                  value={newItem.description}
-                  onChange={(e) => setNewItem({...newItem, description: e.target.value})}
-                  required
-                />
+              {/* Images */}
+              <div className="form-section">
+                <h3>Images *</h3>
+                <div className="form-group">
+                  <label>Upload Images</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageChange}
+                  />
+                  <div className="file-upload-hint">
+                    Select multiple images (max 10MB each)
+                  </div>
+                </div>
+
+                {imagePreviews.length > 0 && (
+                  <div className="image-previews">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="image-preview">
+                        <img src={preview} alt={`Preview ${index + 1}`} />
+                        <button
+                          type="button"
+                          className="remove-image-button"
+                          onClick={() => removeImage(index)}
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="form-group">
-                <label>Starting Price ($):</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={newItem.price}
-                  onChange={(e) => setNewItem({...newItem, price: e.target.value})}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Category:</label>
-                <select
-                  value={newItem.category}
-                  onChange={(e) => setNewItem({...newItem, category: e.target.value})}
-                >
-                  <option value="painting">Painting</option>
-                  <option value="sculpture">Sculpture</option>
-                  <option value="photography">Photography</option>
-                  <option value="digital">Digital Art</option>
-                  <option value="mixed media">Mixed Media</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Image:</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  required
-                />
-                {previewImage && (
-                  <div className="image-preview">
-                    <img src={previewImage} alt="Preview" />
+              {/* NEW: Link to Posts */}
+              <div className="form-section">
+                <h3>Link to Your Posts (Optional)</h3>
+                <p style={sectionDescStyle}>
+                  Select posts to link to this artwork. When users view these posts, they'll see a button to view this product.
+                </p>
+                
+                {loadingPosts ? (
+                  <div>Loading your posts...</div>
+                ) : userPosts.length > 0 ? (
+                  <div style={postsSelectionStyle}>
+                    {userPosts.map(renderPostOption)}
+                    {newItem.linkedPostIds.length > 0 && (
+                      <div style={selectionSummaryStyle}>
+                        {newItem.linkedPostIds.length} post{newItem.linkedPostIds.length > 1 ? 's' : ''} selected
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={noPostsStyle}>
+                    You don't have any posts yet. Create some posts first to link them to your artworks.
                   </div>
                 )}
               </div>
 
               <div className="modal-buttons">
                 <button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Adding...' : 'Add Artwork'}
+                  {isSubmitting ? 'Creating...' : 'Create Artwork'}
                 </button>
                 <button type="button" onClick={() => setShowAddItemModal(false)}>
                   Cancel
@@ -572,6 +756,100 @@ const Shop = () => {
       )}
     </div>
   );
+};
+
+// Inline styles for new post linking components
+const postOptionStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1rem',
+  padding: '1rem',
+  border: '2px solid',
+  borderRadius: '8px',
+  marginBottom: '0.75rem',
+  transition: 'all 0.2s ease'
+};
+
+const postContentStyle = {
+  flex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1rem'
+};
+
+const postImageStyle = {
+  width: '60px',
+  height: '60px',
+  borderRadius: '6px',
+  objectFit: 'cover',
+  border: '1px solid #e5e7eb'
+};
+
+const postDetailsStyle = {
+  flex: 1,
+  minWidth: 0
+};
+
+const postCaptionStyle = {
+  margin: '0 0 0.25rem 0',
+  fontWeight: '500',
+  color: '#374151',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+};
+
+const postDateStyle = {
+  fontSize: '0.8rem',
+  color: '#6b7280'
+};
+
+const linkedIndicatorStyle = {
+  fontSize: '0.8rem',
+  color: '#f59e0b',
+  fontWeight: '500',
+  display: 'block',
+  marginTop: '0.25rem'
+};
+
+const checkboxStyle = {
+  width: '18px',
+  height: '18px'
+};
+
+const sectionDescStyle = {
+  margin: '0 0 1rem 0',
+  color: '#6b7280',
+  fontSize: '0.9rem',
+  lineHeight: '1.5'
+};
+
+const postsSelectionStyle = {
+  maxHeight: '400px',
+  overflowY: 'auto',
+  border: '1px solid #e5e7eb',
+  borderRadius: '8px',
+  padding: '1rem'
+};
+
+const selectionSummaryStyle = {
+  textAlign: 'center',
+  padding: '1rem',
+  backgroundColor: '#f0f2ff',
+  borderRadius: '6px',
+  color: '#667eea',
+  fontWeight: '500',
+  marginTop: '1rem'
+};
+
+const noPostsStyle = {
+  textAlign: 'center',
+  padding: '2rem',
+  color: '#6b7280',
+  fontStyle: 'italic',
+  backgroundColor: '#f9fafb',
+  borderRadius: '8px',
+  border: '1px dashed #d1d5db'
 };
 
 export default Shop;

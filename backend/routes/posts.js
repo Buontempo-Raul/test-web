@@ -1,71 +1,43 @@
-// backend/routes/posts.js - Updated with better error handling
+// backend/routes/posts.js - Updated with artwork linking functionality
 const express = require('express');
 const router = express.Router();
 const {
   getPosts,
   getPostById,
+  getUserPosts,
   createPost,
   updatePost,
   deletePost,
   likePost,
   commentOnPost,
   deleteComment,
-  getUserPosts
+  getUserArtworks
 } = require('../controllers/postController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, isArtist } = require('../middleware/authMiddleware');
 const { uploadPostMedia, uploadFilesToAzure } = require('../middleware/azureStorageMiddleware');
 
-// Middleware to handle multer errors
-const handleMulterError = (err, req, res, next) => {
-  if (err) {
-    console.error('Multer error:', err);
-    return res.status(400).json({
-      success: false,
-      message: err.message || 'File upload error'
-    });
-  }
-  next();
-};
+// NEW: Get user's artworks for linking to posts (requires artist authentication)
+// PUT THIS ROUTE FIRST to avoid conflicts with /user/:userId
+router.get('/user/artworks', protect, isArtist, getUserArtworks);
 
-// Get all posts with filtering
+// Public routes (no authentication required)
 router.get('/', getPosts);
-
-// Get user posts
+router.get('/:id', getPostById);
 router.get('/user/:userId', getUserPosts);
 
-// Get a single post
-router.get('/:id', getPostById);
-
-// Create a post - requires authentication
+// Protected routes (require authentication)
 router.post(
   '/',
-  protect,                                 // Check authentication
-  uploadPostMedia.array('media', 10),      // Parse files with multer (up to 10 files)
-  handleMulterError,                       // Handle multer-specific errors
-  uploadFilesToAzure('posts'),             // Upload to Azure and attach URLs
-  createPost                               // Process the post creation
-);
-
-// Update a post - requires authentication
-router.put(
-  '/:id',
   protect,
-  uploadPostMedia.array('media', 10),
-  handleMulterError,
+  uploadPostMedia.array('media', 10), // Allow up to 10 files
   uploadFilesToAzure('posts'),
-  updatePost
+  createPost
 );
 
-// Delete a post - requires authentication
+router.put('/:id', protect, updatePost);
 router.delete('/:id', protect, deletePost);
-
-// Like a post - requires authentication
 router.post('/:id/like', protect, likePost);
-
-// Comment on a post - requires authentication
 router.post('/:id/comment', protect, commentOnPost);
-
-// Delete a comment - requires authentication
 router.delete('/:id/comment/:commentId', protect, deleteComment);
 
 module.exports = router;

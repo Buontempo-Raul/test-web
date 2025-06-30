@@ -1,111 +1,79 @@
-// backend/controllers/artworkController.js - Updated with auction support
+// backend/controllers/artworkController.js - Updated with post linking functionality
 const Artwork = require('../models/Artwork');
+const Post = require('../models/Post');
 const User = require('../models/User');
-const { deleteFromAzure } = require('../middleware/azureStorageMiddleware');
 
-// @desc    Get all artworks with filtering and pagination
+// @desc    Get all artworks
 // @route   GET /api/artworks
 // @access  Public
 const getArtworks = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12;
-    const skip = (page - 1) * limit;
+    const {
+      page = 1,
+      limit = 12,
+      category,
+      minPrice,
+      maxPrice,
+      forSale,
+      creator,
+      search,
+      sort = 'createdAt',
+      order = 'desc'
+    } = req.query;
 
-    // Build filter object
-    let filter = {};
-    
-    if (req.query.category && req.query.category !== 'all') {
-      filter.category = req.query.category;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build query
+    let query = {};
+
+    if (category) query.category = category;
+    if (forSale !== undefined) query.forSale = forSale === 'true';
+    if (creator) query.creator = creator;
+
+    // Price range
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = parseFloat(minPrice);
+      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
     }
-    
-    if (req.query.forSale !== undefined) {
-      filter.forSale = req.query.forSale === 'true';
-    }
-    
-    if (req.query.search) {
-      filter.$or = [
-        { title: { $regex: req.query.search, $options: 'i' } },
-        { description: { $regex: req.query.search, $options: 'i' } },
-        { tags: { $in: [new RegExp(req.query.search, 'i')] } }
+
+    // Search functionality
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
       ];
     }
 
-    // Price filter
-    if (req.query.minPrice || req.query.maxPrice) {
-      filter.price = {};
-      if (req.query.minPrice) filter.price.$gte = parseFloat(req.query.minPrice);
-      if (req.query.maxPrice) filter.price.$lte = parseFloat(req.query.maxPrice);
-    }
+    // Build sort object
+    const sortOrder = order === 'desc' ? -1 : 1;
+    const sortObj = { [sort]: sortOrder };
 
-    // Sort options
-    let sortOptions = {};
-    switch (req.query.sort) {
-      case 'price_asc':
-        sortOptions = { price: 1 };
-        break;
-      case 'price_desc':
-        sortOptions = { price: -1 };
-        break;
-      case 'newest':
-        sortOptions = { createdAt: -1 };
-        break;
-      case 'oldest':
-        sortOptions = { createdAt: 1 };
-        break;
-      case 'popular':
-        sortOptions = { likes: -1 };
-        break;
-      case 'ending_soon':
-        sortOptions = { 'auction.endTime': 1 };
-        break;
-      default:
-        sortOptions = { createdAt: -1 };
-    }
-
-    const artworks = await Artwork.find(filter)
+    const total = await Artwork.countDocuments(query);
+    const artworks = await Artwork.find(query)
       .populate('creator', 'username profileImage isArtist')
-      .populate('auction.highestBidder', 'username')
-      .sort(sortOptions)
+      .populate('linkedPosts', 'content caption createdAt') // Include linked posts
+      .sort(sortObj)
       .skip(skip)
-      .limit(limit);
+      .limit(limitNum);
 
-    const count = await Artwork.countDocuments(filter);
-    const totalPages = Math.ceil(count / limit);
-
-    // Process artworks to include auction status
-    const artworksWithAuctionInfo = artworks.map(artwork => {
-      const artworkObj = artwork.toObject();
-      
-      // Add computed auction fields
-      if (artworkObj.auction) {
-        const now = new Date();
-        const endTime = new Date(artworkObj.auction.endTime);
-        const isExpired = now > endTime;
-        
-        artworkObj.auctionStatus = isExpired ? 'ended' : (artworkObj.auction.isActive ? 'active' : 'inactive');
-        artworkObj.timeRemaining = artwork.timeRemaining;
-        artworkObj.nextMinimumBid = artworkObj.auction.currentBid 
-          ? artworkObj.auction.currentBid + (artworkObj.auction.minimumIncrement || 5)
-          : artworkObj.auction.startingPrice + (artworkObj.auction.minimumIncrement || 5);
-      }
-      
-      return artworkObj;
-    });
+    const totalPages = Math.ceil(total / limitNum);
 
     res.json({
       success: true,
-      artworks: artworksWithAuctionInfo,
+      artworks,
       pagination: {
-        currentPage: page,
+        currentPage: pageNum,
         totalPages,
-        count,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1
+        totalArtworks: total,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1
       }
     });
   } catch (error) {
-    console.error('Error fetching artworks:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -113,20 +81,26 @@ const getArtworks = async (req, res) => {
   }
 };
 
-// @desc    Get single artwork by ID
+// @desc    Get single artwork
 // @route   GET /api/artworks/:id
 // @access  Public
 const getArtworkById = async (req, res) => {
   try {
     const artwork = await Artwork.findById(req.params.id)
-      .populate('creator', 'username profileImage bio isArtist followers')
-      .populate('auction.bids.bidder', 'username')
-      .populate('auction.highestBidder', 'username');
+      .populate('creator', 'username profileImage isArtist bio website')
+      .populate('linkedPosts', 'content caption createdAt likes comments creator')
+      .populate({
+        path: 'linkedPosts',
+        populate: {
+          path: 'creator',
+          select: 'username profileImage'
+        }
+      });
 
     if (!artwork) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Artwork not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Artwork not found'
       });
     }
 
@@ -134,46 +108,11 @@ const getArtworkById = async (req, res) => {
     artwork.views += 1;
     await artwork.save();
 
-    const artworkObj = artwork.toObject();
-    
-    // Add computed auction fields
-    if (artworkObj.auction) {
-      const now = new Date();
-      const endTime = new Date(artworkObj.auction.endTime);
-      const isExpired = now > endTime;
-      
-      // If auction expired but still active, end it
-      if (isExpired && artwork.auction.isActive) {
-        await artwork.endAuction();
-        await artwork.populate('auction.winner', 'username');
-      }
-      
-      artworkObj.auctionStatus = isExpired ? 'ended' : (artworkObj.auction.isActive ? 'active' : 'inactive');
-      artworkObj.timeRemaining = artwork.timeRemaining;
-      artworkObj.nextMinimumBid = artworkObj.auction.currentBid 
-        ? artworkObj.auction.currentBid + (artworkObj.auction.minimumIncrement || 5)
-        : artworkObj.auction.startingPrice + (artworkObj.auction.minimumIncrement || 5);
-        
-      // Format bid history for response
-      if (artworkObj.auction.bids) {
-        artworkObj.auction.bids = artworkObj.auction.bids.slice(0, 10).map(bid => ({
-          id: bid._id,
-          amount: bid.amount,
-          bidder: {
-            username: bid.bidder.username,
-            _id: bid.bidder._id
-          },
-          timestamp: bid.timestamp
-        }));
-      }
-    }
-
     res.json({
       success: true,
-      artwork: artworkObj
+      artwork
     });
   } catch (error) {
-    console.error('Error fetching artwork:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -181,7 +120,7 @@ const getArtworkById = async (req, res) => {
   }
 };
 
-// @desc    Create new artwork with auction
+// @desc    Create artwork
 // @route   POST /api/artworks
 // @access  Private (Artists only)
 const createArtwork = async (req, res) => {
@@ -194,66 +133,119 @@ const createArtwork = async (req, res) => {
       medium,
       dimensions,
       tags,
+      forSale = true,
       images,
-      auctionDuration = 7 // days
+      linkedPostIds = [], // NEW: Array of post IDs to link
+      // Auction fields
+      isAuction,
+      auctionEndTime,
+      startingPrice
     } = req.body;
+
+    console.log('Creating artwork with data:', req.body);
 
     // Validate required fields
     if (!title || !description || !price || !category) {
       return res.status(400).json({
         success: false,
-        message: 'Title, description, price, and category are required'
+        message: 'Please provide title, description, price, and category'
       });
     }
 
     if (!images || images.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'At least one image is required'
+        message: 'Please provide at least one image'
       });
     }
 
-    // Check if user is an artist
-    if (!req.user.isArtist) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only artists can create artworks'
+    // Validate linked posts belong to the artist
+    if (linkedPostIds && linkedPostIds.length > 0) {
+      const posts = await Post.find({
+        _id: { $in: linkedPostIds },
+        creator: req.user._id
       });
+
+      if (posts.length !== linkedPostIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Some selected posts do not belong to you or do not exist'
+        });
+      }
     }
 
-    // Create auction end time
-    const auctionEndTime = new Date();
-    auctionEndTime.setDate(auctionEndTime.getDate() + parseInt(auctionDuration));
+    // Process tags
+    let processedTags = [];
+    if (tags) {
+      if (Array.isArray(tags)) {
+        processedTags = tags;
+      } else if (typeof tags === 'string') {
+        processedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+      }
+    }
 
-    const artwork = new Artwork({
-      title,
-      description,
+    // Create artwork data
+    const artworkData = {
+      title: title.trim(),
+      description: description.trim(),
       price: parseFloat(price),
       category,
-      medium,
-      dimensions,
-      tags: tags || [],
-      images,
+      medium: medium || '',
+      dimensions: dimensions || {},
       creator: req.user._id,
-      auction: {
-        startTime: new Date(),
-        endTime: auctionEndTime,
-        startingPrice: parseFloat(price),
-        minimumIncrement: 5,
+      forSale,
+      images,
+      tags: processedTags,
+      linkedPosts: linkedPostIds || []
+    };
+
+    // Add auction data if it's an auction
+    if (isAuction === 'true' || isAuction === true) {
+      if (!auctionEndTime) {
+        return res.status(400).json({
+          success: false,
+          message: 'Auction end time is required for auction items'
+        });
+      }
+
+      const endTime = new Date(auctionEndTime);
+      if (endTime <= new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Auction end time must be in the future'
+        });
+      }
+
+      artworkData.auction = {
+        endTime,
+        startingPrice: parseFloat(startingPrice || price),
         isActive: true,
         bids: []
-      }
-    });
+      };
+    }
 
+    console.log('Final artwork data:', artworkData);
+
+    const artwork = new Artwork(artworkData);
     const savedArtwork = await artwork.save();
-    
-    // Populate creator info
-    await savedArtwork.populate('creator', 'username profileImage isArtist');
+
+    // Update linked posts to reference this artwork
+    if (linkedPostIds && linkedPostIds.length > 0) {
+      await Post.updateMany(
+        { _id: { $in: linkedPostIds } },
+        { linkedShopItem: savedArtwork._id }
+      );
+    }
+
+    // Populate the response
+    const populatedArtwork = await Artwork.findById(savedArtwork._id)
+      .populate('creator', 'username profileImage isArtist')
+      .populate('linkedPosts', 'content caption createdAt');
 
     res.status(201).json({
       success: true,
-      artwork: savedArtwork,
-      message: 'Artwork created successfully with auction'
+      message: isAuction ? 'Artwork created successfully with auction' : 'Artwork created successfully',
+      artwork: populatedArtwork
     });
   } catch (error) {
     console.error('Error creating artwork:', error);
@@ -294,6 +286,23 @@ const updateArtwork = async (req, res) => {
       });
     }
 
+    const { linkedPostIds } = req.body;
+
+    // Validate linked posts if provided
+    if (linkedPostIds && linkedPostIds.length > 0) {
+      const posts = await Post.find({
+        _id: { $in: linkedPostIds },
+        creator: req.user._id
+      });
+
+      if (posts.length !== linkedPostIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Some selected posts do not belong to you or do not exist'
+        });
+      }
+    }
+
     // Update fields
     const updatedFields = {
       title: req.body.title || artwork.title,
@@ -311,6 +320,25 @@ const updateArtwork = async (req, res) => {
       updatedFields.images = req.body.images;
     }
 
+    // Handle linked posts update
+    if (linkedPostIds !== undefined) {
+      // Remove this artwork from previously linked posts
+      await Post.updateMany(
+        { linkedShopItem: artwork._id },
+        { $unset: { linkedShopItem: 1 } }
+      );
+
+      // Add this artwork to newly linked posts
+      if (linkedPostIds.length > 0) {
+        await Post.updateMany(
+          { _id: { $in: linkedPostIds } },
+          { linkedShopItem: artwork._id }
+        );
+      }
+
+      updatedFields.linkedPosts = linkedPostIds;
+    }
+
     // Update auction starting price if price changed and no bids yet
     if (req.body.price && artwork.auction && artwork.auction.bids.length === 0) {
       updatedFields['auction.startingPrice'] = parseFloat(req.body.price);
@@ -320,7 +348,8 @@ const updateArtwork = async (req, res) => {
       req.params.id,
       updatedFields,
       { new: true }
-    ).populate('creator', 'username profileImage isArtist');
+    ).populate('creator', 'username profileImage isArtist')
+     .populate('linkedPosts', 'content caption createdAt');
 
     res.json({
       success: true,
@@ -364,21 +393,17 @@ const deleteArtwork = async (req, res) => {
       });
     }
 
-    // Delete images from Azure blob storage
-    for (const imageUrl of artwork.images) {
-      try {
-        await deleteFromAzure(imageUrl);
-        console.log(`Successfully deleted image from Azure: ${imageUrl}`);
-      } catch (deleteError) {
-        console.log(`Warning: Could not delete image from Azure: ${imageUrl}`, deleteError);
-      }
-    }
+    // Remove artwork reference from linked posts
+    await Post.updateMany(
+      { linkedShopItem: artwork._id },
+      { $unset: { linkedShopItem: 1 } }
+    );
 
     await artwork.deleteOne();
 
     res.json({
       success: true,
-      message: 'Artwork removed'
+      message: 'Artwork deleted successfully'
     });
   } catch (error) {
     res.status(500).json({
@@ -388,7 +413,7 @@ const deleteArtwork = async (req, res) => {
   }
 };
 
-// @desc    Like an artwork
+// @desc    Like/Unlike artwork
 // @route   POST /api/artworks/:id/like
 // @access  Private
 const likeArtwork = async (req, res) => {
@@ -396,19 +421,18 @@ const likeArtwork = async (req, res) => {
     const artwork = await Artwork.findById(req.params.id);
 
     if (!artwork) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Artwork not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Artwork not found'
       });
     }
 
-    // Increment likes
+    // For now, just increment likes (you can add user tracking later)
     artwork.likes += 1;
     await artwork.save();
 
     res.json({
       success: true,
-      message: 'Artwork liked',
       likes: artwork.likes
     });
   } catch (error) {
@@ -424,13 +448,6 @@ const likeArtwork = async (req, res) => {
 // @access  Private (Artists only)
 const uploadArtworkImages = async (req, res) => {
   try {
-    if (!req.user.isArtist) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only artists can upload artwork images'
-      });
-    }
-
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
@@ -438,16 +455,35 @@ const uploadArtworkImages = async (req, res) => {
       });
     }
 
-    // Image URLs are already processed by Azure middleware
-    const imageUrls = req.files.map(file => file.location);
+    const imageUrls = req.files.map(file => file.url || file.location || `/uploads/artworks/${file.filename}`);
 
     res.json({
       success: true,
-      images: imageUrls,
-      message: 'Images uploaded successfully'
+      images: imageUrls
     });
   } catch (error) {
-    console.error('Error uploading images:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Get user's posts (for linking to artworks)
+// @route   GET /api/artworks/user-posts
+// @access  Private (Artists only)
+const getUserPosts = async (req, res) => {
+  try {
+    const posts = await Post.find({ creator: req.user._id })
+      .select('_id content caption createdAt linkedShopItem')
+      .sort({ createdAt: -1 })
+      .populate('linkedShopItem', 'title');
+
+    res.json({
+      success: true,
+      posts
+    });
+  } catch (error) {
     res.status(500).json({
       success: false,
       message: error.message

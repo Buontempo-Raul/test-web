@@ -1,6 +1,4 @@
-// Updated Explore component with infinite scroll
-// frontend/src/pages/Explore/Explore.js
-
+// frontend/src/pages/Explore/Explore.js - Fixed with working CreatePostModal
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import PostCard from '../../components/explore/PostCard/PostCard';
@@ -109,7 +107,20 @@ const Explore = () => {
 
   // Handle post creation success
   const handlePostCreated = (newPost) => {
+    console.log('New post created:', newPost);
     setPosts(prev => [newPost, ...prev]);
+    setShowCreateModal(false);
+  };
+
+  // Handle opening create modal
+  const handleCreatePostClick = () => {
+    console.log('Create post button clicked');
+    setShowCreateModal(true);
+  };
+
+  // Handle closing modal
+  const handleCloseModal = () => {
+    console.log('Closing modal');
     setShowCreateModal(false);
   };
 
@@ -154,7 +165,7 @@ const Explore = () => {
           <div className="explore-actions">
             <button 
               className="create-post-button"
-              onClick={() => setShowCreateModal(true)}
+              onClick={handleCreatePostClick}
             >
               Create Post
             </button>
@@ -194,80 +205,62 @@ const Explore = () => {
             Photography
           </button>
           <button
-            className={`filter-btn ${filters.tag === 'design' ? 'active' : ''}`}
-            onClick={() => handleFilterChange('tag', 'design')}
+            className={`filter-btn ${filters.tag === 'digital' ? 'active' : ''}`}
+            onClick={() => handleFilterChange('tag', 'digital')}
           >
-            Design
+            Digital
           </button>
-          {isAuthenticated && (
-            <button
-              className={`filter-btn ${filters.followingOnly ? 'active' : ''}`}
-              onClick={() => handleFilterChange('followingOnly', !filters.followingOnly)}
-            >
-              Following
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Posts Feed */}
-      {posts.length > 0 ? (
-        <div className="posts-feed">
-          {posts.map((post, index) => {
-            // Add ref to last post for infinite scroll
-            const isLast = index === posts.length - 1;
-            return (
+      {/* Posts Grid */}
+      <div className="posts-container">
+        {posts.length === 0 && !loading ? (
+          <div className="no-posts">
+            <h3>No posts found</h3>
+            <p>Be the first to share something!</p>
+          </div>
+        ) : (
+          <div className="posts-grid">
+            {posts.map((post, index) => (
               <div
                 key={post._id}
-                ref={isLast ? lastPostElementRef : null}
+                ref={index === posts.length - 1 ? lastPostElementRef : null}
               >
-                <PostCard
-                  post={post}
-                  currentUser={currentUser}
-                  isAuthenticated={isAuthenticated}
-                  onPostUpdated={() => fetchPosts(true)}
+                <PostCard 
+                  post={post} 
+                  onPostUpdate={(updatedPost) => {
+                    setPosts(prev => prev.map(p => p._id === updatedPost._id ? updatedPost : p));
+                  }}
+                  onPostDelete={(postId) => {
+                    setPosts(prev => prev.filter(p => p._id !== postId));
+                  }}
                 />
               </div>
-            );
-          })}
-          
-          {/* Loading indicator for infinite scroll */}
-          {loadingMore && (
-            <div className="loading-more">
-              <div className="spinner"></div>
-              <p>Loading more posts...</p>
-            </div>
-          )}
-          
-          {/* End of posts indicator */}
-          {!hasMore && posts.length > 0 && (
-            <div className="end-of-posts">
-              <p>No more posts...</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="no-posts">
-          <h2>No posts yet</h2>
-          <p>Be the first to share something amazing!</p>
-          {isAuthenticated && (
-            <button 
-              className="create-post-button"
-              onClick={() => setShowCreateModal(true)}
-            >
-              Create First Post
-            </button>
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+
+        {loadingMore && (
+          <div className="loading-more">
+            <div className="spinner"></div>
+            <p>Loading more posts...</p>
+          </div>
+        )}
+
+        {!hasMore && posts.length > 0 && (
+          <div className="end-of-posts">
+            <p>You've seen all posts!</p>
+          </div>
+        )}
+      </div>
 
       {/* Create Post Modal */}
-      {showCreateModal && (
-        <CreatePostModal
-          onClose={() => setShowCreateModal(false)}
-          onPostCreated={handlePostCreated}
-        />
-      )}
+      <CreatePostModal
+        isOpen={showCreateModal}
+        onClose={handleCloseModal}
+        onPostCreated={handlePostCreated}
+      />
     </div>
   );
 };

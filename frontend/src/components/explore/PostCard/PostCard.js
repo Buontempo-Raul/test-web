@@ -1,327 +1,338 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import api from '../../../services/api';
+// frontend/src/components/explore/PostCard/PostCard.js - Updated with product link button
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { postAPI } from '../../../services/api';
 import './PostCard.css';
 
-const PostCard = ({ post, currentUser, isAuthenticated, onPostUpdated, onPostDeleted }) => {
-  const [liked, setLiked] = useState(false);
-  const [likes, setLikes] = useState(post.likes || 0);
+const PostCard = ({ post, onPostUpdate, onPostDelete }) => {
+  const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
+  const [likesCount, setLikesCount] = useState(post.likes || 0);
+  const [loading, setLoading] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [comment, setComment] = useState('');
-  const [comments, setComments] = useState(post.comments || []);
-  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isLiking, setIsLiking] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    if (isAuthenticated && post.likedBy) {
-      const userLiked = post.likedBy.includes(currentUser?._id || currentUser?.id);
-      setLiked(userLiked);
+  // Get current user
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (error) {
+      console.error('Error parsing user from localStorage:', error);
+      return null;
     }
-  }, [post.likedBy, currentUser, isAuthenticated]);
+  };
 
+  const currentUser = getCurrentUser();
+  const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
+  const isOwner = currentUser && post.creator._id === currentUser._id;
+
+  // Handle like/unlike
   const handleLike = async () => {
     if (!isAuthenticated) {
-      alert('Please log in to like posts');
+      navigate('/login');
       return;
     }
 
-    if (isLiking) return;
+    if (loading) return;
 
-    setIsLiking(true);
-    const previousLiked = liked;
-    const previousLikes = likes;
-
-    setLiked(!liked);
-    setLikes(liked ? likes - 1 : likes + 1);
-
+    setLoading(true);
     try {
-      const response = await api.post(`/api/posts/${post._id}/like`);
+      const response = await postAPI.likePost(post._id);
       if (response.data.success) {
-        setLiked(response.data.liked);
-        setLikes(response.data.likes);
+        setIsLiked(response.data.liked);
+        setLikesCount(response.data.likes);
       }
     } catch (error) {
-      setLiked(previousLiked);
-      setLikes(previousLikes);
       console.error('Error liking post:', error);
     } finally {
-      setIsLiking(false);
+      setLoading(false);
     }
   };
 
+  // Handle comment submission
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    if (!comment.trim()) return;
+    if (!newComment.trim() || submittingComment) return;
 
+    setSubmittingComment(true);
     try {
-      const response = await api.post(`/api/posts/${post._id}/comment`, {
-        text: comment
-      });
-
+      const response = await postAPI.commentOnPost(post._id, newComment.trim());
       if (response.data.success) {
-        setComments(response.data.post.comments);
-        setComment('');
-        if (onPostUpdated) {
-          onPostUpdated(response.data.post);
+        // Update post with new comment
+        if (onPostUpdate) {
+          onPostUpdate({
+            ...post,
+            comments: [...post.comments, response.data.comment]
+          });
         }
+        setNewComment('');
       }
     } catch (error) {
       console.error('Error adding comment:', error);
+    } finally {
+      setSubmittingComment(false);
     }
   };
 
-  const handleDeletePost = async () => {
-    setIsDeleting(true);
+  // Handle comment deletion
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+
     try {
-      const response = await api.delete(`/api/posts/${post._id}`);
+      const response = await postAPI.deleteComment(post._id, commentId);
       if (response.data.success) {
-        if (onPostDeleted) {
-          onPostDeleted(post._id);
+        // Update post with comment removed
+        if (onPostUpdate) {
+          onPostUpdate({
+            ...post,
+            comments: post.comments.filter(comment => comment._id !== commentId)
+          });
         }
       }
     } catch (error) {
+      console.error('Error deleting comment:', error);
+    }
+  };
+
+  // Handle post deletion
+  const handleDeletePost = async () => {
+    if (!window.confirm('Are you sure you want to delete this post?')) return;
+
+    try {
+      const response = await postAPI.deletePost(post._id);
+      if (response.data.success && onPostDelete) {
+        onPostDelete(post._id);
+      }
+    } catch (error) {
       console.error('Error deleting post:', error);
-    } finally {
-      setIsDeleting(false);
-      setShowDeleteConfirm(false);
     }
   };
 
-  const isPostCreator = currentUser && post.creator && 
-    (currentUser._id === post.creator._id || currentUser.id === post.creator._id);
+  // NEW: Handle view product click
+  const handleViewProduct = () => {
+    if (post.linkedShopItem) {
+      navigate(`/shop/product/${post.linkedShopItem._id}`);
+    }
+  };
 
-  const handlePrevMedia = () => {
-    if (post.content.type === 'carousel' && post.content.items) {
-      setCurrentMediaIndex(prev => 
-        prev > 0 ? prev - 1 : post.content.items.length - 1
+  // Render media content
+  const renderContent = () => {
+    const { content } = post;
+
+    if (content.type === 'carousel') {
+      return (
+        <div className="post-carousel">
+          <div className="carousel-container">
+            {content.items.map((item, index) => (
+              <div key={index} className="carousel-item">
+                {item.type === 'video' ? (
+                  <video src={item.url} controls className="post-media" />
+                ) : (
+                  <img src={item.url} alt={`Post content ${index + 1}`} className="post-media" />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="carousel-indicators">
+            {content.items.map((_, index) => (
+              <span key={index} className="indicator active"></span>
+            ))}
+          </div>
+        </div>
       );
     }
-  };
 
-  const handleNextMedia = () => {
-    if (post.content.type === 'carousel' && post.content.items) {
-      setCurrentMediaIndex(prev => 
-        prev < post.content.items.length - 1 ? prev + 1 : 0
+    if (content.type === 'video') {
+      return (
+        <div className="post-video-container">
+          <video src={content.url} controls className="post-media" />
+        </div>
       );
     }
+
+    return (
+      <div className="post-image-container">
+        <img src={content.url} alt="Post content" className="post-media" />
+      </div>
+    );
   };
 
+  // Format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     
-    if (diffDays === 1) return '1 day ago';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
     return date.toLocaleDateString();
-  };
-
-  const renderMedia = () => {
-    if (!post.content) return null;
-
-    if (post.content.type === 'carousel' && post.content.items && post.content.items.length > 0) {
-      const currentItem = post.content.items[currentMediaIndex];
-      return (
-        <div className="post-media carousel">
-          {currentItem.type === 'video' ? (
-            <video 
-              src={currentItem.url} 
-              controls 
-              className="post-media-content"
-            />
-          ) : (
-            <img 
-              src={currentItem.url} 
-              alt={`Post by ${post.creator.username}`}
-              className="post-media-content"
-            />
-          )}
-          
-          {post.content.items.length > 1 && (
-            <>
-              <button className="carousel-nav prev" onClick={handlePrevMedia}>
-                &#8249;
-              </button>
-              <button className="carousel-nav next" onClick={handleNextMedia}>
-                &#8250;
-              </button>
-              <div className="carousel-indicators">
-                {post.content.items.map((_, index) => (
-                  <button
-                    key={index}
-                    className={`indicator ${index === currentMediaIndex ? 'active' : ''}`}
-                    onClick={() => setCurrentMediaIndex(index)}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      );
-    }
-    
-    if ((post.content.type === 'image' || post.content.type === 'video') && post.content.url) {
-      return (
-        <div className="post-media">
-          {post.content.type === 'video' ? (
-            <video 
-              src={post.content.url} 
-              controls 
-              className="post-media-content"
-              poster={post.content.thumbnailUrl}
-            />
-          ) : (
-            <img 
-              src={post.content.url} 
-              alt={`Post by ${post.creator.username}`}
-              className="post-media-content"
-            />
-          )}
-        </div>
-      );
-    }
-    
-    return null;
   };
 
   return (
     <div className="post-card">
+      {/* Post Header */}
       <div className="post-header">
-        <Link to={`/profile/${post.creator.username}`} className="post-creator">
+        <div className="post-user-info">
           <img 
             src={post.creator.profileImage || '/default-profile.jpg'} 
-            alt={`${post.creator.username}'s profile`}
-            className="creator-avatar"
+            alt={post.creator.username}
+            className="user-avatar"
+            onClick={() => navigate(`/profile/${post.creator._id}`)}
           />
-          <div className="creator-info">
-            <span className="creator-name">{post.creator.username}</span>
+          <div className="user-details">
+            <h4 
+              className="username"
+              onClick={() => navigate(`/profile/${post.creator._id}`)}
+            >
+              {post.creator.username}
+            </h4>
             <span className="post-date">{formatDate(post.createdAt)}</span>
           </div>
-        </Link>
-        
-        {isPostCreator && (
-          <div className="post-actions-menu">
-            <button
-              className="delete-post-btn"
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isDeleting}
+        </div>
+
+        {isOwner && (
+          <div className="post-actions">
+            <button 
+              className="action-button delete-button"
+              onClick={handleDeletePost}
+              title="Delete post"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="3,6 5,6 21,6"></polyline>
-                <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-              </svg>
+              🗑️
             </button>
           </div>
         )}
       </div>
 
-      {renderMedia()}
-
-      <div className="post-actions">
-        <button 
-          className={`action-btn ${liked ? 'liked' : ''}`}
-          onClick={handleLike}
-          disabled={isLiking}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-          <span>{likes}</span>
-        </button>
-        
-        <button 
-          className="action-btn"
-          onClick={() => setShowComments(!showComments)}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          <span>{comments.length}</span>
-        </button>
-      </div>
-
+      {/* Post Content */}
       <div className="post-content">
-        {post.caption && (
-          <p className="post-caption">
-            <Link 
-              to={`/profile/${post.creator.username}`} 
-              className="creator-link"
-            >
-              {post.creator.username}
-            </Link>
-            {' '}{post.caption}
-          </p>
-        )}
-        
-        {post.tags && post.tags.length > 0 && (
-          <div className="post-tags">
-            {post.tags.map((tag, index) => (
-              <span key={index} className="tag">#{tag}</span>
-            ))}
-          </div>
-        )}
+        {renderContent()}
       </div>
 
-      {showComments && (
-        <div className="comments-section">
-          <div className="comments-list">
-            {comments.map((comment) => (
-              <div key={comment._id} className="comment">
-                <Link 
-                  to={`/profile/${comment.user?.username || 'unknown'}`} 
-                  className="comment-author"
-                >
-                  {comment.user?.username || 'Anonymous'}
-                </Link>
-                <span className="comment-text">{comment.text}</span>
-              </div>
-            ))}
-          </div>
-          
-          {isAuthenticated && (
-            <form className="comment-form" onSubmit={handleCommentSubmit}>
-              <input
-                type="text"
-                placeholder="Add a comment..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-              <button type="submit" disabled={!comment.trim()}>
-                Post
-              </button>
-            </form>
-          )}
+      {/* Post Caption */}
+      {post.caption && (
+        <div className="post-caption">
+          <p>{post.caption}</p>
         </div>
       )}
 
-      {showDeleteConfirm && (
-        <div className="delete-modal-overlay">
-          <div className="delete-modal">
-            <h3>Delete Post</h3>
-            <p>Are you sure you want to delete this post? This action cannot be undone.</p>
-            <div className="delete-modal-actions">
-              <button 
-                className="cancel-delete-btn"
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
-              >
-                Cancel
-              </button>
-              <button 
-                className="confirm-delete-btn"
-                onClick={handleDeletePost}
-                disabled={isDeleting}
-              >
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </button>
+      {/* NEW: Linked Product Section */}
+      {post.linkedShopItem && (
+        <div className="linked-product">
+          <div className="linked-product-info">
+            <img 
+              src={post.linkedShopItem.images?.[0] || '/placeholder-image.jpg'} 
+              alt={post.linkedShopItem.title}
+              className="linked-product-image"
+            />
+            <div className="linked-product-details">
+              <h5 className="linked-product-title">{post.linkedShopItem.title}</h5>
+              <p className="linked-product-price">${post.linkedShopItem.price}</p>
             </div>
           </div>
+          <button 
+            className="view-product-button"
+            onClick={handleViewProduct}
+          >
+            View Product
+          </button>
+        </div>
+      )}
+
+      {/* Post Tags */}
+      {post.tags && post.tags.length > 0 && (
+        <div className="post-tags">
+          {post.tags.map((tag, index) => (
+            <span key={index} className="post-tag">#{tag}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Post Interactions */}
+      <div className="post-interactions">
+        <div className="interaction-buttons">
+          <button 
+            className={`interaction-button ${isLiked ? 'liked' : ''}`}
+            onClick={handleLike}
+            disabled={loading}
+          >
+            {isLiked ? '❤️' : '🤍'} {likesCount}
+          </button>
+          
+          <button 
+            className="interaction-button"
+            onClick={() => setShowComments(!showComments)}
+          >
+            💬 {post.comments?.length || 0}
+          </button>
+        </div>
+      </div>
+
+      {/* Comments Section */}
+      {showComments && (
+        <div className="comments-section">
+          {/* Existing Comments */}
+          {post.comments && post.comments.length > 0 && (
+            <div className="comments-list">
+              {post.comments.map((comment) => (
+                <div key={comment._id} className="comment">
+                  <img 
+                    src={comment.user.profileImage || '/default-profile.jpg'} 
+                    alt={comment.user.username}
+                    className="comment-avatar"
+                  />
+                  <div className="comment-content">
+                    <div className="comment-header">
+                      <span className="comment-username">{comment.user.username}</span>
+                      <span className="comment-date">{formatDate(comment.createdAt)}</span>
+                      {(currentUser && (comment.user._id === currentUser._id || isOwner)) && (
+                        <button 
+                          className="delete-comment-button"
+                          onClick={() => handleDeleteComment(comment._id)}
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                    <p className="comment-text">{comment.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add Comment Form */}
+          {isAuthenticated && (
+            <form className="add-comment-form" onSubmit={handleCommentSubmit}>
+              <img 
+                src={currentUser.profileImage || '/default-profile.jpg'} 
+                alt={currentUser.username}
+                className="comment-avatar"
+              />
+              <div className="comment-input-container">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="comment-input"
+                  disabled={submittingComment}
+                />
+                <button 
+                  type="submit" 
+                  className="submit-comment-button"
+                  disabled={!newComment.trim() || submittingComment}
+                >
+                  {submittingComment ? '⏳' : '📤'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
     </div>

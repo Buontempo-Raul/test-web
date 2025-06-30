@@ -5,7 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import './Navbar.css';
 
 // Placeholder for logo - you should update this path to match your actual logo location
-const logo = '/api/placeholder/200/100';
+const logo = '../../../assets/images/uncreated.logotransparent.png';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);

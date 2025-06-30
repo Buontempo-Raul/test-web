@@ -1,4 +1,4 @@
-// backend/models/Artwork.js - Updated with auction functionality
+// backend/models/Artwork.js - Updated with linkedPosts functionality
 const mongoose = require('mongoose');
 
 const bidSchema = new mongoose.Schema({
@@ -116,6 +116,11 @@ const artworkSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  // NEW: Array of linked posts
+  linkedPosts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Post'
+  }],
   // End auction fields
   tags: [String],
   views: {
@@ -160,122 +165,44 @@ artworkSchema.virtual('timeRemaining').get(function() {
   
   const now = new Date();
   const endTime = new Date(this.auction.endTime);
-  const difference = endTime - now;
   
-  if (difference <= 0) return 'ended';
+  if (endTime <= now) return 'Auction ended';
   
-  const days = Math.floor(difference / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+  const diff = endTime - now;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   
-  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 });
 
-// Pre-save middleware to initialize auction
-artworkSchema.pre('save', function(next) {
-  // If this is a new artwork and no auction is set, create one
-  if (this.isNew && !this.auction) {
-    const endTime = new Date();
-    endTime.setDate(endTime.getDate() + 7); // 7 days from now
-    
-    this.auction = {
-      startTime: new Date(),
-      endTime: endTime,
-      startingPrice: this.price,
-      currentBid: null,
-      highestBidder: null,
-      bids: [],
-      isActive: true,
-      minimumIncrement: 5
-    };
+// Method to add linked post
+artworkSchema.methods.addLinkedPost = function(postId) {
+  if (!this.linkedPosts.includes(postId)) {
+    this.linkedPosts.push(postId);
   }
-  
-  // Sync auction currentBid with artwork currentBid
-  if (this.auction && this.auction.currentBid !== this.currentBid) {
-    this.currentBid = this.auction.currentBid;
-    this.highestBidder = this.auction.highestBidder;
-  }
-  
-  next();
-});
-
-// Method to place a bid
-artworkSchema.methods.placeBid = function(bidderId, amount) {
-  if (!this.auction || !this.auction.isActive) {
-    throw new Error('Auction is not active');
-  }
-  
-  const now = new Date();
-  const endTime = new Date(this.auction.endTime);
-  
-  if (now > endTime) {
-    throw new Error('Auction has ended');
-  }
-  
-  const currentHighest = this.auction.currentBid || this.auction.startingPrice;
-  const minimumBid = currentHighest + this.auction.minimumIncrement;
-  
-  if (amount < minimumBid) {
-    throw new Error(`Bid must be at least $${minimumBid.toFixed(2)}`);
-  }
-  
-  // Check if bidder is the artwork owner
-  if (this.creator.toString() === bidderId.toString()) {
-    throw new Error('You cannot bid on your own artwork');
-  }
-  
-  // Create new bid
-  const newBid = {
-    bidder: bidderId,
-    amount: amount,
-    timestamp: new Date()
-  };
-  
-  // Add bid to history
-  this.auction.bids.unshift(newBid);
-  
-  // Update current bid and highest bidder
-  this.auction.currentBid = amount;
-  this.auction.highestBidder = bidderId;
-  this.currentBid = amount;
-  this.highestBidder = bidderId;
-  
-  return this.save();
 };
 
-// Method to end auction
-artworkSchema.methods.endAuction = function() {
-  if (!this.auction) {
-    throw new Error('No auction to end');
-  }
-  
-  this.auction.isActive = false;
-  
-  if (this.auction.bids.length > 0) {
-    this.auction.winner = this.auction.highestBidder;
-    this.isSold = true;
-    this.forSale = false;
-  }
-  
-  return this.save();
+// Method to remove linked post
+artworkSchema.methods.removeLinkedPost = function(postId) {
+  this.linkedPosts = this.linkedPosts.filter(id => id.toString() !== postId.toString());
 };
 
-// Static method to end expired auctions
-artworkSchema.statics.endExpiredAuctions = async function() {
-  const now = new Date();
-  
-  const expiredAuctions = await this.find({
-    'auction.endTime': { $lt: now },
-    'auction.isActive': true
-  });
-  
-  for (const artwork of expiredAuctions) {
-    await artwork.endAuction();
-  }
-  
-  return expiredAuctions.length;
+// Static method to get artworks by creator with linked posts
+artworkSchema.statics.findByCreatorWithPosts = function(creatorId) {
+  return this.find({ creator: creatorId })
+    .populate('linkedPosts', 'content caption createdAt')
+    .populate('creator', 'username profileImage');
 };
+
+// Index for efficient queries
+artworkSchema.index({ creator: 1 });
+artworkSchema.index({ linkedPosts: 1 });
+artworkSchema.index({ category: 1 });
+artworkSchema.index({ forSale: 1, price: 1 });
+artworkSchema.index({ tags: 1 });
 
 const Artwork = mongoose.model('Artwork', artworkSchema);
 

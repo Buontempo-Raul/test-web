@@ -1,15 +1,17 @@
-// src/services/api.js - Updated with auction endpoints
+// frontend/src/services/api.js - Updated with linking functionality
 import axios from 'axios';
 
-// Create axios instance with base configuration
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+// Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Request interceptor to add auth token
+// Add token to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -18,12 +20,10 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle token expiration
+// Response interceptor for handling auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -38,82 +38,54 @@ api.interceptors.response.use(
 
 // Auth API service
 export const authAPI = {
+  login: (credentials) => {
+    return api.post('/api/auth/login', credentials);
+  },
+  
   register: (userData) => {
     return api.post('/api/auth/register', userData);
   },
   
-  login: (credentials) => {
-    return api.post('/api/auth/login', credentials);
+  logout: () => {
+    return api.post('/api/auth/logout');
   },
   
   getProfile: () => {
     return api.get('/api/auth/profile');
   },
   
-  changePassword: (passwordData) => {
-    return api.put('/api/auth/change-password', passwordData);
-  },
-  
-  forgotPassword: (email) => {
-    return api.post('/api/auth/forgot-password', { email });
+  updateProfile: (userData) => {
+    return api.put('/api/auth/profile', userData);
   }
 };
 
 // User API service
 export const userAPI = {
-  getUserByUsername: (username) => {
-    return api.get(`/api/users/${username}`);
+  getUser: (id) => {
+    return api.get(`/api/users/${id}`);
   },
   
-  getUserArtworks: (username) => {
-    return api.get(`/api/users/${username}/artworks`);
+  updateUser: (id, userData) => {
+    return api.put(`/api/users/${id}`, userData);
   },
   
-  updateProfile: (profileData) => {
-    return api.put('/api/users/profile', profileData);
+  followUser: (id) => {
+    return api.post(`/api/users/${id}/follow`);
   },
   
-  uploadProfileImage: (formData) => {
-    return api.post('/api/users/profile/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+  unfollowUser: (id) => {
+    return api.delete(`/api/users/${id}/follow`);
   },
   
-  getFavorites: () => {
-    return api.get('/api/users/favorites');
-  },
-  
-  addToFavorites: (artworkId) => {
-    return api.post(`/api/users/favorites/${artworkId}`);
-  },
-  
-  removeFromFavorites: (artworkId) => {
-    return api.delete(`/api/users/favorites/${artworkId}`);
-  },
-  
-  followUser: (userId) => {
-    return api.post(`/api/users/follow/${userId}`);
-  },
-  
-  unfollowUser: (userId) => {
-    return api.post(`/api/users/unfollow/${userId}`);
-  },
-  
-  getFollowing: () => {
-    return api.get('/api/users/following');
-  },
-  
-  getFollowers: () => {
-    return api.get('/api/users/followers');
+  searchUsers: (query) => {
+    return api.get(`/api/users/search?q=${query}`);
   }
 };
 
 // Artwork API service
 export const artworkAPI = {
-  getArtworks: (filters = {}) => {
-    return api.get('/api/artworks', { params: filters });
+  getArtworks: (params = {}) => {
+    return api.get('/api/artworks', { params });
   },
   
   getArtworkById: (id) => {
@@ -122,15 +94,6 @@ export const artworkAPI = {
   
   createArtwork: (artworkData) => {
     return api.post('/api/artworks', artworkData);
-  },
-  
-  uploadArtworkImages: (formData) => {
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    };
-    return api.post('/api/artworks/upload', formData, config);
   },
   
   updateArtwork: (id, artworkData) => {
@@ -143,19 +106,32 @@ export const artworkAPI = {
   
   likeArtwork: (id) => {
     return api.post(`/api/artworks/${id}/like`);
-  }
-};
-
-// Auction API service (now using artwork endpoints)
-export const auctionAPI = {
-  // Place a bid on an artwork
-  placeBid: (artworkId, amount) => {
-    return api.post(`/api/artworks/${artworkId}/bid`, { amount });
   },
   
-  // Get bid history for an artwork
-  getBidHistory: (artworkId, params = {}) => {
-    return api.get(`/api/artworks/${artworkId}/bids`, { params });
+  uploadImages: (formData) => {
+    return api.post('/api/artworks/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  
+  // NEW: Get user's posts for linking to artworks
+  getUserPosts: () => {
+    return api.get('/api/artworks/user/posts');
+  },
+  
+  // TEST: Simple test endpoint to verify routing
+  testGetPosts: () => {
+    return api.get('/api/artworks/test/posts');
+  },
+  
+  placeBid: (id, bidData) => {
+    return api.post(`/api/artworks/${id}/bid`, bidData);
+  },
+  
+  getBids: (id, params = {}) => {
+    return api.get(`/api/artworks/${id}/bids`, { params });
   },
   
   // Get auction info for an artwork (using regular artwork endpoint)
@@ -205,6 +181,11 @@ export const postAPI = {
     return api.get(`/api/posts/user/${userId}`);
   },
   
+  // NEW: Get user's artworks for linking to posts
+  getUserArtworks: () => {
+    return api.get('/api/posts/user/artworks');
+  },
+  
   createPost: (formData) => {
     const config = {
       headers: {
@@ -237,6 +218,21 @@ export const postAPI = {
   
   deleteComment: (postId, commentId) => {
     return api.delete(`/api/posts/${postId}/comment/${commentId}`);
+  }
+};
+
+// Auction API service
+export const auctionAPI = {
+  placeBid: (artworkId, bidData) => {
+    return api.post(`/api/auctions/${artworkId}/bid`, bidData);
+  },
+  
+  getBidHistory: (artworkId, params = {}) => {
+    return api.get(`/api/auctions/${artworkId}/bids`, { params });
+  },
+  
+  getAuctionInfo: (artworkId) => {
+    return api.get(`/api/auctions/${artworkId}/info`);
   }
 };
 
