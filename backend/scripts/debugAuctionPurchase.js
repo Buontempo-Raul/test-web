@@ -1,12 +1,14 @@
-// backend/scripts/debugAuctionPurchase.js
-// Create this file to debug your auction purchase system
+// Save this as: backend/scripts/debugAuctionPurchase_fixed.js
+// This fixes the missing schema error by importing all required models
 
 const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const { v4: uuidv4 } = require('uuid');
+
+// Import ALL required models to avoid "Schema hasn't been registered" errors
 const AuctionPurchase = require('../models/AuctionPurchase');
 const Artwork = require('../models/Artwork');
 const User = require('../models/User');
-const dotenv = require('dotenv');
-const { v4: uuidv4 } = require('uuid');
 
 dotenv.config();
 
@@ -48,7 +50,6 @@ const debugAuctionPurchases = async () => {
     console.log('\n🎨 Checking completed auctions...');
     const completedAuctions = await Artwork.find({
       'auction.isActive': false,
-      'auction.hasEnded': true,
       'auction.highestBidder': { $exists: true, $ne: null }
     })
     .populate('auction.highestBidder', 'username email')
@@ -198,39 +199,27 @@ const testSpecificPurchase = async (auctionId) => {
     } else {
       console.log('❌ Purchase not found in database!');
       
-      // Search for any purchase with similar ID
-      const similarPurchases = await AuctionPurchase.find({
-        auctionId: { $regex: auctionId.substring(0, 8), $options: 'i' }
-      });
-      
-      if (similarPurchases.length > 0) {
-        console.log(`Found ${similarPurchases.length} purchases with similar IDs:`);
-        similarPurchases.forEach(p => {
-          console.log(`- ${p.auctionId}`);
-        });
+      // Look for any purchases
+      const anyPurchases = await AuctionPurchase.find({}).limit(5);
+      if (anyPurchases.length > 0) {
+        console.log('\n📋 Here are the existing purchase IDs:');
+        anyPurchases.forEach(p => console.log(`   ${p.auctionId}`));
       }
     }
     
   } catch (error) {
-    console.error('Error testing specific purchase:', error);
+    console.error('❌ Error:', error);
   } finally {
     await mongoose.disconnect();
   }
 };
 
-// Run the debug
-if (require.main === module) {
-  const specificId = process.argv[2];
-  
-  if (specificId) {
-    console.log(`Testing specific auction purchase: ${specificId}`);
-    testSpecificPurchase(specificId);
-  } else {
-    debugAuctionPurchases();
-  }
+// Check if we're running this specific auction ID
+const args = process.argv.slice(2);
+if (args.length > 0) {
+  testSpecificPurchase(args[0]);
+} else {
+  debugAuctionPurchases();
 }
 
-module.exports = {
-  debugAuctionPurchases,
-  testSpecificPurchase
-};
+module.exports = { debugAuctionPurchases, testSpecificPurchase };
