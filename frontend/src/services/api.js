@@ -1,4 +1,4 @@
-// frontend/src/services/api.js - Updated with linking functionality
+// frontend/src/services/api.js - FIXED: Added missing profile methods
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -59,8 +59,19 @@ export const authAPI = {
   }
 };
 
-// User API service
+// User API service - FIXED: Added missing methods
 export const userAPI = {
+  // FIXED: Added getUserByUsername method that Profile component needs
+  getUserByUsername: (username) => {
+    return api.get(`/api/users/${username}`);
+  },
+  
+  // FIXED: Added getUserArtworks method that Profile component needs
+  getUserArtworks: (username) => {
+    return api.get(`/api/users/${username}/artworks`);
+  },
+  
+  // Existing methods
   getUser: (id) => {
     return api.get(`/api/users/${id}`);
   },
@@ -69,12 +80,48 @@ export const userAPI = {
     return api.put(`/api/users/${id}`, userData);
   },
   
-  followUser: (id) => {
-    return api.post(`/api/users/${id}/follow`);
+  // FIXED: Follow/unfollow methods - corrected endpoints
+  followUser: (userId) => {
+    return api.post(`/api/users/follow/${userId}`);
   },
   
-  unfollowUser: (id) => {
-    return api.delete(`/api/users/${id}/follow`);
+  unfollowUser: (userId) => {
+    return api.post(`/api/users/unfollow/${userId}`);
+  },
+  
+  // FIXED: Added missing profile management methods
+  updateProfile: (userData) => {
+    return api.put('/api/users/profile', userData);
+  },
+  
+  uploadProfileImage: (formData) => {
+    return api.post('/api/users/profile/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  
+  // FIXED: Added favorites methods
+  getFavorites: () => {
+    return api.get('/api/users/favorites');
+  },
+  
+  addToFavorites: (artworkId) => {
+    return api.post(`/api/users/favorites/${artworkId}`);
+  },
+  
+  removeFromFavorites: (artworkId) => {
+    return api.delete(`/api/users/favorites/${artworkId}`);
+  },
+  
+  // FIXED: Added following/followers methods
+  getFollowing: () => {
+    return api.get('/api/users/following');
+  },
+  
+  getFollowers: () => {
+    return api.get('/api/users/followers');
   },
   
   searchUsers: (query) => {
@@ -116,14 +163,9 @@ export const artworkAPI = {
     });
   },
   
-  // NEW: Get user's posts for linking to artworks
+  // Get user's posts for linking to artworks
   getUserPosts: () => {
     return api.get('/api/artworks/user/posts');
-  },
-  
-  // TEST: Simple test endpoint to verify routing
-  testGetPosts: () => {
-    return api.get('/api/artworks/test/posts');
   },
   
   placeBid: (id, bidData) => {
@@ -134,7 +176,7 @@ export const artworkAPI = {
     return api.get(`/api/artworks/${id}/bids`, { params });
   },
   
-  // Get auction info for an artwork (using regular artwork endpoint)
+  // Get auction info for an artwork
   getAuctionInfo: (artworkId) => {
     return api.get(`/api/artworks/${artworkId}`);
   }
@@ -181,7 +223,7 @@ export const postAPI = {
     return api.get(`/api/posts/user/${userId}`);
   },
   
-  // NEW: Get user's artworks for linking to posts
+  // Get user's artworks for linking to posts
   getUserArtworks: () => {
     return api.get('/api/posts/user/artworks');
   },

@@ -1,4 +1,4 @@
-// frontend/src/components/explore/PostCard/PostCard.js - FIXED VERSION
+// frontend/src/components/explore/PostCard/PostCard.js - FIXED: Use username for profile navigation
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './PostCard.css';
@@ -34,13 +34,19 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
     : linkedArtworks.slice(0, maxArtworksToShow);
   const hasMoreArtworks = linkedArtworks.length > maxArtworksToShow;
 
-  // 🔧 FIXED: Navigate to the correct route that matches App.js
+  // Navigate to artwork detail page
   const handleArtworkClick = (artworkId) => {
-    navigate(`/shop/product/${artworkId}`);  // ✅ Fixed route
+    navigate(`/shop/product/${artworkId}`);
   };
 
+  // 🔧 FIXED: Use username instead of ID for profile navigation
   const handleProfileClick = () => {
-    navigate(`/profile/${post.creator._id}`);
+    // Use username from post.creator.username, not post.creator._id
+    if (post.creator && post.creator.username) {
+      navigate(`/profile/${post.creator.username}`);
+    } else {
+      console.error('Post creator username not available:', post.creator);
+    }
   };
 
   const handleLike = () => {
@@ -127,15 +133,15 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
       <div className="post-header">
         <div className="user-info" onClick={handleProfileClick}>
           <img 
-            src={post.creator.profileImage || '/api/placeholder/40/40'} 
-            alt={post.creator.username}
+            src={post.creator?.profileImage || '/api/placeholder/40/40'} 
+            alt={post.creator?.username || 'User'}
             className="user-avatar"
             onError={(e) => {
               e.target.src = '/api/placeholder/40/40';
             }}
           />
           <div className="user-details">
-            <span className="username">{post.creator.username}</span>
+            <span className="username">{post.creator?.username || 'Unknown User'}</span>
             <span className="post-date">{formatDate(post.createdAt)}</span>
           </div>
         </div>
@@ -145,7 +151,7 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
       <div className="post-content">
         {/* Media Content */}
         <div className="post-media">
-          {post.content.type === 'image' && (
+          {post.content?.type === 'image' && (
             <img 
               src={post.content.url} 
               alt="Post content"
@@ -155,14 +161,14 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
             />
           )}
           
-          {post.content.type === 'video' && (
+          {post.content?.type === 'video' && (
             <video controls>
               <source src={post.content.url} type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           )}
           
-          {post.content.type === 'carousel' && post.content.items && (
+          {post.content?.type === 'carousel' && post.content.items && (
             <div className="carousel">
               {post.content.items.map((item, index) => (
                 <div key={index} className="carousel-item">
