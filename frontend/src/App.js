@@ -16,6 +16,8 @@ import Profile from './pages/Profile/Profile';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import NotFound from './pages/NotFound/NotFound';
+import AuctionPurchase from './pages/AuctionPurchase/AuctionPurchase';
+
 
 // Admin Pages
 import AdminLayout from './components/admin/Layout/AdminLayout';
@@ -47,6 +49,8 @@ function App() {
                 <Route path="/profile/:username" element={<Profile />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/auction-purchase/:auctionId" element={<AuctionPurchase />} />
+
                 
                 {/* Admin Routes */}
                 <Route path="/admin" element={<ProtectedRoute adminOnly={true} />}>

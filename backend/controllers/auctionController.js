@@ -1,5 +1,8 @@
 // backend/controllers/auctionController.js - Updated with start/end functionality
 const Artwork = require('../models/Artwork');
+const AuctionPurchase = require('../models/AuctionPurchase');
+const { sendAuctionWinnerEmail } = require('../utils/sendEmail');
+const { v4: uuidv4 } = require('uuid');
 
 // @desc    Place a bid on an artwork
 // @route   POST /api/auctions/:artworkId/bid
@@ -223,8 +226,8 @@ const endAuction = async (req, res) => {
 
     // Find the artwork
     const artwork = await Artwork.findById(artworkId)
-      .populate('creator', 'username')
-      .populate('auction.highestBidder', 'username');
+      .populate('creator', 'username email')
+      .populate('auction.highestBidder', 'username email');
 
     if (!artwork) {
       return res.status(404).json({
@@ -253,20 +256,24 @@ const endAuction = async (req, res) => {
     artwork.auction.isActive = false;
     artwork.auction.endTime = new Date(); // Set end time to now
 
-    // If there are bids, set the winner
-    if (artwork.auction.bids && artwork.auction.bids.length > 0) {
-      artwork.auction.winner = artwork.auction.highestBidder;
-    }
-
-    await artwork.save();
-
-    // Format response
-    const auctionResult = {
+    // If there are bids, set the winner and process the sale
+    let auctionResult = {
       endedAt: artwork.auction.endTime,
       finalBid: artwork.auction.currentBid,
       winner: artwork.auction.highestBidder?.username || null,
       totalBids: artwork.auction.bids ? artwork.auction.bids.length : 0
     };
+
+    if (artwork.auction.bids && artwork.auction.bids.length > 0) {
+      artwork.auction.winner = artwork.auction.highestBidder;
+      
+      // Process the auction completion
+      await processAuctionCompletion(artwork);
+      
+      auctionResult.purchaseInitiated = true;
+    }
+
+    await artwork.save();
 
     res.json({
       success: true,
@@ -396,6 +403,67 @@ const getAuctionInfo = async (req, res) => {
       success: false,
       message: 'Server error while fetching auction info'
     });
+  }
+};
+
+// Helper function to process auction completion
+const processAuctionCompletion = async (artwork) => {
+  try {
+    if (!artwork.auction.highestBidder || !artwork.auction.currentBid) {
+      console.log('No winner or bid amount found');
+      return;
+    }
+
+    // Generate unique auction ID
+    const auctionId = uuidv4();
+
+    // Calculate platform fee (e.g., 5% of winning bid)
+    const platformFeeRate = 0.05; // 5%
+    const platformFee = artwork.auction.currentBid * platformFeeRate;
+    const shippingFee = 25; // Default shipping fee
+    const totalAmount = artwork.auction.currentBid + platformFee + shippingFee;
+
+    // Create auction purchase record
+    const auctionPurchase = new AuctionPurchase({
+      auctionId: auctionId,
+      artwork: artwork._id,
+      artist: artwork.creator._id,
+      winner: artwork.auction.highestBidder,
+      winningBid: artwork.auction.currentBid,
+      platformFee: platformFee,
+      shippingFee: shippingFee,
+      totalAmount: totalAmount,
+      auctionEndDate: artwork.auction.endTime,
+      status: 'pending'
+    });
+
+    await auctionPurchase.save();
+
+    // Send winner notification email
+    const winnerData = {
+      winnerEmail: artwork.auction.highestBidder.email,
+      winnerUsername: artwork.auction.highestBidder.username,
+      artwork: {
+        title: artwork.title,
+        description: artwork.description,
+        images: artwork.images
+      },
+      finalBid: artwork.auction.currentBid,
+      artistUsername: artwork.creator.username,
+      auctionId: auctionId
+    };
+
+    await sendAuctionWinnerEmail(winnerData);
+
+    // Mark email as sent
+    auctionPurchase.emailNotificationsSent.winner = true;
+    await auctionPurchase.save();
+
+    console.log(`Auction completion processed for artwork: ${artwork.title}, winner: ${artwork.auction.highestBidder.username}`);
+
+  } catch (error) {
+    console.error('Error processing auction completion:', error);
+    throw error;
   }
 };
 
