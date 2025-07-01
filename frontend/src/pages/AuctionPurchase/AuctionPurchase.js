@@ -1,4 +1,6 @@
 // frontend/src/pages/AuctionPurchase/AuctionPurchase.js
+// IMPROVED VERSION with better error handling and debugging
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -12,6 +14,7 @@ const AuctionPurchase = () => {
   const [purchase, setPurchase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState(null);
   const [step, setStep] = useState(1); // 1: shipping, 2: payment, 3: complete
   
   // Shipping form state
@@ -36,13 +39,46 @@ const AuctionPurchase = () => {
   const fetchPurchaseData = async () => {
     try {
       setLoading(true);
+      setError('');
+      
+      console.log(`🔍 Fetching purchase data for auction ID: ${auctionId}`);
+      
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/auction-purchases/${auctionId}`, {
+      const apiUrl = `/api/auction-purchases/${auctionId}`;
+      
+      console.log(`📡 Making request to: ${apiUrl}`);
+      
+      const response = await fetch(apiUrl, {
         headers: token ? {
-          'Authorization': `Bearer ${token}`
-        } : {}
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        } : {
+          'Content-Type': 'application/json'
+        }
       });
-      const data = await response.json();
+      
+      console.log(`📊 Response status: ${response.status}`);
+      console.log(`📊 Response headers:`, response.headers);
+      
+      // Get response text first to check if it's HTML or JSON
+      const responseText = await response.text();
+      console.log(`📄 Response text (first 500 chars):`, responseText.substring(0, 500));
+      
+      // Check if response is HTML (error page)
+      if (responseText.startsWith('<!DOCTYPE html>') || responseText.startsWith('<html')) {
+        throw new Error('Backend returned HTML instead of JSON. This usually means the route is not found or there\'s a server error.');
+      }
+      
+      // Try to parse as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ JSON Parse Error:', parseError);
+        throw new Error(`Failed to parse response as JSON: ${parseError.message}`);
+      }
+      
+      console.log(`📦 Parsed response:`, data);
       
       if (data.success) {
         setPurchase(data.purchase);
@@ -60,12 +96,41 @@ const AuctionPurchase = () => {
         if (data.purchase.shippingAddress) {
           setShippingData(data.purchase.shippingAddress);
         }
+        
+        console.log('✅ Purchase data loaded successfully');
       } else {
-        setError(data.message);
+        setError(data.message || 'Failed to load purchase information');
+        console.error('❌ API returned error:', data.message);
       }
     } catch (err) {
-      setError('Failed to load purchase information');
-      console.error('Error fetching purchase:', err);
+      console.error('❌ Fetch error:', err);
+      
+      // Enhanced error handling with debugging info
+      let errorMessage = 'Failed to load purchase information';
+      let debugMessage = err.message;
+      
+      if (err.message.includes('HTML instead of JSON')) {
+        errorMessage = 'Server configuration error';
+        debugMessage = 'The backend is returning HTML instead of JSON. This could mean: 1) The auction purchase doesn\'t exist in the database, 2) The backend route is not properly configured, 3) The server is not running correctly.';
+      } else if (err.message.includes('Failed to fetch')) {
+        errorMessage = 'Cannot connect to server';
+        debugMessage = 'Make sure your backend server is running on the correct port (usually :5000)';
+      }
+      
+      setError(errorMessage);
+      setDebugInfo({
+        originalError: err.message,
+        debugMessage,
+        auctionId,
+        timestamp: new Date().toISOString(),
+        apiUrl: `/api/auction-purchases/${auctionId}`,
+        suggestions: [
+          'Check if the backend server is running',
+          'Verify the auction purchase exists in the database',
+          'Run the debugging script: node backend/scripts/debugAuctionPurchase.js',
+          'Check browser network tab for detailed error information'
+        ]
+      });
     } finally {
       setLoading(false);
     }
@@ -148,6 +213,7 @@ const AuctionPurchase = () => {
         <div className="loading-spinner">
           <div className="spinner"></div>
           <p>Loading purchase information...</p>
+          <small>Auction ID: {auctionId}</small>
         </div>
       </div>
     );
@@ -158,10 +224,60 @@ const AuctionPurchase = () => {
       <div className="auction-purchase-container">
         <div className="error-container">
           <h2>Error</h2>
-          <p>{error}</p>
-          <button onClick={() => navigate('/')} className="btn btn-primary">
-            Return Home
-          </button>
+          <p className="error-message">{error}</p>
+          
+          {debugInfo && (
+            <div className="debug-info">
+              <details>
+                <summary>🔍 Debug Information (Click to expand)</summary>
+                <div className="debug-content">
+                  <p><strong>Auction ID:</strong> {debugInfo.auctionId}</p>
+                  <p><strong>API URL:</strong> {debugInfo.apiUrl}</p>
+                  <p><strong>Time:</strong> {debugInfo.timestamp}</p>
+                  <p><strong>Original Error:</strong> {debugInfo.originalError}</p>
+                  <p><strong>Debug Message:</strong> {debugInfo.debugMessage}</p>
+                  
+                  <h4>Suggested Actions:</h4>
+                  <ul>
+                    {debugInfo.suggestions.map((suggestion, index) => (
+                      <li key={index}>{suggestion}</li>
+                    ))}
+                  </ul>
+                  
+                  <h4>Quick Tests:</h4>
+                  <ul>
+                    <li>
+                      <a 
+                        href={`/api/auction-purchases/test`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        Test Auction Purchase API
+                      </a>
+                    </li>
+                    <li>
+                      <a 
+                        href={`/api/test`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        Test Backend Connection
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </details>
+            </div>
+          )}
+          
+          <div className="error-actions">
+            <button onClick={() => fetchPurchaseData()} className="btn btn-secondary">
+              🔄 Retry
+            </button>
+            <button onClick={() => navigate('/')} className="btn btn-primary">
+              🏠 Return Home
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -173,6 +289,7 @@ const AuctionPurchase = () => {
         <div className="error-container">
           <h2>Purchase Not Found</h2>
           <p>The auction purchase could not be found.</p>
+          <p><strong>Auction ID:</strong> {auctionId}</p>
           <button onClick={() => navigate('/')} className="btn btn-primary">
             Return Home
           </button>
@@ -181,7 +298,7 @@ const AuctionPurchase = () => {
     );
   }
   
-  // Check if user is the winner (if logged in)
+  // Check if user is authenticated and is the winner
   if (isAuthenticated && currentUser && currentUser._id !== purchase.winner._id) {
     return (
       <div className="auction-purchase-container">
@@ -227,6 +344,41 @@ const AuctionPurchase = () => {
         )}
       </div>
       
+      {/* Artwork Information */}
+      <div className="artwork-section">
+        <div className="artwork-images">
+          {purchase.artwork.images && purchase.artwork.images.length > 0 && (
+            <img 
+              src={purchase.artwork.images[0]} 
+              alt={purchase.artwork.title}
+              className="artwork-image"
+            />
+          )}
+        </div>
+        <div className="artwork-details">
+          <h2>{purchase.artwork.title}</h2>
+          <p className="artwork-description">{purchase.artwork.description}</p>
+          <div className="purchase-summary">
+            <div className="price-row">
+              <span>Winning Bid:</span>
+              <span>${purchase.winningBid.toFixed(2)}</span>
+            </div>
+            <div className="price-row">
+              <span>Platform Fee:</span>
+              <span>${purchase.platformFee.toFixed(2)}</span>
+            </div>
+            <div className="price-row">
+              <span>Shipping:</span>
+              <span>${purchase.shippingFee.toFixed(2)}</span>
+            </div>
+            <div className="price-row total">
+              <span>Total:</span>
+              <span>${purchase.totalAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       {/* Progress Steps */}
       <div className="progress-steps">
         <div className={`step ${step >= 1 ? 'active' : ''} ${step > 1 ? 'completed' : ''}`}>
@@ -243,147 +395,95 @@ const AuctionPurchase = () => {
         </div>
       </div>
       
-      {/* Artwork Info */}
-      <div className="artwork-summary">
-        <div className="artwork-image">
-          {purchase.artwork.images && purchase.artwork.images.length > 0 && (
-            <img 
-              src={purchase.artwork.images[0]} 
-              alt={purchase.artwork.title}
-              onError={(e) => {
-                e.target.src = '/api/placeholder/300/200';
-              }}
-            />
-          )}
-        </div>
-        <div className="artwork-details">
-          <h2>{purchase.artwork.title}</h2>
-          <p className="artist">by {purchase.artist.username}</p>
-          <p className="description">{purchase.artwork.description}</p>
-        </div>
-      </div>
-      
-      {/* Purchase Summary */}
-      <div className="purchase-summary">
-        <h3>Purchase Summary</h3>
-        <div className="summary-row">
-          <span>Winning Bid:</span>
-          <span>${purchase.winningBid.toFixed(2)}</span>
-        </div>
-        <div className="summary-row">
-          <span>Platform Fee (5%):</span>
-          <span>${purchase.platformFee.toFixed(2)}</span>
-        </div>
-        <div className="summary-row">
-          <span>Shipping:</span>
-          <span>${purchase.shippingFee.toFixed(2)}</span>
-        </div>
-        <div className="summary-row total">
-          <span>Total:</span>
-          <span>${purchase.totalAmount.toFixed(2)}</span>
-        </div>
-      </div>
-      
       {/* Step Content */}
       {step === 1 && (
         <div className="step-content">
-          <h3>📦 Shipping Address</h3>
-          
-          {!isAuthenticated && (
-            <div className="login-notice">
-              <p>Please <a href="/login">log in</a> to continue with your purchase.</p>
-            </div>
-          )}
-          
-          {isAuthenticated && (
-            <form onSubmit={handleShippingSubmit} className="shipping-form">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Full Name *</label>
-                  <input
-                    type="text"
-                    value={shippingData.fullName}
-                    onChange={(e) => setShippingData({...shippingData, fullName: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Phone Number *</label>
-                  <input
-                    type="tel"
-                    value={shippingData.phoneNumber}
-                    onChange={(e) => setShippingData({...shippingData, phoneNumber: e.target.value})}
-                    required
-                  />
-                </div>
-              </div>
-              
+          <h3>📦 Shipping Information</h3>
+          <form onSubmit={handleShippingSubmit} className="shipping-form">
+            <div className="form-row">
               <div className="form-group">
-                <label>Address *</label>
+                <label>Full Name *</label>
                 <input
                   type="text"
-                  value={shippingData.address}
-                  onChange={(e) => setShippingData({...shippingData, address: e.target.value})}
+                  value={shippingData.fullName}
+                  onChange={(e) => setShippingData({...shippingData, fullName: e.target.value})}
                   required
                 />
               </div>
-              
-              <div className="form-row">
-                <div className="form-group">
-                  <label>City *</label>
-                  <input
-                    type="text"
-                    value={shippingData.city}
-                    onChange={(e) => setShippingData({...shippingData, city: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>State/Province *</label>
-                  <input
-                    type="text"
-                    value={shippingData.state}
-                    onChange={(e) => setShippingData({...shippingData, state: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Postal Code *</label>
-                  <input
-                    type="text"
-                    value={shippingData.postalCode}
-                    onChange={(e) => setShippingData({...shippingData, postalCode: e.target.value})}
-                    required
-                  />
-                </div>
-              </div>
-              
               <div className="form-group">
-                <label>Country *</label>
-                <select
-                  value={shippingData.country}
-                  onChange={(e) => setShippingData({...shippingData, country: e.target.value})}
+                <label>Phone Number *</label>
+                <input
+                  type="tel"
+                  value={shippingData.phoneNumber}
+                  onChange={(e) => setShippingData({...shippingData, phoneNumber: e.target.value})}
                   required
-                >
-                  <option value="United States">United States</option>
-                  <option value="Canada">Canada</option>
-                  <option value="United Kingdom">United Kingdom</option>
-                  <option value="Germany">Germany</option>
-                  <option value="France">France</option>
-                  <option value="Australia">Australia</option>
-                  <option value="Other">Other</option>
-                </select>
+                />
               </div>
-              
-              <button 
-                type="submit" 
-                className="btn btn-primary"
-                disabled={isProcessing}
+            </div>
+            
+            <div className="form-group">
+              <label>Address *</label>
+              <input
+                type="text"
+                value={shippingData.address}
+                onChange={(e) => setShippingData({...shippingData, address: e.target.value})}
+                required
+              />
+            </div>
+            
+            <div className="form-row">
+              <div className="form-group">
+                <label>City *</label>
+                <input
+                  type="text"
+                  value={shippingData.city}
+                  onChange={(e) => setShippingData({...shippingData, city: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>State *</label>
+                <input
+                  type="text"
+                  value={shippingData.state}
+                  onChange={(e) => setShippingData({...shippingData, state: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Postal Code *</label>
+                <input
+                  type="text"
+                  value={shippingData.postalCode}
+                  onChange={(e) => setShippingData({...shippingData, postalCode: e.target.value})}
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="form-group">
+              <label>Country *</label>
+              <select
+                value={shippingData.country}
+                onChange={(e) => setShippingData({...shippingData, country: e.target.value})}
+                required
               >
-                {isProcessing ? 'Saving...' : 'Continue to Payment'}
-              </button>
-            </form>
-          )}
+                <option value="United States">United States</option>
+                <option value="Canada">Canada</option>
+                <option value="United Kingdom">United Kingdom</option>
+                <option value="Australia">Australia</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Saving...' : 'Continue to Payment'}
+            </button>
+          </form>
         </div>
       )}
       
@@ -412,32 +512,15 @@ const AuctionPurchase = () => {
               </label>
             </div>
             
-            {paymentMethod === 'credit_card' && (
-              <div className="credit-card-form">
-                <div className="form-group">
-                  <label>Card Number *</label>
-                  <input type="text" placeholder="1234 5678 9012 3456" required />
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Expiry Date *</label>
-                    <input type="text" placeholder="MM/YY" required />
-                  </div>
-                  <div className="form-group">
-                    <label>CVV *</label>
-                    <input type="text" placeholder="123" required />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Cardholder Name *</label>
-                  <input type="text" required />
-                </div>
-              </div>
-            )}
+            <div className="payment-simulation">
+              <p className="notice">
+                🔧 <strong>Development Mode:</strong> This is a simulated payment for testing purposes.
+              </p>
+            </div>
             
             <button 
               type="submit" 
-              className="btn btn-primary payment-button"
+              className="btn btn-primary"
               disabled={isProcessing}
             >
               {isProcessing ? 'Processing...' : `Pay $${purchase.totalAmount.toFixed(2)}`}
@@ -447,37 +530,41 @@ const AuctionPurchase = () => {
       )}
       
       {step === 3 && (
-        <div className="step-content completion-step">
-          <div className="success-message">
-            <div className="success-icon">✅</div>
-            <h3>Payment Successful!</h3>
-            <p>Your purchase has been completed successfully.</p>
-          </div>
-          
-          <div className="next-steps">
-            <h4>What happens next?</h4>
-            <ol>
-              <li>The artist has been notified of your payment</li>
-              <li>They will prepare and ship your artwork</li>
-              <li>You'll receive tracking information once shipped</li>
-              <li>Enjoy your new artwork!</li>
-            </ol>
-          </div>
-          
-          {purchase.trackingNumber && (
-            <div className="tracking-info">
-              <h4>📦 Tracking Information</h4>
-              <p><strong>Carrier:</strong> {purchase.shippingCarrier}</p>
-              <p><strong>Tracking Number:</strong> {purchase.trackingNumber}</p>
+        <div className="step-content">
+          <div className="completion-message">
+            <h3>🎉 Purchase Complete!</h3>
+            <p>Thank you for your purchase! The artist has been notified and will prepare your artwork for shipping.</p>
+            
+            <div className="next-steps">
+              <h4>What happens next:</h4>
+              <ul>
+                <li>The artist will prepare your artwork for shipping</li>
+                <li>You'll receive tracking information once it's shipped</li>
+                <li>Estimated delivery: 5-10 business days</li>
+              </ul>
             </div>
-          )}
-          
-          <button 
-            onClick={() => navigate('/')} 
-            className="btn btn-primary"
-          >
-            Return Home
-          </button>
+            
+            <button onClick={() => navigate('/')} className="btn btn-primary">
+              Return to Browse Artworks
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Debug info for development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="debug-panel" style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f5f5f5', fontSize: '0.8rem' }}>
+          <details>
+            <summary>🔧 Development Debug Info</summary>
+            <pre>{JSON.stringify({ 
+              auctionId, 
+              step, 
+              status: purchase?.status,
+              isAuthenticated,
+              currentUserId: currentUser?._id,
+              winnerId: purchase?.winner?._id
+            }, null, 2)}</pre>
+          </details>
         </div>
       )}
     </div>
