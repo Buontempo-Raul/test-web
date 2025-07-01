@@ -24,6 +24,102 @@ const ProductDetail = () => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [isAuctionActive, setIsAuctionActive] = useState(true);
 
+  const [isStartingAuction, setIsStartingAuction] = useState(false);
+  const [isEndingAuction, setIsEndingAuction] = useState(false);
+  const [auctionDuration, setAuctionDuration] = useState(7);
+
+  const handleStartAuction = async () => {
+    if (!isAuthenticated || !isArtworkOwner()) {
+      alert('Only the artist can start their auction');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Start auction for ${auctionDuration} days? This will begin the bidding process immediately.`
+    );
+
+    if (!confirmed) return;
+
+    setIsStartingAuction(true);
+
+    try {
+      const response = await auctionAPI.startAuction(id, auctionDuration);
+      
+      if (response.data.success) {
+        // Update local state
+        setArtwork(prev => ({
+          ...prev,
+          auction: {
+            ...prev.auction,
+            ...response.data.auction,
+            isActive: true
+          }
+        }));
+        
+        alert('Auction started successfully!');
+        
+        // Refresh the page to update timer and status
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error starting auction:', error);
+      alert(error.response?.data?.message || 'Failed to start auction');
+    } finally {
+      setIsStartingAuction(false);
+    }
+  };
+
+  const handleEndAuction = async () => {
+    if (!isAuthenticated || !isArtworkOwner()) {
+      alert('Only the artist can end their auction');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Are you sure you want to end this auction? This action cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    setIsEndingAuction(true);
+
+    try {
+      const response = await auctionAPI.endAuction(id);
+      
+      if (response.data.success) {
+        // Update local state
+        setArtwork(prev => ({
+          ...prev,
+          auction: {
+            ...prev.auction,
+            isActive: false,
+            endTime: new Date().toISOString()
+          }
+        }));
+        
+        setIsAuctionActive(false);
+        setTimeRemaining('Auction Ended');
+        
+        const result = response.data.auctionResult;
+        let message = 'Auction ended successfully!';
+        
+        if (result.winner) {
+          message += `\n\nWinner: ${result.winner}\nFinal Bid: $${result.finalBid?.toFixed(2) || '0.00'}\nTotal Bids: ${result.totalBids}`;
+        } else {
+          message += '\n\nNo bids were placed.';
+        }
+        
+        alert(message);
+      }
+    } catch (error) {
+      console.error('Error ending auction:', error);
+      alert(error.response?.data?.message || 'Failed to end auction');
+    } finally {
+      setIsEndingAuction(false);
+    }
+  };
+
+
   // Fetch artwork data
   useEffect(() => {
     const fetchArtwork = async () => {
@@ -149,7 +245,8 @@ const ProductDetail = () => {
 
     try {
       console.log('Making API call to place bid...');
-      const response = await auctionAPI.placeBid(id, bidValue);
+      // FIX: Send bid amount as an object with 'amount' property
+      const response = await auctionAPI.placeBid(id, { amount: bidValue });
       console.log('Bid response:', response.data);
       
       if (response.data.success) {
@@ -171,13 +268,11 @@ const ProductDetail = () => {
         setBidAmount((response.data.currentBid + 5).toFixed(2));
         
         alert('Bid placed successfully!');
-      } else {
-        throw new Error(response.data.message || 'Failed to place bid');
       }
     } catch (error) {
       console.error('Error placing bid:', error);
-      console.error('Error details:', error.response?.data);
-      alert(error.response?.data?.message || error.message || 'Failed to place bid. Please try again.');
+      const errorMessage = error.response?.data?.message || 'Failed to place bid';
+      alert(errorMessage);
     } finally {
       setIsPlacingBid(false);
     }
@@ -327,6 +422,87 @@ const ProductDetail = () => {
                 {isAuctionActive ? 'Live' : 'Ended'}
               </div>
             </div>
+
+            {isArtworkOwner() && (
+            <div className="artist-auction-controls">
+              <h4>Auction Management</h4>
+              
+              {!artwork.auction?.isActive ? (
+                <div className="start-auction-section">
+                  <div className="duration-selector">
+                    <label htmlFor="auctionDuration">Auction Duration:</label>
+                    <select
+                      id="auctionDuration"
+                      value={auctionDuration}
+                      onChange={(e) => setAuctionDuration(parseInt(e.target.value))}
+                      disabled={isStartingAuction}
+                    >
+                      <option value={1}>1 Day</option>
+                      <option value={3}>3 Days</option>
+                      <option value={7}>7 Days</option>
+                      <option value={14}>14 Days</option>
+                      <option value={30}>30 Days</option>
+                    </select>
+                  </div>
+                  
+                  <button 
+                    onClick={handleStartAuction}
+                    disabled={isStartingAuction}
+                    className="start-auction-button"
+                  >
+                    {isStartingAuction ? (
+                      <>
+                        <svg className="loading-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 6v6l4 2"/>
+                        </svg>
+                        Starting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polygon points="5,3 19,12 5,21"/>
+                        </svg>
+                        Start Auction
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="end-auction-section">
+                  <p className="auction-active-notice">
+                    <svg className="live-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="12" r="10"/>
+                    </svg>
+                    Your auction is currently live
+                  </p>
+                  
+                  <button 
+                    onClick={handleEndAuction}
+                    disabled={isEndingAuction}
+                    className="end-auction-button"
+                  >
+                    {isEndingAuction ? (
+                      <>
+                        <svg className="loading-spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 6v6l4 2"/>
+                        </svg>
+                        Ending...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="stop-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <square x="6" y="6" width="12" height="12"/>
+                        </svg>
+                        End Auction Early
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
             <div className="auction-timer">
               <span className="timer-label">Time Remaining:</span>

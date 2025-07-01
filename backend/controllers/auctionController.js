@@ -1,18 +1,16 @@
-// backend/controllers/auctionController.js
+// backend/controllers/auctionController.js - Updated with start/end functionality
 const Artwork = require('../models/Artwork');
 
 // @desc    Place a bid on an artwork
 // @route   POST /api/auctions/:artworkId/bid
-// @access  Private
+// @access  Protected
 const placeBid = async (req, res) => {
   try {
     const { artworkId } = req.params;
     const { amount } = req.body;
     const bidderId = req.user._id;
 
-    console.log('Placing bid:', { artworkId, amount, bidderId });
-
-    // Validate bid amount
+    // Basic validation
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
@@ -20,9 +18,8 @@ const placeBid = async (req, res) => {
       });
     }
 
-    // Find artwork
-    const artwork = await Artwork.findById(artworkId)
-      .populate('creator', 'username');
+    // Find the artwork
+    const artwork = await Artwork.findById(artworkId).populate('creator', 'username');
 
     if (!artwork) {
       return res.status(404).json({
@@ -31,21 +28,7 @@ const placeBid = async (req, res) => {
       });
     }
 
-    if (!artwork.forSale) {
-      return res.status(400).json({
-        success: false,
-        message: 'This artwork is not for sale'
-      });
-    }
-
-    if (artwork.isSold) {
-      return res.status(400).json({
-        success: false,
-        message: 'This artwork has already been sold'
-      });
-    }
-
-    // Check if bidder is the artwork owner
+    // Check if user is trying to bid on their own artwork
     if (artwork.creator._id.toString() === bidderId.toString()) {
       return res.status(400).json({
         success: false,
@@ -53,9 +36,8 @@ const placeBid = async (req, res) => {
       });
     }
 
-    // Get current highest bid
     const currentHighest = artwork.currentBid || artwork.price;
-    const minimumBid = currentHighest + 5; // $5 minimum increment
+    const minimumBid = currentHighest + (artwork.auction?.minimumIncrement || 5);
 
     if (amount < minimumBid) {
       return res.status(400).json({
@@ -85,7 +67,7 @@ const placeBid = async (req, res) => {
     const now = new Date();
     const endTime = new Date(artwork.auction.endTime);
     
-    if (now > endTime) {
+    if (now > endTime || !artwork.auction.isActive) {
       return res.status(400).json({
         success: false,
         message: 'Auction has ended'
@@ -144,6 +126,159 @@ const placeBid = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while placing bid'
+    });
+  }
+};
+
+// @desc    Start an auction manually (Artist only)
+// @route   POST /api/auctions/:artworkId/start
+// @access  Protected (Artist only)
+const startAuction = async (req, res) => {
+  try {
+    const { artworkId } = req.params;
+    const { duration = 7 } = req.body; // Duration in days, default 7 days
+    const userId = req.user._id;
+
+    // Find the artwork
+    const artwork = await Artwork.findById(artworkId).populate('creator', 'username');
+
+    if (!artwork) {
+      return res.status(404).json({
+        success: false,
+        message: 'Artwork not found'
+      });
+    }
+
+    // Check if user is the creator of the artwork
+    if (artwork.creator._id.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the artist can start their artwork auction'
+      });
+    }
+
+    // Check if auction already exists and is active
+    if (artwork.auction && artwork.auction.isActive) {
+      const now = new Date();
+      const endTime = new Date(artwork.auction.endTime);
+      
+      if (now <= endTime) {
+        return res.status(400).json({
+          success: false,
+          message: 'Auction is already active'
+        });
+      }
+    }
+
+    // Create new auction
+    const startTime = new Date();
+    const endTime = new Date();
+    endTime.setDate(endTime.getDate() + duration);
+
+    artwork.auction = {
+      startTime: startTime,
+      endTime: endTime,
+      startingPrice: artwork.price,
+      currentBid: null,
+      highestBidder: null,
+      bids: artwork.auction?.bids || [], // Keep existing bids if any
+      isActive: true,
+      minimumIncrement: artwork.auction?.minimumIncrement || 5,
+      winner: null
+    };
+
+    // Reset current bid fields
+    artwork.currentBid = null;
+    artwork.highestBidder = null;
+
+    await artwork.save();
+
+    res.json({
+      success: true,
+      message: 'Auction started successfully',
+      auction: {
+        startTime: artwork.auction.startTime,
+        endTime: artwork.auction.endTime,
+        isActive: artwork.auction.isActive,
+        startingPrice: artwork.auction.startingPrice
+      }
+    });
+
+  } catch (error) {
+    console.error('Error starting auction:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while starting auction'
+    });
+  }
+};
+
+// @desc    End an auction manually (Artist only)
+// @route   POST /api/auctions/:artworkId/end
+// @access  Protected (Artist only)
+const endAuction = async (req, res) => {
+  try {
+    const { artworkId } = req.params;
+    const userId = req.user._id;
+
+    // Find the artwork
+    const artwork = await Artwork.findById(artworkId)
+      .populate('creator', 'username')
+      .populate('auction.highestBidder', 'username');
+
+    if (!artwork) {
+      return res.status(404).json({
+        success: false,
+        message: 'Artwork not found'
+      });
+    }
+
+    // Check if user is the creator of the artwork
+    if (artwork.creator._id.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the artist can end their artwork auction'
+      });
+    }
+
+    // Check if auction exists and is active
+    if (!artwork.auction || !artwork.auction.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active auction to end'
+      });
+    }
+
+    // End the auction
+    artwork.auction.isActive = false;
+    artwork.auction.endTime = new Date(); // Set end time to now
+
+    // If there are bids, set the winner
+    if (artwork.auction.bids && artwork.auction.bids.length > 0) {
+      artwork.auction.winner = artwork.auction.highestBidder;
+    }
+
+    await artwork.save();
+
+    // Format response
+    const auctionResult = {
+      endedAt: artwork.auction.endTime,
+      finalBid: artwork.auction.currentBid,
+      winner: artwork.auction.highestBidder?.username || null,
+      totalBids: artwork.auction.bids ? artwork.auction.bids.length : 0
+    };
+
+    res.json({
+      success: true,
+      message: 'Auction ended successfully',
+      auctionResult
+    });
+
+  } catch (error) {
+    console.error('Error ending auction:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while ending auction'
     });
   }
 };
@@ -266,6 +401,8 @@ const getAuctionInfo = async (req, res) => {
 
 module.exports = {
   placeBid,
+  startAuction,  // NEW
+  endAuction,    // NEW
   getBidHistory,
   getAuctionInfo
 };

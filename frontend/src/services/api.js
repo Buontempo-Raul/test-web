@@ -265,6 +265,7 @@ export const postAPI = {
 
 // Auction API service
 export const auctionAPI = {
+  // Existing functions...
   placeBid: (artworkId, bidData) => {
     return api.post(`/api/auctions/${artworkId}/bid`, bidData);
   },
@@ -275,6 +276,15 @@ export const auctionAPI = {
   
   getAuctionInfo: (artworkId) => {
     return api.get(`/api/auctions/${artworkId}/info`);
+  },
+
+  // NEW: Artist auction management functions
+  startAuction: (artworkId, duration = 7) => {
+    return api.post(`/api/auctions/${artworkId}/start`, { duration });
+  },
+  
+  endAuction: (artworkId) => {
+    return api.post(`/api/auctions/${artworkId}/end`);
   }
 };
 
