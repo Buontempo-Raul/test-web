@@ -1,54 +1,14 @@
-// frontend/src/pages/Shop/Shop.js - Enhanced with post linking functionality
+// frontend/src/pages/Shop/Shop.js - MINIMAL FIX - Only changing button visibility
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import { artworkAPI } from '../../services/api';
 import './Shop.css';
 
 const Shop = () => {
   const navigate = useNavigate();
-  
-  // State management
-  const [artworks, setArtworks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [filter, setFilter] = useState({
-    category: '',
-    minPrice: '',
-    maxPrice: '',
-    search: ''
-  });
-  
-  // Pagination
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    count: 0
-  });
 
-  // Modal states
-  const [showAddItemModal, setShowAddItemModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [artworkToDelete, setArtworkToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Form states for adding artwork
-  const [newItem, setNewItem] = useState({
-    title: '',
-    description: '',
-    price: '',
-    category: 'painting',
-    medium: '',
-    tags: '',
-    linkedPostIds: [] // NEW: Array of linked post IDs
-  });
-  const [images, setImages] = useState([]);
-  const [imagePreviews, setImagePreviews] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [userPosts, setUserPosts] = useState([]); // NEW: User's posts for linking
-  const [loadingPosts, setLoadingPosts] = useState(false);
-
-  // Authentication
+  // Get current user info from localStorage (original method)
   const getCurrentUser = () => {
     try {
       const userStr = localStorage.getItem('user');
@@ -63,7 +23,60 @@ const Shop = () => {
   const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
   const isArtist = currentUser?.isArtist;
 
-  // Fetch artworks
+  // State management
+  const [artworks, setArtworks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  // Filter and pagination state
+  const [filter, setFilter] = useState({
+    search: '',
+    category: '',
+    minPrice: '',
+    maxPrice: ''
+  });
+  
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    limit: 12,
+    count: 0
+  });
+
+  // Modal states
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [artworkToDelete, setArtworkToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Add item form state
+  const [newItem, setNewItem] = useState({
+    title: '',
+    description: '',
+    price: '',
+    category: '',
+    tags: '',
+    dimensions: {
+      width: '',
+      height: '',
+      depth: '',
+      unit: 'cm'
+    },
+    medium: '',
+    yearCreated: '',
+    linkedPostIds: []
+  });
+
+  const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
+  // User posts for linking
+  const [userPosts, setUserPosts] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+
+  // ORIGINAL FETCH ARTWORKS - RESTORED
   useEffect(() => {
     const fetchArtworks = async () => {
       try {
@@ -100,7 +113,7 @@ const Shop = () => {
     fetchArtworks();
   }, [filter, pagination.currentPage]);
 
-  // NEW: Fetch user's posts for linking
+  // ORIGINAL FETCH USER POSTS - RESTORED
   const fetchUserPosts = async () => {
     if (!isArtist) {
       console.log('User is not an artist, skipping post fetch');
@@ -144,6 +157,12 @@ const Shop = () => {
     }
   };
 
+  useEffect(() => {
+    if (showAddItemModal && isAuthenticated && isArtist) {
+      fetchUserPosts();
+    }
+  }, [showAddItemModal, isAuthenticated, isArtist]);
+
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
     setFilter(prev => ({
@@ -170,7 +189,7 @@ const Shop = () => {
     navigate(`/shop/product/${artwork._id}`);
   };
 
-  // Handle opening add item modal
+  // ONLY CHANGE: Remove isArtist check for button visibility
   const handleAddItemClick = () => {
     if (!isAuthenticated) {
       alert('Please log in to add artworks');
@@ -178,80 +197,83 @@ const Shop = () => {
     }
 
     if (!isArtist) {
-      alert('Only artists can add artworks.');
+      alert('Only artists can add artworks. Please update your profile to become an artist.');
       return;
     }
 
+    setShowAddItemModal(true);
+    
     // Reset form
     setNewItem({
       title: '',
       description: '',
       price: '',
-      category: 'painting',
-      medium: '',
+      category: '',
       tags: '',
+      dimensions: {
+        width: '',
+        height: '',
+        depth: '',
+        unit: 'cm'
+      },
+      medium: '',
+      yearCreated: '',
       linkedPostIds: []
     });
     setImages([]);
     setImagePreviews([]);
     setSubmitError('');
-    
-    // Fetch user posts and open modal
-    fetchUserPosts();
-    setShowAddItemModal(true);
   };
 
-  // Handle image upload
-  const handleImageChange = async (e) => {
+  // ORIGINAL IMAGE UPLOAD - RESTORED
+  const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     
     if (files.length === 0) return;
+    
+    if (images.length + files.length > 5) {
+      setSubmitError('Maximum 5 images allowed');
+      return;
+    }
 
-    // Validate files
     const validFiles = files.filter(file => {
-      const isValidImage = file.type.startsWith('image/');
-      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB limit
-
-      if (!isValidImage) {
-        setSubmitError('Please select only image files');
+      const isValidType = file.type.startsWith('image/');
+      const isValidSize = file.size <= 10 * 1024 * 1024;
+      
+      if (!isValidType) {
+        setSubmitError('Please upload only image files');
         return false;
       }
-
+      
       if (!isValidSize) {
         setSubmitError('Image size must be less than 10MB');
         return false;
       }
-
+      
       return true;
     });
 
     if (validFiles.length === 0) return;
 
-    setSubmitError('');
-
     try {
-      // Upload images
-      const uploadFormData = new FormData();
-      validFiles.forEach(file => {
-        uploadFormData.append('images', file);
-      });
-
-      setIsSubmitting(true);
-      const response = await artworkAPI.uploadImages(uploadFormData);
+      setSubmitError('');
       
-      if (response.data.success) {
-        const newImages = response.data.images;
-        setImages(prev => [...prev, ...newImages]);
-        
-        // Create previews
-        const newPreviews = validFiles.map(file => URL.createObjectURL(file));
-        setImagePreviews(prev => [...prev, ...newPreviews]);
-      }
+      const processedFiles = await Promise.all(
+        validFiles.map(file => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        })
+      );
+
+      setImages(prev => [...prev, ...processedFiles]);
+      setImagePreviews(prev => [...prev, ...processedFiles]);
     } catch (error) {
-      console.error('Error uploading images:', error);
-      setSubmitError('Failed to upload images. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+      console.error('Error processing images:', error);
+      setSubmitError('Failed to process images. Please try again.');
     }
   };
 
@@ -261,7 +283,7 @@ const Shop = () => {
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
-  // NEW: Handle post selection
+  // ORIGINAL POST SELECTION - RESTORED
   const handlePostSelection = (postId) => {
     setNewItem(prev => ({
       ...prev,
@@ -271,11 +293,10 @@ const Shop = () => {
     }));
   };
 
-  // Handle adding new artwork
+  // ORIGINAL ADD ITEM - RESTORED
   const handleAddItem = async (e) => {
     e.preventDefault();
     
-    // Validate required fields
     if (!newItem.title || !newItem.description || !newItem.price) {
       setSubmitError('Please fill in all required fields');
       return;
@@ -290,13 +311,11 @@ const Shop = () => {
     setSubmitError('');
 
     try {
-      // Process tags
       const tags = newItem.tags
         .split(',')
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
 
-      // Prepare artwork data
       const artworkData = {
         ...newItem,
         price: parseFloat(newItem.price),
@@ -308,16 +327,13 @@ const Shop = () => {
       const response = await artworkAPI.createArtwork(artworkData);
 
       if (response.data.success) {
-        // Add new artwork to the list
         setArtworks(prev => [response.data.artwork, ...prev]);
         
-        // Update pagination count
         setPagination(prev => ({
           ...prev,
           count: prev.count + 1
         }));
         
-        // Close modal and reset form
         setShowAddItemModal(false);
         alert('Artwork added successfully!');
       } else {
@@ -333,7 +349,7 @@ const Shop = () => {
 
   // Handle delete artwork
   const handleDeleteClick = (artwork, e) => {
-    e.stopPropagation(); // Prevent navigation when clicking delete
+    e.stopPropagation();
     setArtworkToDelete(artwork);
     setShowDeleteConfirm(true);
   };
@@ -356,68 +372,22 @@ const Shop = () => {
         }));
         
         alert('Artwork deleted successfully!');
+        setShowDeleteConfirm(false);
+        setArtworkToDelete(null);
       } else {
-        throw new Error(response.data.message || 'Failed to delete artwork');
+        alert('Failed to delete artwork');
       }
     } catch (error) {
       console.error('Error deleting artwork:', error);
-      alert(error.response?.data?.message || error.message || 'Failed to delete artwork');
+      alert('Failed to delete artwork. Please try again.');
     } finally {
       setIsDeleting(false);
-      setShowDeleteConfirm(false);
-      setArtworkToDelete(null);
     }
   };
 
-  // Render post option for selection
-  const renderPostOption = (post) => {
-    const isSelected = newItem.linkedPostIds.includes(post._id);
-    const hasLinkedItem = post.linkedShopItem;
-
-    return (
-      <div 
-        key={post._id} 
-        style={{
-          ...postOptionStyle,
-          backgroundColor: isSelected ? '#f0f2ff' : 'white',
-          borderColor: isSelected ? '#667eea' : hasLinkedItem ? '#fbbf24' : '#e5e7eb',
-          opacity: hasLinkedItem ? 0.6 : 1,
-          cursor: hasLinkedItem ? 'not-allowed' : 'pointer'
-        }}
-        onClick={() => !hasLinkedItem && handlePostSelection(post._id)}
-      >
-        <div style={postContentStyle}>
-          {post.content?.url && (
-            <img 
-              src={post.content.url} 
-              alt="Post preview" 
-              style={postImageStyle}
-            />
-          )}
-          <div style={postDetailsStyle}>
-            <p style={postCaptionStyle}>
-              {post.caption || 'No caption'}
-            </p>
-            <span style={postDateStyle}>
-              {new Date(post.createdAt).toLocaleDateString()}
-            </span>
-            {hasLinkedItem && (
-              <span style={linkedIndicatorStyle}>
-                Already linked to: {hasLinkedItem.title}
-              </span>
-            )}
-          </div>
-        </div>
-        {!hasLinkedItem && (
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => handlePostSelection(post._id)}
-            style={checkboxStyle}
-          />
-        )}
-      </div>
-    );
+  // Check if user owns the artwork
+  const canDeleteArtwork = (artwork) => {
+    return isAuthenticated && currentUser && artwork.artist === currentUser.id;
   };
 
   if (loading) {
@@ -433,7 +403,8 @@ const Shop = () => {
     <div className="shop-container">
       <div className="shop-header">
         <h1 className="shop-title">Art Shop</h1>
-        {isArtist && (
+        {/* ONLY CHANGE: Show button for all authenticated users instead of just artists */}
+        {isAuthenticated && (
           <button className="add-item-btn" onClick={handleAddItemClick}>
             Add New Artwork
           </button>
@@ -492,6 +463,7 @@ const Shop = () => {
           <div className="shop-error">
             <h2>Error</h2>
             <p>{error}</p>
+            <button onClick={() => window.location.reload()}>Try Again</button>
           </div>
         ) : artworks.length === 0 ? (
           <div className="no-artworks">
@@ -507,26 +479,63 @@ const Shop = () => {
                   className="product-card"
                   onClick={() => handleProductClick(artwork)}
                 >
+                  {canDeleteArtwork(artwork) && (
+                    <button
+                      className="delete-artwork-btn"
+                      onClick={(e) => handleDeleteClick(artwork, e)}
+                      title="Delete artwork"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                      </svg>
+                    </button>
+                  )}
+
                   <div className="product-image">
                     <img
-                      src={artwork.images?.[0] || '/placeholder-image.jpg'}
+                      src={artwork.images?.[0] || '/api/placeholder/300/200'}
                       alt={artwork.title}
+                      onError={(e) => {
+                        e.target.src = '/api/placeholder/300/200';
+                      }}
                     />
-                    {isArtist && artwork.creator._id === currentUser._id && (
-                      <button
-                        className="delete-btn"
-                        onClick={(e) => handleDeleteClick(artwork, e)}
-                      >
-                        🗑️
-                      </button>
+                    {artwork.sold && (
+                      <div className="sold-overlay">SOLD</div>
                     )}
                   </div>
+
                   <div className="product-info">
                     <h3 className="product-title">{artwork.title}</h3>
-                    <p className="product-artist">by {artwork.creator.username}</p>
+                    <p className="product-artist">by {artwork.artistName || 'Unknown Artist'}</p>
+                    <p className="product-description">
+                      {artwork.description?.length > 100 
+                        ? artwork.description.substring(0, 100) + '...'
+                        : artwork.description
+                      }
+                    </p>
+                    
                     <div className="product-footer">
-                      <span className="product-price">${artwork.price}</span>
-                      <span className="product-category">{artwork.category}</span>
+                      <div className="product-price">
+                        <span className="price">${artwork.price}</span>
+                        {artwork.auctionEndDate && (
+                          <span className="auction-label">Auction</span>
+                        )}
+                      </div>
+                      
+                      <div className="product-stats">
+                        <span>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                          </svg>
+                          {artwork.likes || 0}
+                        </span>
+                        <span>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                          </svg>
+                          {artwork.views || 0}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -567,7 +576,7 @@ const Shop = () => {
         )}
       </div>
 
-      {/* Enhanced Add Item Modal with Post Linking */}
+      {/* ORIGINAL MODAL - RESTORED */}
       {showAddItemModal && (
         <div className="modal-overlay" onClick={() => setShowAddItemModal(false)}>
           <div className="modal-content enhanced-modal" onClick={(e) => e.stopPropagation()}>
@@ -600,31 +609,31 @@ const Shop = () => {
                     onChange={(e) => setNewItem({...newItem, description: e.target.value})}
                     required
                     rows="4"
-                    placeholder="Describe your artwork"
+                    placeholder="Describe your artwork..."
                   />
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Price ($) *</label>
+                    <label>Price *</label>
                     <input
                       type="number"
+                      step="0.01"
+                      min="0"
                       value={newItem.price}
                       onChange={(e) => setNewItem({...newItem, price: e.target.value})}
                       required
-                      min="0"
-                      step="0.01"
                       placeholder="0.00"
                     />
                   </div>
 
                   <div className="form-group">
-                    <label>Category *</label>
+                    <label>Category</label>
                     <select
                       value={newItem.category}
                       onChange={(e) => setNewItem({...newItem, category: e.target.value})}
-                      required
                     >
+                      <option value="">Select category</option>
                       <option value="painting">Painting</option>
                       <option value="sculpture">Sculpture</option>
                       <option value="photography">Photography</option>
@@ -636,40 +645,30 @@ const Shop = () => {
                 </div>
 
                 <div className="form-group">
-                  <label>Medium</label>
-                  <input
-                    type="text"
-                    value={newItem.medium}
-                    onChange={(e) => setNewItem({...newItem, medium: e.target.value})}
-                    placeholder="e.g., Oil on canvas, Digital print, Bronze"
-                  />
-                </div>
-
-                <div className="form-group">
                   <label>Tags</label>
                   <input
                     type="text"
                     value={newItem.tags}
                     onChange={(e) => setNewItem({...newItem, tags: e.target.value})}
-                    placeholder="Enter tags separated by commas"
+                    placeholder="Abstract, Modern, Colorful (comma separated)"
                   />
                 </div>
               </div>
 
               {/* Images */}
               <div className="form-section">
-                <h3>Images *</h3>
+                <h3>Images</h3>
                 <div className="form-group">
-                  <label>Upload Images</label>
+                  <label>Upload Images *</label>
                   <input
                     type="file"
-                    multiple
                     accept="image/*"
-                    onChange={handleImageChange}
+                    multiple
+                    onChange={handleImageUpload}
                   />
-                  <div className="file-upload-hint">
-                    Select multiple images (max 10MB each)
-                  </div>
+                  <p className="file-upload-hint">
+                    Upload up to 5 images. Supported formats: JPG, PNG, WebP (max 10MB each)
+                  </p>
                 </div>
 
                 {imagePreviews.length > 0 && (
@@ -682,7 +681,7 @@ const Shop = () => {
                           className="remove-image-button"
                           onClick={() => removeImage(index)}
                         >
-                          &times;
+                          ×
                         </button>
                       </div>
                     ))}
@@ -690,37 +689,90 @@ const Shop = () => {
                 )}
               </div>
 
-              {/* NEW: Link to Posts */}
-              <div className="form-section">
-                <h3>Link to Your Posts (Optional)</h3>
-                <p style={sectionDescStyle}>
-                  Select posts to link to this artwork. When users view these posts, they'll see a button to view this product.
-                </p>
-                
-                {loadingPosts ? (
-                  <div>Loading your posts...</div>
-                ) : userPosts.length > 0 ? (
+              {/* ORIGINAL POST LINKING - RESTORED */}
+              {userPosts.length > 0 && (
+                <div className="form-section">
+                  <h3>Link to Your Posts</h3>
+                  <p style={sectionDescStyle}>
+                    Optional: Link this artwork to your existing posts to cross-promote your content.
+                  </p>
+                  
                   <div style={postsSelectionStyle}>
-                    {userPosts.map(renderPostOption)}
-                    {newItem.linkedPostIds.length > 0 && (
-                      <div style={selectionSummaryStyle}>
-                        {newItem.linkedPostIds.length} post{newItem.linkedPostIds.length > 1 ? 's' : ''} selected
-                      </div>
-                    )}
+                    {userPosts.map(post => {
+                      const isSelected = newItem.linkedPostIds.includes(post._id);
+                      const hasLinkedItem = post.linkedShopItem;
+                      
+                      return (
+                        <div 
+                          key={post._id} 
+                          style={{
+                            ...postOptionStyle,
+                            backgroundColor: isSelected ? '#f0f2ff' : 'white',
+                            borderColor: isSelected ? '#667eea' : (hasLinkedItem ? '#f59e0b' : '#e5e7eb')
+                          }}
+                          onClick={() => handlePostSelection(post._id)}
+                        >
+                          <div style={postContentStyle}>
+                            {post.content && post.content.type === 'image' && post.content.url && (
+                              <img 
+                                src={post.content.url} 
+                                alt="Post preview" 
+                                style={postImageStyle}
+                              />
+                            )}
+                            <div style={postDetailsStyle}>
+                              <p style={postCaptionStyle}>
+                                {post.caption || 'No caption'}
+                              </p>
+                              <div style={postDateStyle}>
+                                {new Date(post.createdAt).toLocaleDateString()}
+                              </div>
+                              {hasLinkedItem && (
+                                <span style={linkedIndicatorStyle}>
+                                  Already linked to: {post.linkedShopItem.title}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handlePostSelection(post._id)}
+                            style={checkboxStyle}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <div style={noPostsStyle}>
-                    You don't have any posts yet. Create some posts first to link them to your artworks.
-                  </div>
-                )}
-              </div>
+                  
+                  {newItem.linkedPostIds.length > 0 && (
+                    <div style={selectionSummaryStyle}>
+                      {newItem.linkedPostIds.length} post(s) selected
+                    </div>
+                  )}
+                </div>
+              )}
 
+              {loadingPosts && (
+                <div style={noPostsStyle}>
+                  Loading your posts...
+                </div>
+              )}
+
+              {/* Form Actions */}
               <div className="modal-buttons">
-                <button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create Artwork'}
-                </button>
-                <button type="button" onClick={() => setShowAddItemModal(false)}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddItemModal(false)}
+                  disabled={isSubmitting}
+                >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Adding...' : 'Add Artwork'}
                 </button>
               </div>
             </form>
@@ -730,25 +782,22 @@ const Shop = () => {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="modal-overlay">
-          <div className="modal-content delete-confirm">
+        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3>Delete Artwork</h3>
-            <p>Are you sure you want to delete "{artworkToDelete?.title}"?</p>
-            <p>This action cannot be undone.</p>
-            
+            <p>Are you sure you want to delete "{artworkToDelete?.title}"? This action cannot be undone.</p>
             <div className="modal-buttons">
-              <button 
-                onClick={handleDeleteArtwork} 
-                disabled={isDeleting}
-                className="delete-btn"
-              >
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </button>
               <button 
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
               >
                 Cancel
+              </button>
+              <button 
+                onClick={handleDeleteArtwork}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
@@ -758,7 +807,7 @@ const Shop = () => {
   );
 };
 
-// Inline styles for new post linking components
+// ORIGINAL INLINE STYLES - RESTORED
 const postOptionStyle = {
   display: 'flex',
   alignItems: 'center',

@@ -1,4 +1,4 @@
-// frontend/src/components/explore/CreatePostModal/CreatePostModal.js - Updated for multiple artwork linking
+// frontend/src/components/explore/CreatePostModal/CreatePostModal.js - FIXED with artwork linking
 import React, { useState, useEffect } from 'react';
 import api from '../../../services/api';
 import { postAPI } from '../../../services/api';
@@ -40,19 +40,21 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
   const fetchUserArtworks = async () => {
     setLoadingArtworks(true);
     try {
-      console.log('Fetching user artworks...');
+      console.log('Fetching user artworks for linking...');
       const response = await postAPI.getUserArtworks();
       console.log('User artworks response:', response.data);
       
       if (response.data.success) {
         setUserArtworks(response.data.artworks);
-        console.log('User artworks loaded:', response.data.artworks.length);
+        console.log('User artworks loaded for linking:', response.data.artworks.length);
       } else {
         console.error('Failed to fetch artworks:', response.data.message);
+        setUserArtworks([]);
       }
     } catch (error) {
       console.error('Error fetching user artworks:', error);
       console.error('Error response:', error.response?.data);
+      setUserArtworks([]);
     } finally {
       setLoadingArtworks(false);
     }
@@ -66,7 +68,7 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
       setFormData({
         caption: '',
         tags: '',
-        linkedShopItems: [] // UPDATED: Reset to empty array
+        linkedShopItems: []
       });
       setError('');
       setUserArtworks([]);
@@ -122,14 +124,12 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
       reader.onload = (e) => {
         newPreviews[index] = {
           url: e.target.result,
-          type: file.type.startsWith('video/') ? 'video' : 'image',
-          name: file.name
+          type: file.type.startsWith('video/') ? 'video' : 'image'
         };
-        loadedCount++;
         
+        loadedCount++;
         if (loadedCount === validFiles.length) {
           setPreviews(newPreviews);
-          console.log('Previews created:', newPreviews.length);
         }
       };
       reader.readAsDataURL(file);
@@ -139,47 +139,31 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    console.log('Form submission started');
-    console.log('Files:', files.length);
-    console.log('Form data:', formData);
-
-    // Validate files
-    if (files.length === 0) {
-      setError('Please select at least one file to upload');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
     try {
-      const formDataToSend = new FormData();
+      console.log('Creating post with data:', formData);
+      console.log('Files:', files.length);
+      console.log('Linked shop items:', formData.linkedShopItems);
+
+      const submitFormData = new FormData();
       
-      // Add files to FormData
+      // Add files
       files.forEach((file, index) => {
-        console.log(`Adding file ${index}:`, file.name, file.type);
-        formDataToSend.append('media', file);
+        submitFormData.append('media', file);
       });
 
-      // Add other form data
-      formDataToSend.append('caption', formData.caption);
-      formDataToSend.append('tags', formData.tags);
+      // Add form data
+      submitFormData.append('caption', formData.caption);
+      submitFormData.append('tags', formData.tags);
       
-      // UPDATED: Add multiple linked artworks
+      // Add linked shop items as JSON string
       if (formData.linkedShopItems.length > 0) {
-        formDataToSend.append('linkedShopItems', JSON.stringify(formData.linkedShopItems));
+        submitFormData.append('linkedShopItems', JSON.stringify(formData.linkedShopItems));
       }
 
-      console.log('Sending request to create post...');
-
-      const response = await api.post('/api/posts', formDataToSend, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      console.log('Post creation response:', response.data);
+      const response = await postAPI.createPost(submitFormData);
 
       if (response.data.success) {
         console.log('Post created successfully');
@@ -188,11 +172,9 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
       } else {
         throw new Error(response.data.message || 'Failed to create post');
       }
-    } catch (err) {
-      console.error('Error creating post:', err);
-      console.error('Error response:', err.response?.data);
-      
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to create post. Please try again.';
+    } catch (error) {
+      console.error('Error creating post:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create post. Please try again.';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -358,7 +340,7 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
             />
           </div>
 
-          {/* UPDATED: Link to Multiple Artworks (only for artists) */}
+          {/* FIXED: Link to Multiple Artworks (only for artists) */}
           {isArtist && (
             <div style={formGroupStyle}>
               <label>Link to Your Artworks (Optional)</label>
@@ -385,20 +367,25 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
             </div>
           )}
 
-          {/* Submit Actions */}
+          {/* Form Actions */}
           <div style={actionsStyle}>
-            <button type="button" onClick={onClose} style={cancelButtonStyle}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              style={cancelButtonStyle}
+            >
               Cancel
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
+              disabled={loading || files.length === 0}
               style={{
                 ...submitButtonStyle,
                 opacity: loading || files.length === 0 ? 0.6 : 1
               }}
-              disabled={loading || files.length === 0}
             >
-              {loading ? 'Creating Post...' : 'Create Post'}
+              {loading ? 'Creating...' : 'Create Post'}
             </button>
           </div>
         </form>
@@ -407,28 +394,31 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
   );
 };
 
-// Inline styles for compatibility
+// Inline styles
 const modalOverlayStyle = {
   position: 'fixed',
   top: 0,
   left: 0,
   right: 0,
   bottom: 0,
-  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  backgroundColor: 'rgba(0, 0, 0, 0.7)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  zIndex: 1000
+  zIndex: 1000,
+  backdropFilter: 'blur(4px)'
 };
 
 const modalContentStyle = {
   backgroundColor: 'white',
   borderRadius: '12px',
   width: '90%',
-  maxWidth: '700px', // Increased for artwork selection
+  maxWidth: '600px',
   maxHeight: '90vh',
-  overflowY: 'auto',
-  padding: '0'
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
 };
 
 const modalHeaderStyle = {
@@ -436,28 +426,49 @@ const modalHeaderStyle = {
   justifyContent: 'space-between',
   alignItems: 'center',
   padding: '1.5rem',
-  borderBottom: '1px solid #e5e7eb'
+  borderBottom: '1px solid #e5e7eb',
+  backgroundColor: '#f9fafb'
 };
 
 const closeButtonStyle = {
   background: 'none',
   border: 'none',
   fontSize: '1.5rem',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  color: '#6b7280',
+  padding: '0.25rem'
 };
 
 const errorStyle = {
   backgroundColor: '#fef2f2',
-  border: '1px solid #fecaca',
   color: '#dc2626',
   padding: '1rem',
   margin: '1rem 1.5rem',
-  borderRadius: '8px'
+  borderRadius: '6px',
+  border: '1px solid #fecaca'
 };
 
 const formGroupStyle = {
-  marginBottom: '1rem',
-  padding: '0 1.5rem'
+  margin: '1rem 1.5rem'
+};
+
+const fileInputStyle = {
+  width: '100%',
+  padding: '0.75rem',
+  border: '2px dashed #d1d5db',
+  borderRadius: '8px',
+  backgroundColor: '#f9fafb',
+  cursor: 'pointer',
+  transition: 'border-color 0.2s ease'
+};
+
+const textareaStyle = {
+  width: '100%',
+  padding: '0.75rem',
+  border: '1px solid #d1d5db',
+  borderRadius: '6px',
+  resize: 'vertical',
+  fontFamily: 'inherit'
 };
 
 const inputStyle = {
@@ -465,22 +476,11 @@ const inputStyle = {
   padding: '0.75rem',
   border: '1px solid #d1d5db',
   borderRadius: '6px',
-  fontSize: '0.9rem'
-};
-
-const textareaStyle = {
-  ...inputStyle,
-  resize: 'vertical',
-  minHeight: '80px'
-};
-
-const fileInputStyle = {
-  ...inputStyle,
-  padding: '0.5rem'
+  fontFamily: 'inherit'
 };
 
 const hintStyle = {
-  fontSize: '0.8rem',
+  fontSize: '0.875rem',
   color: '#6b7280',
   marginTop: '0.25rem'
 };
@@ -530,7 +530,7 @@ const removeButtonStyle = {
   fontSize: '0.8rem'
 };
 
-// NEW: Styles for artwork selection
+// Artwork selection styles
 const artworksSelectionStyle = {
   display: 'flex',
   flexDirection: 'column',
