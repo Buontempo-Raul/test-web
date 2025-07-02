@@ -1,6 +1,6 @@
-// frontend/src/pages/Explore/Explore.js - Fixed with working CreatePostModal
+// frontend/src/pages/Explore/Explore.js - Fixed with working like and comment functionality
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import api from '../../services/api';
+import { postAPI } from '../../services/api';
 import PostCard from '../../components/explore/PostCard/PostCard';
 import CreatePostModal from '../../components/explore/CreatePostModal/CreatePostModal';
 import './Explore.css';
@@ -31,6 +31,95 @@ const Explore = () => {
     if (node) observer.current.observe(node);
   }, [loadingMore, hasMore]);
 
+  // Get current user from localStorage
+  const getCurrentUser = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      return userStr ? JSON.parse(userStr) : null;
+    } catch (error) {
+      console.error('Error parsing user from localStorage:', error);
+      return null;
+    }
+  };
+
+  const currentUser = getCurrentUser();
+  const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
+
+  // Handle like functionality
+  const handleLike = async (postId) => {
+    if (!isAuthenticated) {
+      alert('Please log in to like posts');
+      return;
+    }
+
+    try {
+      const response = await postAPI.likePost(postId);
+      
+      if (response.data.success) {
+        // Update the post in the posts array
+        setPosts(prevPosts => 
+          prevPosts.map(post => {
+            if (post._id === postId) {
+              const updatedPost = { ...post };
+              updatedPost.likes = response.data.likes;
+              
+              // Update likedBy array
+              if (response.data.liked) {
+                // Add current user to likedBy if not already there
+                if (!updatedPost.likedBy.includes(currentUser._id)) {
+                  updatedPost.likedBy = [...updatedPost.likedBy, currentUser._id];
+                }
+              } else {
+                // Remove current user from likedBy
+                updatedPost.likedBy = updatedPost.likedBy.filter(id => id !== currentUser._id);
+              }
+              
+              return updatedPost;
+            }
+            return post;
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error liking post:', error);
+      alert('Failed to like post. Please try again.');
+    }
+  };
+
+  // Handle comment functionality
+  const handleComment = async (postId, commentText) => {
+    if (!isAuthenticated) {
+      alert('Please log in to comment on posts');
+      return;
+    }
+
+    if (!commentText || commentText.trim().length === 0) {
+      alert('Please enter a comment');
+      return;
+    }
+
+    try {
+      const response = await postAPI.commentOnPost(postId, commentText.trim());
+      
+      if (response.data.success) {
+        // Update the post with the new comment
+        setPosts(prevPosts => 
+          prevPosts.map(post => {
+            if (post._id === postId) {
+              const updatedPost = { ...post };
+              updatedPost.comments = [...updatedPost.comments, response.data.comment];
+              return updatedPost;
+            }
+            return post;
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error commenting on post:', error);
+      alert('Failed to add comment. Please try again.');
+    }
+  };
+
   // Initial posts fetch
   const fetchPosts = async (reset = false) => {
     try {
@@ -44,7 +133,7 @@ const Explore = () => {
         ...(lastPostDate && !reset && { before: lastPostDate })
       };
 
-      const response = await api.get('/api/posts', { params });
+      const response = await postAPI.getPosts(params);
 
       if (response.data.success) {
         const newPosts = response.data.posts;
@@ -123,20 +212,6 @@ const Explore = () => {
     console.log('Closing modal');
     setShowCreateModal(false);
   };
-
-  // Get current user from localStorage
-  const getCurrentUser = () => {
-    try {
-      const userStr = localStorage.getItem('user');
-      return userStr ? JSON.parse(userStr) : null;
-    } catch (error) {
-      console.error('Error parsing user from localStorage:', error);
-      return null;
-    }
-  };
-
-  const currentUser = getCurrentUser();
-  const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
 
   if (loading && posts.length === 0) {
     return (
@@ -229,6 +304,9 @@ const Explore = () => {
               >
                 <PostCard 
                   post={post} 
+                  currentUser={currentUser}
+                  onLike={handleLike}
+                  onComment={handleComment}
                   onPostUpdate={(updatedPost) => {
                     setPosts(prev => prev.map(p => p._id === updatedPost._id ? updatedPost : p));
                   }}

@@ -1,4 +1,4 @@
-// frontend/src/components/explore/PostCard/PostCard.js - FIXED: Use username for profile navigation
+// frontend/src/components/explore/PostCard/PostCard.js - Fixed with comment functionality
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './PostCard.css';
@@ -6,6 +6,9 @@ import './PostCard.css';
 const PostCard = ({ post, onLike, onComment, currentUser }) => {
   const navigate = useNavigate();
   const [showAllArtworks, setShowAllArtworks] = useState(false);
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   // Handle backward compatibility - merge old and new format
   const getLinkedArtworks = () => {
@@ -39,9 +42,8 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
     navigate(`/shop/product/${artworkId}`);
   };
 
-  // 🔧 FIXED: Use username instead of ID for profile navigation
+  // Use username for profile navigation
   const handleProfileClick = () => {
-    // Use username from post.creator.username, not post.creator._id
     if (post.creator && post.creator.username) {
       navigate(`/profile/${post.creator.username}`);
     } else {
@@ -55,10 +57,37 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
     }
   };
 
+  // Handle comment button click
+  const handleCommentClick = () => {
+    setShowCommentInput(!showCommentInput);
+  };
+
+  // Handle comment submission
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!commentText.trim()) {
+      return;
+    }
+
+    setSubmittingComment(true);
+    
+    if (onComment) {
+      await onComment(post._id, commentText);
+      setCommentText('');
+      setShowCommentInput(false);
+    }
+    
+    setSubmittingComment(false);
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString();
   };
+
+  // Check if current user has liked the post
+  const isLikedByCurrentUser = currentUser && post.likedBy && post.likedBy.includes(currentUser._id);
 
   // Render single artwork button (compact)
   const renderArtworkButton = (artwork, index) => (
@@ -229,14 +258,19 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
       {/* Post Actions */}
       <div className="post-actions">
         <button 
-          className={`action-button ${post.likedBy?.includes(currentUser?._id) ? 'liked' : ''}`}
+          className={`action-button ${isLikedByCurrentUser ? 'liked' : ''}`}
           onClick={handleLike}
+          disabled={!currentUser}
         >
           <span>❤️</span>
           <span>{post.likes || 0}</span>
         </button>
         
-        <button className="action-button">
+        <button 
+          className="action-button"
+          onClick={handleCommentClick}
+          disabled={!currentUser}
+        >
           <span>💬</span>
           <span>{post.comments?.length || 0}</span>
         </button>
@@ -246,6 +280,58 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
           <span>Share</span>
         </button>
       </div>
+
+      {/* Comment Input Section */}
+      {showCommentInput && currentUser && (
+        <div className="comment-input-section">
+          <form onSubmit={handleCommentSubmit} className="comment-form">
+            <div className="comment-input-container">
+              <img 
+                src={currentUser.profileImage || '/api/placeholder/32/32'} 
+                alt={currentUser.username}
+                className="comment-user-avatar"
+                onError={(e) => {
+                  e.target.src = '/api/placeholder/32/32';
+                }}
+              />
+              <input
+                type="text"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Write a comment..."
+                className="comment-input"
+                disabled={submittingComment}
+              />
+              <button 
+                type="submit"
+                className="comment-submit-btn"
+                disabled={!commentText.trim() || submittingComment}
+              >
+                {submittingComment ? '...' : 'Post'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Comments Preview */}
+      {post.comments && post.comments.length > 0 && (
+        <div className="comments-preview">
+          {post.comments.slice(-3).map((comment, index) => (
+            <div key={comment._id || index} className="comment">
+              <span className="comment-username">
+                {comment.user?.username || 'Unknown User'}
+              </span>
+              <span className="comment-text">{comment.text}</span>
+            </div>
+          ))}
+          {post.comments.length > 3 && (
+            <button className="view-all-comments">
+              View all {post.comments.length} comments
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

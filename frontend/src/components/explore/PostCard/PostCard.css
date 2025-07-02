@@ -1,4 +1,4 @@
-/* frontend/src/components/explore/PostCard/PostCard.css - Updated for multiple artwork display */
+/* frontend/src/components/explore/PostCard/PostCard.css - Updated with comment input styles */
 
 .post-card {
   background: white;
@@ -134,12 +134,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .section-title {
   font-weight: 600;
-  color: #374151;
+  color: #1f2937;
   font-size: 0.9rem;
 }
 
@@ -148,7 +148,7 @@
   border: none;
   color: #6366f1;
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -156,7 +156,7 @@
 }
 
 .toggle-view-button:hover {
-  background-color: rgba(99, 102, 241, 0.1);
+  background: rgba(99, 102, 241, 0.1);
 }
 
 /* Single Artwork Display */
@@ -169,26 +169,25 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem;
   background: white;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
+  padding: 0.75rem;
   cursor: pointer;
   transition: all 0.2s ease;
   text-decoration: none;
-  color: inherit;
   width: 100%;
   max-width: 300px;
 }
 
 .artwork-link-button:hover {
   border-color: #6366f1;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .artwork-link-button.compact {
-  max-width: 280px;
+  max-width: none;
 }
 
 .artwork-image {
@@ -208,15 +207,14 @@
 .artwork-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  flex: 1;
-  min-width: 0;
+  gap: 0.25rem;
+  text-align: left;
+  flex-grow: 1;
 }
 
 .artwork-title {
   font-weight: 600;
   color: #1f2937;
-  margin-bottom: 0.25rem;
   font-size: 0.9rem;
   white-space: nowrap;
   overflow: hidden;
@@ -337,6 +335,11 @@
   background-color: #f3f4f6;
 }
 
+.action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .action-button.liked {
   color: #ef4444;
 }
@@ -348,6 +351,76 @@
 .action-button .count {
   font-weight: 600;
   font-size: 0.8rem;
+}
+
+/* Comment Input Section */
+.comment-input-section {
+  border-top: 1px solid #f0f0f0;
+  padding: 1rem;
+  background: #fafafa;
+}
+
+.comment-form {
+  width: 100%;
+}
+
+.comment-input-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 24px;
+  padding: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.comment-input-container:focus-within {
+  border-color: #6366f1;
+}
+
+.comment-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.comment-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  background: transparent;
+}
+
+.comment-input::placeholder {
+  color: #9ca3af;
+}
+
+.comment-submit-btn {
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.comment-submit-btn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.comment-submit-btn:disabled {
+  background: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
 }
 
 /* Comments Preview */
@@ -378,6 +451,7 @@
   cursor: pointer;
   padding: 0;
   margin-top: 0.5rem;
+  transition: color 0.2s ease;
 }
 
 .view-all-comments:hover {
@@ -434,6 +508,19 @@
     padding: 0.375rem;
     font-size: 0.8rem;
   }
+
+  .comment-input-section {
+    padding: 0.75rem;
+  }
+
+  .comment-input-container {
+    gap: 0.5rem;
+  }
+
+  .comment-user-avatar {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -447,6 +534,15 @@
 
   .show-more-artworks {
     min-height: 100px;
+    font-size: 0.75rem;
+  }
+
+  .comment-input {
+    font-size: 0.8rem;
+  }
+
+  .comment-submit-btn {
+    padding: 0.375rem 0.75rem;
     font-size: 0.75rem;
   }
 }

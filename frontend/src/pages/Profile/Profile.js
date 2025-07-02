@@ -329,23 +329,6 @@ const Profile = () => {
             </button>
           )}
           
-          <button 
-            className={`profile-tab ${activeTab === 'Favorites' ? 'active' : ''}`}
-            onClick={() => setActiveTab('Favorites')}
-          >
-            <span className="profile-tab-icon favorites-icon"></span>
-            Favorites
-          </button>
-          
-          {isOwnProfile && (
-            <button 
-              className={`profile-tab ${activeTab === 'Orders' ? 'active' : ''}`}
-              onClick={() => setActiveTab('Orders')}
-            >
-              <span className="profile-tab-icon orders-icon"></span>
-              Orders
-            </button>
-          )}
         </motion.div>
         
         <motion.div 
