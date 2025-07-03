@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { artworkAPI } from '../../services/api';
 import './Shop.css';
+import { Link } from 'react-router-dom';
 
 const Shop = () => {
   const navigate = useNavigate();
@@ -414,6 +415,7 @@ const Shop = () => {
       {/* Filters */}
       <div className="shop-filters">
         <div className="filter-group">
+          <label>Search</label>
           <input
             type="text"
             placeholder="Search artworks..."
@@ -424,6 +426,7 @@ const Shop = () => {
         </div>
         
         <div className="filter-group">
+          <label>Category</label>
           <select
             value={filter.category}
             onChange={(e) => handleFilterChange('category', e.target.value)}
@@ -439,21 +442,28 @@ const Shop = () => {
           </select>
         </div>
 
-        <div className="filter-group">
-          <input
-            type="number"
-            placeholder="Min Price"
-            value={filter.minPrice}
-            onChange={(e) => handleFilterChange('minPrice', e.target.value)}
-            className="price-input"
-          />
-          <input
-            type="number"
-            placeholder="Max Price"
-            value={filter.maxPrice}
-            onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
-            className="price-input"
-          />
+        {/* Grouped price filters */}
+        <div className="price-filters">
+          <div className="filter-group">
+            <label>Min Price</label>
+            <input
+              type="number"
+              placeholder="Min Price"
+              value={filter.minPrice}
+              onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+              className="price-input"
+            />
+          </div>
+          <div className="filter-group">
+            <label>Max Price</label>
+            <input
+              type="number"
+              placeholder="Max Price"
+              value={filter.maxPrice}
+              onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+              className="price-input"
+            />
+          </div>
         </div>
       </div>
 
@@ -506,7 +516,16 @@ const Shop = () => {
 
                   <div className="product-info">
                     <h3 className="product-title">{artwork.title}</h3>
-                    <p className="product-artist">by {artwork.artistName || 'Unknown Artist'}</p>
+                    <p className="product-artist">
+                      by{' '}
+                      {artwork.creator?.username ? (
+                        <Link to={`/profile/${artwork.creator.username}`} className="artist-link">
+                          {artwork.creator.username}
+                        </Link>
+                      ) : (
+                        artwork.artistName || 'Unknown Artist'
+                      )}
+                    </p>
                     <p className="product-description">
                       {artwork.description?.length > 100 
                         ? artwork.description.substring(0, 100) + '...'
