@@ -1,77 +1,37 @@
+// Beautiful AdminArtworks Component - frontend/src/pages/Admin/Artworks.js
 import React, { useState, useEffect } from 'react';
-
-// Import the admin API service
-const adminAPI = {
-  getAllArtworks: (params = {}) => {
-    const { page = 1, limit = 10, search = '', category = '', status = '' } = params;
-    const queryParams = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-      search,
-      category,
-      status
-    });
-    
-    return fetch(`/api/admin/artworks?${queryParams}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
-    }).then(res => res.json());
-  },
-
-  deleteArtwork: (artworkId) => {
-    return fetch(`/api/admin/artworks/${artworkId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
-    }).then(res => res.json());
-  }
-};
+import adminAPI from '../../services/adminAPI';
 
 const AdminArtworks = () => {
   const [artworks, setArtworks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
   const [selectedArtwork, setSelectedArtwork] = useState(null);
   const [showArtworkModal, setShowArtworkModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pages: 1,
-    total: 0
+  const [filters, setFilters] = useState({
+    category: '',
+    status: '',
+    search: ''
   });
 
   useEffect(() => {
     fetchArtworks();
-  }, [searchTerm, filterCategory, filterStatus, pagination.current]);
+  }, []);
 
   const fetchArtworks = async () => {
     try {
       setIsLoading(true);
-      
-      const response = await adminAPI.getAllArtworks({
-        page: pagination.current,
-        limit: 10,
-        search: searchTerm,
-        category: filterCategory,
-        status: filterStatus
-      });
+      const response = await adminAPI.getAllArtworks();
 
-      if (response.success) {
-        setArtworks(response.artworks);
-        setPagination(response.pagination);
+      if (response.data.success) {
+        setArtworks(response.data.artworks);
+        console.log('✅ Artworks loaded:', response.data.artworks.length);
       } else {
-        throw new Error(response.message || 'Failed to fetch artworks');
+        console.error('Failed to fetch artworks:', response.data.message);
       }
-      
-      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching artworks:', error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -85,6 +45,9 @@ const AdminArtworks = () => {
   };
 
   const formatCurrency = (amount) => {
+    if (amount === null || amount === undefined || isNaN(amount)) {
+      return '$0.00';
+    }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
@@ -92,13 +55,13 @@ const AdminArtworks = () => {
   };
 
   const getArtworkStatus = (artwork) => {
-    if (artwork.auction.isActive) {
-      return { status: 'auction', color: '#f39c12', text: 'Live Auction' };
+    if (artwork.auction && artwork.auction.isActive) {
+      return { status: 'auction', color: '#e74c3c', text: 'Live Auction', icon: '🔥' };
     }
     if (artwork.forSale) {
-      return { status: 'for-sale', color: '#27ae60', text: 'For Sale' };
+      return { status: 'for-sale', color: '#27ae60', text: 'For Sale', icon: '💰' };
     }
-    return { status: 'not-for-sale', color: '#95a5a6', text: 'Not For Sale' };
+    return { status: 'not-for-sale', color: '#95a5a6', text: 'Not For Sale', icon: '📱' };
   };
 
   const getCategoryIcon = (category) => {
@@ -111,6 +74,26 @@ const AdminArtworks = () => {
       mixed: '🎭'
     };
     return icons[category] || '🎨';
+  };
+
+  const getAuctionInfo = (artwork) => {
+    if (!artwork.auction) {
+      return {
+        hasAuction: false,
+        currentBid: null,
+        bidCount: 0,
+        status: 'No Auction'
+      };
+    }
+
+    return {
+      hasAuction: true,
+      currentBid: artwork.auction.currentBid,
+      bidCount: artwork.auction.bids ? artwork.auction.bids.length : 0,
+      status: artwork.auction.isActive ? 'Active' : 'Ended',
+      startTime: artwork.auction.startTime,
+      endTime: artwork.auction.endTime
+    };
   };
 
   const handleViewArtwork = (artwork) => {
@@ -127,309 +110,351 @@ const AdminArtworks = () => {
     try {
       const response = await adminAPI.deleteArtwork(selectedArtwork._id);
 
-      if (response.success) {
-        console.log('Artwork deleted successfully:', response);
-        // Remove from local state
+      if (response.data.success) {
         setArtworks(artworks.filter(artwork => artwork._id !== selectedArtwork._id));
         setShowDeleteModal(false);
         setSelectedArtwork(null);
       } else {
-        throw new Error(response.message || 'Failed to delete artwork');
+        throw new Error(response.data.message || 'Failed to delete artwork');
       }
     } catch (error) {
       console.error('Error deleting artwork:', error);
-      // You could show an error message to the user here
+      alert('Failed to delete artwork. Please try again.');
     }
   };
 
+  const filteredArtworks = artworks.filter(artwork => {
+    if (filters.category && artwork.category !== filters.category) return false;
+    if (filters.status === 'auction' && (!artwork.auction || !artwork.auction.isActive)) return false;
+    if (filters.status === 'for-sale' && !artwork.forSale) return false;
+    if (filters.status === 'not-for-sale' && artwork.forSale) return false;
+    if (filters.search && !artwork.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
+    return true;
+  });
+
   if (isLoading) {
     return (
-      <div className="admin-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading artworks...</p>
+      <div className="admin-container">
+        <div className="loading-state">
+          <div className="loading-spinner"></div>
+          <h2>Loading artworks...</h2>
+          <p>Fetching artwork data from database</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="admin-page">
-      <div className="admin-header">
-        <h1>Artworks Management</h1>
-        <p>Monitor and manage artworks across the platform</p>
-      </div>
-
-      <div className="admin-filters">
-        <div className="filter-group">
-          <input
-            type="text"
-            placeholder="Search artworks, artists, or tags..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
+    <div className="admin-container">
+      {/* Header */}
+      <div className="page-header">
+        <div className="header-content">
+          <h1>🎨 Artworks Management</h1>
+          <p>Monitor and manage platform artworks</p>
         </div>
-
-        <div className="filter-group">
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Categories</option>
-            <option value="painting">Painting</option>
-            <option value="digital">Digital Art</option>
-            <option value="photography">Photography</option>
-            <option value="sculpture">Sculpture</option>
-            <option value="drawing">Drawing</option>
-            <option value="mixed">Mixed Media</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Status</option>
-            <option value="for-sale">For Sale</option>
-            <option value="auction">Live Auction</option>
-            <option value="not-for-sale">Not For Sale</option>
-          </select>
+        <div className="header-actions">
+          <button className="refresh-btn" onClick={fetchArtworks}>
+            🔄 Refresh
+          </button>
         </div>
       </div>
 
-      <div className="admin-table-container">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>Artwork</th>
-              <th>Artist</th>
-              <th>Category</th>
-              <th>Price/Bid</th>
-              <th>Status</th>
-              <th>Engagement</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {artworks.map(artwork => {
+      {/* Stats Cards */}
+      <div className="stats-grid">
+        <div className="stat-card total">
+          <div className="stat-header">
+            <div className="stat-icon">🎨</div>
+            <div className="stat-info">
+              <h3>Total Artworks</h3>
+              <div className="stat-value">{artworks.length}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="stat-card auctions">
+          <div className="stat-header">
+            <div className="stat-icon">🔥</div>
+            <div className="stat-info">
+              <h3>Live Auctions</h3>
+              <div className="stat-value">
+                {artworks.filter(artwork => artwork.auction && artwork.auction.isActive).length}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="stat-card for-sale">
+          <div className="stat-header">
+            <div className="stat-icon">💰</div>
+            <div className="stat-info">
+              <h3>For Sale</h3>
+              <div className="stat-value">
+                {artworks.filter(artwork => artwork.forSale).length}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="stat-card views">
+          <div className="stat-header">
+            <div className="stat-icon">👁️</div>
+            <div className="stat-info">
+              <h3>Total Views</h3>
+              <div className="stat-value">
+                {artworks.reduce((total, artwork) => total + (artwork.views || 0), 0).toLocaleString()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="filters-section">
+        <div className="filters-container">
+          <div className="filter-group">
+            <label>🔍 Search</label>
+            <input
+              type="text"
+              placeholder="Search artworks..."
+              value={filters.search}
+              onChange={(e) => setFilters({...filters, search: e.target.value})}
+              className="filter-input"
+            />
+          </div>
+          
+          <div className="filter-group">
+            <label>📂 Category</label>
+            <select
+              value={filters.category}
+              onChange={(e) => setFilters({...filters, category: e.target.value})}
+              className="filter-select"
+            >
+              <option value="">All Categories</option>
+              <option value="painting">🎨 Painting</option>
+              <option value="digital">💻 Digital</option>
+              <option value="photography">📸 Photography</option>
+              <option value="sculpture">🗿 Sculpture</option>
+              <option value="drawing">✏️ Drawing</option>
+              <option value="mixed">🎭 Mixed Media</option>
+            </select>
+          </div>
+          
+          <div className="filter-group">
+            <label>🏷️ Status</label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({...filters, status: e.target.value})}
+              className="filter-select"
+            >
+              <option value="">All Status</option>
+              <option value="auction">🔥 Live Auction</option>
+              <option value="for-sale">💰 For Sale</option>
+              <option value="not-for-sale">📱 Not For Sale</option>
+            </select>
+          </div>
+          
+          <button
+            className="clear-filters-btn"
+            onClick={() => setFilters({category: '', status: '', search: ''})}
+          >
+            🗑️ Clear
+          </button>
+        </div>
+      </div>
+
+      {/* Artworks Grid */}
+      <div className="artworks-section">
+        <div className="section-header">
+          <h2>📋 Artworks ({filteredArtworks.length})</h2>
+        </div>
+        
+        {filteredArtworks.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🎨</div>
+            <h3>No artworks found</h3>
+            <p>Try adjusting your filters or check back later</p>
+          </div>
+        ) : (
+          <div className="artworks-grid">
+            {filteredArtworks.map(artwork => {
               const status = getArtworkStatus(artwork);
+              const auctionInfo = getAuctionInfo(artwork);
+              
               return (
-                <tr key={artwork._id}>
-                  <td>
-                    <div className="artwork-preview">
-                      <div className="artwork-image">
-                        <img 
-                          src={artwork.images[0]} 
-                          alt={artwork.title}
-                          onError={(e) => {
-                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0zMCA0MS4yNUMzNi4yMTMyIDQxLjI1IDQxLjI1IDM2LjIxMzIgNDEuMjUgMzBDNDEuMjUgMjMuNzg2OCAzNi4yMTMyIDE4Ljc1IDMwIDE4Ljc1QzIzLjc4NjggMTguNzUgMTguNzUgMjMuNzg2OCAxOC43NSAzMEMxOC43NSAzNi4yMTMyIDIzLjc4NjggNDEuMjUgMzAgNDEuMjVaIiBmaWxsPSIjNkM3NTdEIi8+Cjwvc3ZnPg==';
-                          }}
-                        />
-                      </div>
-                      <div className="artwork-info">
-                        <div className="artwork-title">{artwork.title}</div>
-                        <div className="artwork-tags">
-                          {artwork.tags.slice(0, 2).map(tag => (
-                            <span key={tag} className="tag">#{tag}</span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="creator-info">
-                      <div className="creator-avatar">
-                        {artwork.creator.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="creator-name">{artwork.creator.username}</div>
-                        <div className="creator-email">{artwork.creator.email}</div>
+                <div key={artwork._id} className="artwork-card">
+                  <div className="artwork-image-container">
+                    <img 
+                      src={artwork.images && artwork.images[0] ? artwork.images[0] : '/default-artwork.jpg'} 
+                      alt={artwork.title}
+                      className="artwork-image"
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0xMDAgMTM3LjVDMTIwLjcxIDEzNy41IDEzNy41IDEyMC43MSAxMzcuNSAxMDBDMTM3LjUgNzkuMjg5MyAxMjAuNzEgNjIuNSAxMDAgNjIuNUM3OS4yODkzIDYyLjUgNjIuNSA3OS4yODkzIDYyLjUgMTAwQzYyLjUgMTIwLjcxIDc5LjI4OTMgMTM3LjUgMTAwIDEzNy41WiIgZmlsbD0iIzZDNzU3RCIvPgo8L3N2Zz4K';
+                      }}
+                    />
+                    <div className="artwork-overlay">
+                      <div className="overlay-actions">
+                        <button 
+                          className="overlay-btn view"
+                          onClick={() => handleViewArtwork(artwork)}
+                          title="View Details"
+                        >
+                          👁️
+                        </button>
+                        <button 
+                          className="overlay-btn delete"
+                          onClick={() => handleDeleteClick(artwork)}
+                          title="Delete Artwork"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </div>
-                  </td>
-                  <td>
-                    <div className="category-info">
-                      <span className="category-icon">{getCategoryIcon(artwork.category)}</span>
-                      <span className="category-name">{artwork.category}</span>
+                    
+                    <div className="status-badge" style={{ backgroundColor: status.color }}>
+                      {status.icon} {status.text}
                     </div>
-                  </td>
-                  <td>
-                    <div className="price-info">
-                      {artwork.auction.isActive ? (
+                    
+                    {auctionInfo.hasAuction && auctionInfo.status === 'Active' && (
+                      <div className="auction-badge">
+                        🔥 LIVE AUCTION
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="artwork-content">
+                    <div className="artwork-header">
+                      <h3 className="artwork-title">{artwork.title || 'Untitled'}</h3>
+                      <div className="artwork-category">
+                        {getCategoryIcon(artwork.category)} {artwork.category || 'Other'}
+                      </div>
+                    </div>
+                    
+                    <div className="artwork-artist">
+                      <div className="artist-avatar">
+                        {artwork.creator?.username ? artwork.creator.username.charAt(0).toUpperCase() : '?'}
+                      </div>
+                      <div className="artist-info">
+                        <div className="artist-name">{artwork.creator?.username || 'Unknown'}</div>
+                        <div className="artist-email">{artwork.creator?.email || 'No email'}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="artwork-price">
+                      {auctionInfo.hasAuction && auctionInfo.status === 'Active' ? (
                         <div>
-                          <div className="current-bid">{formatCurrency(artwork.auction.currentBid)}</div>
-                          <div className="bid-label">Current Bid</div>
+                          <div className="current-bid">{formatCurrency(auctionInfo.currentBid || artwork.price)}</div>
+                          <div className="bid-info">
+                            {auctionInfo.currentBid ? `Current bid • ${auctionInfo.bidCount} bids` : 'Starting price'}
+                          </div>
                         </div>
                       ) : artwork.forSale ? (
                         <div>
-                          <div className="price">{formatCurrency(artwork.price)}</div>
-                          <div className="price-label">Fixed Price</div>
+                          <div className="fixed-price">{formatCurrency(artwork.price)}</div>
+                          <div className="price-info">Fixed price</div>
                         </div>
                       ) : (
-                        <div className="not-for-sale">Not For Sale</div>
+                        <div className="not-for-sale-price">Not for sale</div>
                       )}
                     </div>
-                  </td>
-                  <td>
-                    <span 
-                      className="status-badge"
-                      style={{ backgroundColor: status.color }}
-                    >
-                      {status.text}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="engagement-stats">
-                      <div className="stat">
-                        <span className="stat-icon">❤️</span>
-                        <span>{artwork.likes}</span>
-                      </div>
-                      <div className="stat">
+                    
+                    <div className="artwork-stats">
+                      <div className="stat-item">
                         <span className="stat-icon">👁️</span>
-                        <span>{artwork.views}</span>
+                        <span className="stat-text">{artwork.views || 0} views</span>
+                      </div>
+                      <div className="stat-item">
+                        <span className="stat-icon">📅</span>
+                        <span className="stat-text">{formatDate(artwork.createdAt)}</span>
                       </div>
                     </div>
-                  </td>
-                  <td>{formatDate(artwork.createdAt)}</td>
-                  <td className="action-buttons">
-                    <button
-                      className="view-button"
-                      onClick={() => handleViewArtwork(artwork)}
-                    >
-                      View
-                    </button>
-                    <button
-                      className="delete-button"
-                      onClick={() => handleDeleteClick(artwork)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+                    
+                    {artwork.tags && artwork.tags.length > 0 && (
+                      <div className="artwork-tags">
+                        {artwork.tags.slice(0, 3).map(tag => (
+                          <span key={tag} className="tag">#{tag}</span>
+                        ))}
+                        {artwork.tags.length > 3 && (
+                          <span className="tag-more">+{artwork.tags.length - 3} more</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
 
       {/* Artwork Details Modal */}
       {showArtworkModal && selectedArtwork && (
         <div className="modal-overlay" onClick={() => setShowArtworkModal(false)}>
-          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content artwork-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Artwork Details</h3>
-              <button onClick={() => setShowArtworkModal(false)} className="close-button">×</button>
+              <h3>🎨 Artwork Details</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowArtworkModal(false)}
+              >
+                ✕
+              </button>
             </div>
             <div className="modal-body">
-              <div className="artwork-detail">
-                <div className="artwork-detail-image">
+              <div className="artwork-detail-layout">
+                <div className="artwork-image-section">
                   <img 
-                    src={selectedArtwork.images[0]} 
+                    src={selectedArtwork.images && selectedArtwork.images[0] ? selectedArtwork.images[0] : '/default-artwork.jpg'} 
                     alt={selectedArtwork.title}
-                    onError={(e) => {
-                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDMwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0xNTAgMjA2LjI1QzE4MS4wNjYgMjA2LjI1IDIwNi4yNSAxODEuMDY2IDIwNi4yNSAxNTBDMjA2LjI1IDExOC45MzQgMTgxLjA2NiA5My43NSAxNTAgOTMuNzVDMTE4LjkzNCA5My43NSA5My43NSAxMTguOTM0IDkzLjc1IDE1MEM5My43NSAxODEuMDY2IDExOC45MzQgMjA2LjI1IDE1MCAyMDYuMjVaIiBmaWxsPSIjNkM3NTdEIi8+Cjwvc3ZnPg==';
-                    }}
+                    className="detail-image"
                   />
                 </div>
-                <div className="artwork-detail-content">
-                  <div className="detail-section">
-                    <h4>Title</h4>
-                    <p>{selectedArtwork.title}</p>
+                <div className="artwork-info-section">
+                  <h2>{selectedArtwork.title || 'Untitled'}</h2>
+                  
+                  <div className="detail-group">
+                    <h4>👤 Artist Information</h4>
+                    <p><strong>Name:</strong> {selectedArtwork.creator?.username || 'Unknown'}</p>
+                    <p><strong>Email:</strong> {selectedArtwork.creator?.email || 'No email'}</p>
                   </div>
                   
-                  <div className="detail-section">
-                    <h4>Artist</h4>
-                    <div className="creator-info">
-                      <div className="creator-avatar">
-                        {selectedArtwork.creator.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="creator-name">{selectedArtwork.creator.username}</div>
-                        <div className="creator-email">{selectedArtwork.creator.email}</div>
-                      </div>
-                    </div>
+                  <div className="detail-group">
+                    <h4>🎨 Artwork Details</h4>
+                    <p><strong>Category:</strong> {getCategoryIcon(selectedArtwork.category)} {selectedArtwork.category || 'Other'}</p>
+                    <p><strong>Price:</strong> {formatCurrency(selectedArtwork.price)}</p>
+                    <p><strong>Views:</strong> {selectedArtwork.views || 0}</p>
+                    <p><strong>Created:</strong> {formatDate(selectedArtwork.createdAt)}</p>
+                    <p><strong>For Sale:</strong> {selectedArtwork.forSale ? '✅ Yes' : '❌ No'}</p>
                   </div>
                   
-                  <div className="detail-section">
-                    <h4>Description</h4>
-                    <p>{selectedArtwork.description}</p>
-                  </div>
-                  
-                  <div className="detail-section">
-                    <h4>Category</h4>
-                    <div className="category-info">
-                      <span className="category-icon">{getCategoryIcon(selectedArtwork.category)}</span>
-                      <span className="category-name">{selectedArtwork.category}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="detail-section">
-                    <h4>Tags</h4>
-                    <div className="artwork-tags">
-                      {selectedArtwork.tags.map(tag => (
-                        <span key={tag} className="tag">#{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="detail-section">
-                    <h4>Pricing & Status</h4>
-                    <div className="pricing-detail">
-                      {selectedArtwork.auction.isActive ? (
-                        <div>
-                          <div className="price-item">
-                            <span className="price-label">Current Bid:</span>
-                            <span className="price-value">{formatCurrency(selectedArtwork.auction.currentBid)}</span>
-                          </div>
-                          <div className="price-item">
-                            <span className="price-label">Total Bids:</span>
-                            <span className="price-value">{selectedArtwork.auction.bids.length}</span>
-                          </div>
-                          <div className="price-item">
-                            <span className="price-label">Auction End:</span>
-                            <span className="price-value">{formatDate(selectedArtwork.auction.endTime)}</span>
-                          </div>
-                        </div>
-                      ) : selectedArtwork.forSale ? (
-                        <div className="price-item">
-                          <span className="price-label">Price:</span>
-                          <span className="price-value">{formatCurrency(selectedArtwork.price)}</span>
-                        </div>
-                      ) : (
-                        <div className="not-for-sale">This artwork is not for sale</div>
+                  {selectedArtwork.auction && (
+                    <div className="detail-group auction-info">
+                      <h4>🔨 Auction Information</h4>
+                      <p><strong>Status:</strong> {selectedArtwork.auction.isActive ? '🔥 Active' : '⏰ Ended'}</p>
+                      <p><strong>Starting Price:</strong> {formatCurrency(selectedArtwork.auction.startingPrice)}</p>
+                      <p><strong>Current Bid:</strong> {formatCurrency(selectedArtwork.auction.currentBid)}</p>
+                      <p><strong>Total Bids:</strong> {selectedArtwork.auction.bids ? selectedArtwork.auction.bids.length : 0}</p>
+                      {selectedArtwork.auction.startTime && (
+                        <p><strong>Started:</strong> {formatDate(selectedArtwork.auction.startTime)}</p>
+                      )}
+                      {selectedArtwork.auction.endTime && (
+                        <p><strong>Ends:</strong> {formatDate(selectedArtwork.auction.endTime)}</p>
                       )}
                     </div>
-                  </div>
+                  )}
                   
-                  <div className="detail-section">
-                    <h4>Engagement</h4>
-                    <div className="engagement-detail">
-                      <div className="engagement-item">
-                        <span className="engagement-icon">❤️</span>
-                        <span className="engagement-label">Likes:</span>
-                        <span className="engagement-value">{selectedArtwork.likes}</span>
-                      </div>
-                      <div className="engagement-item">
-                        <span className="engagement-icon">👁️</span>
-                        <span className="engagement-label">Views:</span>
-                        <span className="engagement-value">{selectedArtwork.views}</span>
-                      </div>
+                  {selectedArtwork.description && (
+                    <div className="detail-group">
+                      <h4>📝 Description</h4>
+                      <p>{selectedArtwork.description}</p>
                     </div>
-                  </div>
+                  )}
                   
-                  {selectedArtwork.auction.isActive && selectedArtwork.auction.bids.length > 0 && (
-                    <div className="detail-section">
-                      <h4>Recent Bids</h4>
-                      <div className="bids-list">
-                        {selectedArtwork.auction.bids.slice(0, 3).map((bid, index) => (
-                          <div key={index} className="bid-item">
-                            <span className="bid-user">{bid.bidder.username}</span>
-                            <span className="bid-amount">{formatCurrency(bid.amount)}</span>
-                            <span className="bid-time">{formatDate(bid.bidTime)}</span>
-                          </div>
+                  {selectedArtwork.tags && selectedArtwork.tags.length > 0 && (
+                    <div className="detail-group">
+                      <h4>🏷️ Tags</h4>
+                      <div className="tags-container">
+                        {selectedArtwork.tags.map(tag => (
+                          <span key={tag} className="tag">#{tag}</span>
                         ))}
                       </div>
                     </div>
@@ -444,48 +469,37 @@ const AdminArtworks = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedArtwork && (
         <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content delete-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Delete Artwork</h3>
-              <button onClick={() => setShowDeleteModal(false)} className="close-button">×</button>
+              <h3>⚠️ Confirm Delete</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                ✕
+              </button>
             </div>
             <div className="modal-body">
-              <p>Are you sure you want to delete this artwork by <strong>{selectedArtwork.creator.username}</strong>?</p>
-              <p className="warning-text">This action cannot be undone and will also remove any associated posts.</p>
-              
-              <div className="delete-preview">
-                <div className="artwork-preview">
-                  <div className="artwork-image">
-                    <img 
-                      src={selectedArtwork.images[0]} 
-                      alt={selectedArtwork.title}
-                      onError={(e) => {
-                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0zMCA0MS4yNUMzNi4yMTMyIDQxLjI1IDQxLjI1IDM2LjIxMzIgNDEuMjUgMzBDNDEuMjUgMjMuNzg2OCAzNi4yMTMyIDE4Ljc1IDMwIDE4Ljc1QzIzLjc4NjggMTguNzUgMTguNzUgMjMuNzg2OCAxOC43NSAzMEMxOC43NSAzNi4yMTMyIDIzLjc4NjggNDEuMjUgMzAgNDEuMjVaIiBmaWxsPSIjNkM3NTdEIi8+Cjwvc3ZnPg==';
-                      }}
-                    />
-                  </div>
-                  <div className="artwork-info">
-                    <div className="artwork-title">{selectedArtwork.title}</div>
-                    <div className="artwork-price">
-                      {selectedArtwork.forSale ? formatCurrency(selectedArtwork.price) : 'Not for sale'}
-                    </div>
-                  </div>
+              <div className="delete-confirmation">
+                <div className="delete-icon">🗑️</div>
+                <h3>Delete Artwork?</h3>
+                <p>Are you sure you want to delete "<strong>{selectedArtwork.title}</strong>"?</p>
+                <p className="warning-text">This action cannot be undone and will permanently remove the artwork from the platform.</p>
+                
+                <div className="modal-actions">
+                  <button 
+                    className="btn-secondary"
+                    onClick={() => setShowDeleteModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="btn-danger"
+                    onClick={handleDeleteConfirm}
+                  >
+                    Delete Artwork
+                  </button>
                 </div>
-              </div>
-              
-              <div className="form-actions">
-                <button 
-                  onClick={handleDeleteConfirm} 
-                  className="delete-confirm-button"
-                >
-                  Delete Artwork
-                </button>
-                <button 
-                  onClick={() => setShowDeleteModal(false)} 
-                  className="cancel-button"
-                >
-                  Cancel
-                </button>
               </div>
             </div>
           </div>
@@ -493,256 +507,470 @@ const AdminArtworks = () => {
       )}
 
       <style jsx>{`
-        .admin-page {
-          padding: 0;
+        .admin-container {
+          padding: 1.5rem;
+          max-width: 1400px;
+          margin: 0 auto;
+          background: #f8fafc;
+          min-height: 100vh;
         }
 
-        .admin-header {
+        .loading-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 4rem 2rem;
+          text-align: center;
+        }
+
+        .loading-spinner {
+          width: 50px;
+          height: 50px;
+          border: 4px solid #e2e8f0;
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 2rem;
+          background: white;
+          padding: 2rem;
+          border-radius: 16px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content h1 {
+          margin: 0 0 0.5rem 0;
+          color: #1a202c;
+          font-size: 2rem;
+          font-weight: 700;
+        }
+
+        .header-content p {
+          margin: 0;
+          color: #718096;
+          font-size: 1.1rem;
+        }
+
+        .refresh-btn {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+          padding: 0.75rem 1.5rem;
+          border-radius: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .refresh-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 1.5rem;
           margin-bottom: 2rem;
         }
 
-        .admin-header h1 {
+        .stat-card {
+          background: white;
+          border-radius: 16px;
+          padding: 1.5rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-card.total { border-left: 4px solid #667eea; }
+        .stat-card.auctions { border-left: 4px solid #e53e3e; }
+        .stat-card.for-sale { border-left: 4px solid #38a169; }
+        .stat-card.views { border-left: 4px solid #ed8936; }
+
+        .stat-header {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .stat-icon {
+          font-size: 2.5rem;
+          opacity: 0.8;
+        }
+
+        .stat-info h3 {
           margin: 0 0 0.5rem 0;
-          color: #2c3e50;
+          color: #4a5568;
+          font-size: 0.9rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
 
-        .admin-header p {
-          margin: 0;
-          color: #7f8c8d;
+        .stat-value {
+          font-size: 2rem;
+          font-weight: 700;
+          color: #1a202c;
         }
 
-        .admin-filters {
+        .filters-section {
+          background: white;
+          border-radius: 16px;
+          padding: 1.5rem;
+          margin-bottom: 2rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .filters-container {
           display: flex;
           gap: 1rem;
-          margin-bottom: 2rem;
+          align-items: end;
           flex-wrap: wrap;
         }
 
         .filter-group {
-          flex: 1;
-          min-width: 200px;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          min-width: 150px;
         }
 
-        .search-input,
-        .filter-select {
-          width: 100%;
+        .filter-group label {
+          font-weight: 600;
+          color: #4a5568;
+          font-size: 0.9rem;
+        }
+
+        .filter-input, .filter-select {
           padding: 0.75rem;
-          border: 2px solid #e9ecef;
+          border: 2px solid #e2e8f0;
           border-radius: 8px;
-          font-size: 1rem;
-          transition: border-color 0.3s ease;
+          font-size: 0.9rem;
+          transition: border-color 0.2s ease;
         }
 
-        .search-input:focus,
-        .filter-select:focus {
+        .filter-input:focus, .filter-select:focus {
           outline: none;
           border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .admin-table-container {
+        .clear-filters-btn {
+          padding: 0.75rem 1rem;
+          background: #f7fafc;
+          border: 2px solid #e2e8f0;
+          border-radius: 8px;
+          color: #4a5568;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          height: fit-content;
+        }
+
+        .clear-filters-btn:hover {
+          background: #edf2f7;
+          border-color: #cbd5e0;
+        }
+
+        .artworks-section {
+          background: white;
+          border-radius: 16px;
+          padding: 1.5rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-header {
+          margin-bottom: 1.5rem;
+          border-bottom: 2px solid #e2e8f0;
+          padding-bottom: 1rem;
+        }
+
+        .section-header h2 {
+          margin: 0;
+          color: #1a202c;
+          font-size: 1.5rem;
+          font-weight: 600;
+        }
+
+        .empty-state {
+          text-align: center;
+          padding: 4rem 2rem;
+          color: #718096;
+        }
+
+        .empty-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+          opacity: 0.5;
+        }
+
+        .empty-state h3 {
+          margin: 0 0 0.5rem 0;
+          color: #4a5568;
+        }
+
+        .artworks-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          gap: 1.5rem;
+        }
+
+        .artwork-card {
           background: white;
           border-radius: 12px;
           overflow: hidden;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          transition: all 0.2s ease;
+          border: 1px solid #e2e8f0;
         }
 
-        .admin-table {
-          width: 100%;
-          border-collapse: collapse;
+        .artwork-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
         }
 
-        .admin-table th {
-          background: #f8f9fa;
-          padding: 1rem;
-          text-align: left;
-          font-weight: 600;
-          color: #2c3e50;
-          border-bottom: 2px solid #e9ecef;
-        }
-
-        .admin-table td {
-          padding: 1rem;
-          border-bottom: 1px solid #e9ecef;
-          vertical-align: middle;
-        }
-
-        .admin-table tr:hover {
-          background-color: #f8f9fa;
-        }
-
-        .artwork-preview {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          max-width: 300px;
+        .artwork-image-container {
+          position: relative;
+          height: 200px;
+          overflow: hidden;
         }
 
         .artwork-image {
-          flex-shrink: 0;
-        }
-
-        .artwork-image img {
-          width: 60px;
-          height: 60px;
+          width: 100%;
+          height: 100%;
           object-fit: cover;
-          border-radius: 8px;
+          transition: transform 0.3s ease;
         }
 
-        .artwork-info {
-          flex: 1;
-          min-width: 0;
+        .artwork-card:hover .artwork-image {
+          transform: scale(1.05);
+        }
+
+        .artwork-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0;
+          transition: opacity 0.2s ease;
+        }
+
+        .artwork-card:hover .artwork-overlay {
+          opacity: 1;
+        }
+
+        .overlay-actions {
+          display: flex;
+          gap: 1rem;
+        }
+
+        .overlay-btn {
+          padding: 0.75rem;
+          background: rgba(255, 255, 255, 0.9);
+          border: none;
+          border-radius: 50%;
+          cursor: pointer;
+          font-size: 1.2rem;
+          transition: all 0.2s ease;
+          width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .overlay-btn:hover {
+          background: white;
+          transform: scale(1.1);
+        }
+
+        .overlay-btn.delete:hover {
+          background: #fed7d7;
+        }
+
+        .status-badge {
+          position: absolute;
+          top: 0.75rem;
+          right: 0.75rem;
+          padding: 0.25rem 0.75rem;
+          border-radius: 20px;
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .auction-badge {
+          position: absolute;
+          top: 0.75rem;
+          left: 0.75rem;
+          padding: 0.25rem 0.75rem;
+          background: linear-gradient(135deg, #e53e3e 0%, #ff6b6b 100%);
+          color: white;
+          border-radius: 20px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+
+        .artwork-content {
+          padding: 1.5rem;
+        }
+
+        .artwork-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: start;
+          margin-bottom: 1rem;
         }
 
         .artwork-title {
+          margin: 0;
+          color: #1a202c;
+          font-size: 1.1rem;
           font-weight: 600;
-          color: #2c3e50;
-          margin-bottom: 0.5rem;
+          line-height: 1.3;
+        }
+
+        .artwork-category {
+          background: #edf2f7;
+          color: #4a5568;
+          padding: 0.25rem 0.5rem;
+          border-radius: 6px;
+          font-size: 0.8rem;
+          font-weight: 500;
+        }
+
+        .artwork-artist {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+
+        .artist-avatar {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+          font-size: 0.9rem;
+        }
+
+        .artist-name {
+          font-weight: 600;
+          color: #2d3748;
+          font-size: 0.9rem;
+        }
+
+        .artist-email {
+          color: #718096;
+          font-size: 0.8rem;
         }
 
         .artwork-price {
-          color: #27ae60;
+          margin-bottom: 1rem;
+          padding: 1rem;
+          background: #f7fafc;
+          border-radius: 8px;
+          text-align: center;
+        }
+
+        .current-bid, .fixed-price {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #38a169;
+          margin-bottom: 0.25rem;
+        }
+
+        .bid-info, .price-info {
+          color: #718096;
+          font-size: 0.8rem;
+        }
+
+        .not-for-sale-price {
+          color: #a0aec0;
+          font-style: italic;
           font-weight: 500;
+        }
+
+        .artwork-stats {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 1rem;
+          padding: 0.75rem;
+          background: #f7fafc;
+          border-radius: 8px;
+        }
+
+        .stat-item {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .stat-icon {
+          opacity: 0.7;
+        }
+
+        .stat-text {
+          color: #4a5568;
+          font-size: 0.85rem;
         }
 
         .artwork-tags {
           display: flex;
           flex-wrap: wrap;
-          gap: 0.25rem;
+          gap: 0.5rem;
         }
 
         .tag {
-          background: #e9ecef;
-          color: #6c757d;
-          padding: 0.2rem 0.5rem;
-          border-radius: 12px;
-          font-size: 0.8rem;
-        }
-
-        .creator-info {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-        }
-
-        .creator-avatar {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-        }
-
-        .creator-name {
-          font-weight: 600;
-          color: #2c3e50;
-        }
-
-        .creator-email {
-          font-size: 0.9rem;
-          color: #7f8c8d;
-        }
-
-        .category-info {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .category-icon {
-          font-size: 1.2rem;
-        }
-
-        .category-name {
+          background: #e2e8f0;
+          color: #4a5568;
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+          font-size: 0.75rem;
           font-weight: 500;
-          text-transform: capitalize;
-          color: #2c3e50;
         }
 
-        .price-info {
-          text-align: right;
-        }
-
-        .current-bid,
-        .price {
-          font-weight: 600;
-          color: #27ae60;
-          font-size: 1.1rem;
-        }
-
-        .bid-label,
-        .price-label {
-          font-size: 0.8rem;
-          color: #7f8c8d;
-          text-transform: uppercase;
-        }
-
-        .not-for-sale {
-          color: #95a5a6;
+        .tag-more {
+          color: #718096;
+          font-size: 0.75rem;
           font-style: italic;
-        }
-
-        .status-badge {
-          padding: 0.25rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: white;
-        }
-
-        .engagement-stats {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .stat {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.9rem;
-        }
-
-        .stat-icon {
-          font-size: 1rem;
-        }
-
-        .action-buttons {
-          display: flex;
-          gap: 0.5rem;
-          flex-wrap: wrap;
-        }
-
-        .view-button,
-        .delete-button {
-          padding: 0.5rem 1rem;
-          border: none;
-          border-radius: 6px;
-          font-size: 0.9rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-        }
-
-        .view-button {
-          background: #3498db;
-          color: white;
-        }
-
-        .view-button:hover {
-          background: #2980b9;
-        }
-
-        .delete-button {
-          background: #e74c3c;
-          color: white;
-        }
-
-        .delete-button:hover {
-          background: #c0392b;
         }
 
         .modal-overlay {
@@ -756,19 +984,26 @@ const AdminArtworks = () => {
           align-items: center;
           justify-content: center;
           z-index: 1000;
+          padding: 1rem;
         }
 
         .modal-content {
           background: white;
-          border-radius: 12px;
-          max-width: 500px;
-          width: 90%;
-          max-height: 80vh;
-          overflow-y: auto;
+          border-radius: 16px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+          max-width: 90vw;
+          max-height: 90vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
 
-        .modal-content.large {
+        .artwork-modal {
           max-width: 900px;
+        }
+
+        .delete-modal {
+          max-width: 500px;
         }
 
         .modal-header {
@@ -776,239 +1011,196 @@ const AdminArtworks = () => {
           justify-content: space-between;
           align-items: center;
           padding: 1.5rem;
-          border-bottom: 1px solid #e9ecef;
+          border-bottom: 1px solid #e2e8f0;
         }
 
         .modal-header h3 {
           margin: 0;
-          color: #2c3e50;
+          color: #1a202c;
+          font-size: 1.25rem;
+          font-weight: 600;
         }
 
-        .close-button {
+        .modal-close {
           background: none;
           border: none;
           font-size: 1.5rem;
           cursor: pointer;
-          color: #7f8c8d;
-          width: 30px;
-          height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          color: #718096;
+          padding: 0.5rem;
           border-radius: 50%;
-          transition: background 0.3s ease;
+          transition: all 0.2s ease;
         }
 
-        .close-button:hover {
-          background: #f8f9fa;
+        .modal-close:hover {
+          background: #f7fafc;
+          color: #4a5568;
         }
 
         .modal-body {
           padding: 1.5rem;
+          overflow-y: auto;
         }
 
-        .artwork-detail {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
+        .artwork-detail-layout {
+          display: flex;
           gap: 2rem;
         }
 
-        .artwork-detail-image img {
+        .artwork-image-section {
+          flex: 0 0 300px;
+        }
+
+        .detail-image {
           width: 100%;
-          max-width: 400px;
-          height: auto;
+          height: 300px;
+          object-fit: cover;
+          border-radius: 12px;
+        }
+
+        .artwork-info-section {
+          flex: 1;
+        }
+
+        .artwork-info-section h2 {
+          margin: 0 0 1.5rem 0;
+          color: #1a202c;
+          font-size: 1.5rem;
+          font-weight: 700;
+        }
+
+        .detail-group {
+          margin-bottom: 1.5rem;
+          padding: 1rem;
+          background: #f7fafc;
           border-radius: 8px;
         }
 
-        .detail-section {
-          margin-bottom: 1.5rem;
-        }
-
-        .detail-section h4 {
+        .detail-group h4 {
           margin: 0 0 0.75rem 0;
-          color: #2c3e50;
+          color: #2d3748;
           font-size: 1rem;
+          font-weight: 600;
         }
 
-        .detail-section p {
-          margin: 0;
+        .detail-group p {
+          margin: 0.5rem 0;
+          color: #4a5568;
           line-height: 1.5;
-          color: #495057;
         }
 
-        .pricing-detail {
+        .auction-info {
+          border-left: 4px solid #e53e3e;
+        }
+
+        .tags-container {
           display: flex;
-          flex-direction: column;
+          flex-wrap: wrap;
           gap: 0.5rem;
         }
 
-        .price-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
+        .delete-confirmation {
+          text-align: center;
+          padding: 1rem;
         }
 
-        .price-label {
-          color: #6c757d;
+        .delete-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+          opacity: 0.7;
         }
 
-        .price-value {
+        .delete-confirmation h3 {
+          margin: 0 0 1rem 0;
+          color: #1a202c;
+          font-size: 1.25rem;
           font-weight: 600;
-          color: #2c3e50;
         }
 
-        .engagement-detail {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .engagement-item {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .engagement-icon {
-          font-size: 1.2rem;
-        }
-
-        .engagement-label {
-          color: #6c757d;
-          min-width: 60px;
-        }
-
-        .engagement-value {
-          font-weight: 600;
-          color: #2c3e50;
-        }
-
-        .bids-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .bid-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.5rem;
-          background: #f8f9fa;
-          border-radius: 6px;
-        }
-
-        .bid-user {
-          font-weight: 500;
-        }
-
-        .bid-amount {
-          font-weight: 600;
-          color: #27ae60;
-        }
-
-        .bid-time {
-          font-size: 0.9rem;
-          color: #7f8c8d;
+        .delete-confirmation p {
+          margin: 0.5rem 0;
+          color: #4a5568;
+          line-height: 1.5;
         }
 
         .warning-text {
-          color: #e74c3c;
-          font-weight: 500;
-          margin: 1rem 0;
+          color: #e53e3e !important;
+          font-weight: 600;
+          margin-top: 1rem !important;
         }
 
-        .delete-preview {
-          background: #f8f9fa;
-          border-radius: 8px;
-          padding: 1rem;
-          margin: 1rem 0;
-        }
-
-        .form-actions {
+        .modal-actions {
           display: flex;
           gap: 1rem;
-          justify-content: flex-end;
+          justify-content: center;
           margin-top: 2rem;
         }
 
-        .delete-confirm-button,
-        .cancel-button {
+        .btn-secondary {
           padding: 0.75rem 1.5rem;
-          border: none;
+          background: #f7fafc;
+          border: 2px solid #e2e8f0;
           border-radius: 8px;
+          color: #4a5568;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.2s ease;
         }
 
-        .delete-confirm-button {
-          background: #e74c3c;
+        .btn-secondary:hover {
+          background: #edf2f7;
+          border-color: #cbd5e0;
+        }
+
+        .btn-danger {
+          padding: 0.75rem 1.5rem;
+          background: #e53e3e;
+          border: none;
+          border-radius: 8px;
           color: white;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
         }
 
-        .delete-confirm-button:hover {
-          background: #c0392b;
-        }
-
-        .cancel-button {
-          background: #e9ecef;
-          color: #6c757d;
-        }
-
-        .cancel-button:hover {
-          background: #dee2e6;
-        }
-
-        .admin-loading {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 4rem 2rem;
-          text-align: center;
-        }
-
-        .loading-spinner {
-          width: 50px;
-          height: 50px;
-          border: 4px solid #f3f3f3;
-          border-top: 4px solid #667eea;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin-bottom: 1rem;
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+        .btn-danger:hover {
+          background: #c53030;
+          transform: translateY(-1px);
         }
 
         @media (max-width: 768px) {
-          .admin-filters {
+          .admin-container {
+            padding: 1rem;
+          }
+
+          .page-header {
             flex-direction: column;
-          }
-
-          .admin-table-container {
-            overflow-x: auto;
-          }
-
-          .admin-table {
-            min-width: 1000px;
-          }
-
-          .modal-content {
-            width: 95%;
-            margin: 1rem;
-          }
-
-          .artwork-detail {
-            grid-template-columns: 1fr;
             gap: 1rem;
+            text-align: center;
           }
 
-          .action-buttons {
+          .filters-container {
             flex-direction: column;
+          }
+
+          .filter-group {
+            min-width: 100%;
+          }
+
+          .artworks-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .artwork-detail-layout {
+            flex-direction: column;
+          }
+
+          .artwork-image-section {
+            flex: none;
+          }
+
+          .stats-grid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>

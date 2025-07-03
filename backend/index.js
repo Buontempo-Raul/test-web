@@ -77,6 +77,9 @@ app.use('/api/auction-purchases', auctionPurchaseRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/artist-requests', artistRequestRoutes);
 app.use('/api/admin/artist-requests', adminArtistRequestRoutes);
+app.use('/api/admin', require('./routes/admin'));
+
+
 
 // Simple test route
 app.get('/api/test', (req, res) => {
