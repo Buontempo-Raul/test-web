@@ -385,9 +385,9 @@
   color: #ffffff;
   margin-bottom: 20px;
   line-height: 1.1;
-  text-shadow: 
+  /*text-shadow: 
     0 4px 8px rgba(0, 0, 0, 0.3),
-    0 2px 4px rgba(0, 0, 0, 0.2);
+    0 2px 4px rgba(0, 0, 0, 0.2);*/
   background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #ffffff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -414,7 +414,7 @@
   font-size: 1.4rem;
   text-transform: uppercase;
   letter-spacing: 2px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  /*text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);*/
   background: linear-gradient(135deg, #feca57 0%, #ff6b6b 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
