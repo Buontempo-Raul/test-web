@@ -1,4 +1,4 @@
-// backend/index.js - FIXED VERSION
+// backend/index.js - UPDATED VERSION with Admin and Artist Request Routes
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -57,7 +57,12 @@ const artworkRoutes = require('./routes/artworks');
 const auctionRoutes = require('./routes/auctions');
 const shopRoutes = require('./routes/shop');
 const postsRoutes = require('./routes/posts');
-const auctionPurchaseRoutes = require('./routes/auctionPurchase'); // FIXED: Import the route
+const auctionPurchaseRoutes = require('./routes/auctionPurchase');
+
+// NEW: Import admin and artist request routes
+const adminRoutes = require('./routes/admin');
+const artistRequestRoutes = require('./routes/artistRequests');
+const adminArtistRequestRoutes = require('./routes/adminArtistRequests');
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -66,14 +71,19 @@ app.use('/api/artworks', artworkRoutes);
 app.use('/api/auctions', auctionRoutes);
 app.use('/api/shop', shopRoutes);
 app.use('/api/posts', postsRoutes);
-app.use('/api/auction-purchases', auctionPurchaseRoutes); // FIXED: Ensure this route is registered
+app.use('/api/auction-purchases', auctionPurchaseRoutes);
+
+// NEW: Admin and Artist Request Routes
+app.use('/api/admin', adminRoutes);
+app.use('/api/artist-requests', artistRequestRoutes);
+app.use('/api/admin/artist-requests', adminArtistRequestRoutes);
 
 // Simple test route
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Backend server is running!' });
 });
 
-// FIXED: Add test route for auction purchases
+// Test route for auction purchases
 app.get('/api/auction-purchases/test', (req, res) => {
   res.json({ 
     message: 'Auction purchases API is working!',
@@ -81,7 +91,136 @@ app.get('/api/auction-purchases/test', (req, res) => {
   });
 });
 
-// FIXED: Add global error handler
+// NEW: Test route for admin functionality
+app.get('/api/admin/test', (req, res) => {
+  res.json({ 
+    message: 'Admin API is working!',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      'GET /api/admin/dashboard/stats - Dashboard statistics',
+      'GET /api/admin/dashboard/activity - Recent activity',
+      'GET /api/admin/users - User management',
+      'GET /api/admin/posts - Post management',
+      'GET /api/admin/artworks - Artwork management',
+      'GET /api/admin/auctions - Auction management',
+      'GET /api/admin/artist-requests - Artist request management'
+    ]
+  });
+});
+
+// NEW: Automatic auction ending cron job
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    console.log('🕒 Running auction check...');
+    
+    const Artwork = require('./models/Artwork');
+    const User = require('./models/User');
+    
+    // Find auctions that have ended but are still active
+    const endedAuctions = await Artwork.find({
+      'auction.isActive': true,
+      'auction.endTime': { $lt: new Date() }
+    }).populate('creator', 'username email');
+
+    for (const artwork of endedAuctions) {
+      console.log(`🔨 Ending auction for: ${artwork.title}`);
+      
+      // Mark auction as inactive
+      artwork.auction.isActive = false;
+      
+      // If there are bids, process the winner
+      if (artwork.auction.bids && artwork.auction.bids.length > 0) {
+        // Get highest bid
+        const winningBid = artwork.auction.bids.reduce((max, bid) => 
+          bid.amount > max.amount ? bid : max
+        );
+        
+        // Create auction purchase record
+        const auctionPurchase = new AuctionPurchase({
+          auctionId: uuidv4(),
+          artwork: artwork._id,
+          winner: winningBid.bidder,
+          winningBid: winningBid.amount,
+          status: 'pending_payment',
+          auctionEndTime: artwork.auction.endTime
+        });
+        
+        await auctionPurchase.save();
+        
+        // Send notification emails (if email service is configured)
+        try {
+          const winner = await User.findById(winningBid.bidder);
+          if (winner && process.env.EMAIL_SERVICE_ENABLED === 'true') {
+            await sendEmail({
+              to: winner.email,
+              subject: `🎉 You won the auction for "${artwork.title}"!`,
+              text: `Congratulations! You won the auction for "${artwork.title}" with a bid of $${winningBid.amount}. Please complete your purchase to receive your artwork.`
+            });
+            
+            // Notify the artist
+            if (artwork.creator.email) {
+              await sendEmail({
+                to: artwork.creator.email,
+                subject: `✅ Your auction for "${artwork.title}" has ended`,
+                text: `Your auction for "${artwork.title}" has ended successfully! The winning bid was $${winningBid.amount}. The buyer will be contacted to complete the purchase.`
+              });
+            }
+          }
+        } catch (emailError) {
+          console.error('Error sending auction end emails:', emailError);
+        }
+        
+        console.log(`🏆 Auction ended - Winner: ${winner?.username}, Amount: $${winningBid.amount}`);
+      } else {
+        console.log(`📭 Auction ended with no bids for: ${artwork.title}`);
+      }
+      
+      await artwork.save();
+    }
+    
+    if (endedAuctions.length > 0) {
+      console.log(`✅ Processed ${endedAuctions.length} ended auctions`);
+    }
+  } catch (error) {
+    console.error('❌ Error in auction cron job:', error);
+  }
+});
+
+// NEW: Daily cleanup cron job
+cron.schedule('0 2 * * *', async () => {
+  try {
+    console.log('🧹 Running daily cleanup...');
+    
+    const User = require('./models/User');
+    
+    // Clean up expired bans and pauses
+    const now = new Date();
+    
+    // Unban users whose ban period has expired
+    const expiredBans = await User.updateMany(
+      { 
+        banUntil: { $lt: now },
+        active: false 
+      },
+      { 
+        $unset: { banUntil: 1, banReason: 1 },
+        $set: { active: true }
+      }
+    );
+    
+    // Remove expired pauses
+    const expiredPauses = await User.updateMany(
+      { pauseUntil: { $lt: now } },
+      { $unset: { pauseUntil: 1, pauseReason: 1 } }
+    );
+    
+    console.log(`✅ Cleanup complete - Unbanned: ${expiredBans.modifiedCount}, Unpaused: ${expiredPauses.modifiedCount}`);
+  } catch (error) {
+    console.error('❌ Error in daily cleanup:', error);
+  }
+});
+
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
   res.status(500).json({
@@ -91,234 +230,51 @@ app.use((err, req, res, next) => {
   });
 });
 
-// FIXED: Handle 404 for API routes specifically
-app.use('/api/*', (req, res) => {
+// Handle 404 routes
+app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`
   });
 });
 
-// Cron job to check for expired purchases (runs every hour)
-cron.schedule('0 * * * *', async () => {
-  try {
-    console.log('⏰ Checking for expired auction purchases...');
-    
-    const expiredPurchases = await AuctionPurchase.findExpired();
-    
-    if (expiredPurchases.length > 0) {
-      console.log(`📋 Found ${expiredPurchases.length} expired purchase(s) to update`);
-      
-      for (const purchase of expiredPurchases) {
-        try {
-          await purchase.updateStatus('expired');
-          console.log(`⏰ Marked purchase as expired: ${purchase.auctionId}`);
-        } catch (error) {
-          console.error(`❌ Error updating purchase ${purchase.auctionId}:`, error);
-        }
-      }
-    } else {
-      console.log('✨ No expired purchases found');
-    }
-  } catch (error) {
-    console.error('❌ Error in purchase expiry cron job:', error);
-  }
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received. Shutting down gracefully...');
+  process.exit(0);
 });
 
-// Cron job to send reminder emails (runs daily at 9 AM)
-cron.schedule('0 9 * * *', async () => {
-  try {
-    console.log('📧 Checking for purchase reminder emails...');
-    
-    const purchasesNeedingReminders = await AuctionPurchase.findNeedingReminders();
-    
-    if (purchasesNeedingReminders.length > 0) {
-      console.log(`📋 Found ${purchasesNeedingReminders.length} purchase(s) needing reminders`);
-      
-      for (const purchase of purchasesNeedingReminders) {
-        try {
-          await purchase.populate('winner', 'username email');
-          await purchase.populate('artwork', 'title');
-          
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const completePurchaseUrl = `${frontendUrl}/auction-purchase/${purchase.auctionId}`;
-          
-          const reminderMessage = `
-            Hello ${purchase.winner.username},
-
-            This is a friendly reminder that you have won the auction for "${purchase.artwork.title}".
-            
-            You have ${purchase.timeRemaining} left to complete your purchase.
-            
-            Please complete your purchase here: ${completePurchaseUrl}
-            
-            If you don't complete your purchase within the time limit, the artwork may be offered to the next highest bidder.
-            
-            Best regards,
-            The Uncreated Team
-          `;
-          
-          await sendEmail({
-            email: purchase.winner.email,
-            subject: `⏰ Reminder: Complete your purchase for "${purchase.artwork.title}"`,
-            message: reminderMessage
-          });
-          
-          purchase.emailNotificationsSent.reminder = true;
-          await purchase.save();
-          
-          console.log(`📧 Sent reminder email for: ${purchase.auctionId}`);
-        } catch (error) {
-          console.error(`❌ Error sending reminder for ${purchase.auctionId}:`, error);
-        }
-      }
-    } else {
-      console.log('✨ No reminder emails needed');
-    }
-  } catch (error) {
-    console.error('❌ Error in reminder email cron job:', error);
-  }
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received. Shutting down gracefully...');
+  process.exit(0);
 });
-
-// Enhanced auction processing function
-const processAuctionCompletion = async (artwork) => {
-  try {
-    // Ensure artwork has populated creator and highestBidder
-    await artwork.populate('creator', 'username email');
-    await artwork.populate('auction.highestBidder', 'username email');
-
-    if (!artwork.auction.highestBidder || !artwork.auction.currentBid) {
-      console.log(`No winner or bid amount found for auction: ${artwork.title}`);
-      return;
-    }
-
-    // Generate unique auction ID
-    const auctionId = uuidv4();
-
-    // Calculate platform fee (e.g., 5% of winning bid)
-    const platformFeeRate = 0.05; // 5%
-    const platformFee = artwork.auction.currentBid * platformFeeRate;
-    const shippingFee = 25; // Default shipping fee
-    const totalAmount = artwork.auction.currentBid + platformFee + shippingFee;
-
-    // Check if purchase record already exists
-    const existingPurchase = await AuctionPurchase.findOne({ artwork: artwork._id });
-    if (existingPurchase) {
-      console.log(`Purchase record already exists for artwork: ${artwork.title}`);
-      return;
-    }
-
-    // Create auction purchase record
-    const auctionPurchase = new AuctionPurchase({
-      auctionId: auctionId,
-      artwork: artwork._id,
-      artist: artwork.creator._id,
-      winner: artwork.auction.highestBidder._id,
-      winningBid: artwork.auction.currentBid,
-      platformFee: platformFee,
-      shippingFee: shippingFee,
-      totalAmount: totalAmount,
-      auctionEndDate: artwork.auction.endTime,
-      status: 'pending'
-    });
-
-    await auctionPurchase.save();
-
-    // Send winner notification email
-    const { sendAuctionWinnerEmail } = require('./utils/sendEmail');
-    
-    const winnerData = {
-      winnerEmail: artwork.auction.highestBidder.email,
-      winnerUsername: artwork.auction.highestBidder.username,
-      artwork: {
-        title: artwork.title,
-        description: artwork.description,
-        images: artwork.images
-      },
-      finalBid: artwork.auction.currentBid,
-      artistUsername: artwork.creator.username,
-      auctionId: auctionId
-    };
-
-    await sendAuctionWinnerEmail(winnerData);
-
-    // Mark email as sent
-    auctionPurchase.emailNotificationsSent.winner = true;
-    await auctionPurchase.save();
-
-    console.log(`✅ Auction completion processed for artwork: ${artwork.title}, winner: ${artwork.auction.highestBidder.username}`);
-    console.log(`📧 Winner email sent to: ${artwork.auction.highestBidder.email}`);
-    console.log(`🆔 Purchase ID: ${auctionId}`);
-
-  } catch (error) {
-    console.error('❌ Error processing auction completion:', error);
-    throw error;
-  }
-};
 
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log(`📊 Admin panel available at: http://localhost:${PORT}/admin`);
+  console.log(`🔧 API documentation: http://localhost:${PORT}/api/test`);
+  console.log(`👥 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Export for testing
+// Add a test route to verify admin API works
+app.get('/api/admin/test-public', (req, res) => {
+  res.json({ 
+    success: true,
+    message: 'Admin routes are registered!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Test route to check auth middleware
+app.get('/api/test-auth', (req, res) => {
+  const token = req.headers.authorization;
+  res.json({
+    success: true,
+    message: 'Auth test endpoint',
+    hasAuth: !!token,
+    authHeader: token || 'No auth header'
+  });
+});
+
 module.exports = app;
-
-// ===================================================================
-// DEBUGGING SCRIPT - Run this to test your auction purchase system
-// ===================================================================
-
-// Create a test script: backend/scripts/testAuctionPurchase.js
-/*
-const mongoose = require('mongoose');
-const AuctionPurchase = require('../models/AuctionPurchase');
-const dotenv = require('dotenv');
-
-dotenv.config();
-
-// Test function to check auction purchases
-const testAuctionPurchases = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('Connected to database');
-    
-    // Find all auction purchases
-    const purchases = await AuctionPurchase.find({})
-      .populate('artwork', 'title')
-      .populate('winner', 'username email')
-      .populate('artist', 'username');
-    
-    console.log(`Found ${purchases.length} auction purchases:`);
-    
-    purchases.forEach(purchase => {
-      console.log(`
-        🆔 ID: ${purchase.auctionId}
-        🎨 Artwork: ${purchase.artwork?.title || 'Unknown'}
-        👑 Winner: ${purchase.winner?.username || 'Unknown'}
-        🎯 Artist: ${purchase.artist?.username || 'Unknown'}
-        💰 Bid: $${purchase.winningBid}
-        📋 Status: ${purchase.status}
-        ⏰ Created: ${purchase.createdAt}
-        ---
-      `);
-    });
-    
-    if (purchases.length === 0) {
-      console.log('❌ No auction purchases found. You may need to:');
-      console.log('1. End an auction to create a purchase record');
-      console.log('2. Make sure the auction has bids');
-      console.log('3. Check that the processAuctionCompletion function is working');
-    }
-    
-  } catch (error) {
-    console.error('Error testing auction purchases:', error);
-  } finally {
-    mongoose.disconnect();
-  }
-};
-
-// Uncomment to run:
-// testAuctionPurchases();
-*/

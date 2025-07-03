@@ -26,6 +26,10 @@ import AdminUsers from './pages/Admin/Users';
 import AdminProducts from './pages/Admin/Products';
 import AdminOrders from './pages/Admin/Orders';
 import AdminSettings from './pages/Admin/Settings';
+import AdminPosts from './pages/Admin/Posts';
+import AdminArtworks from './pages/Admin/Artworks';
+import AdminArtistRequests from './pages/Admin/ArtistRequests';
+import AdminAuctions from './pages/Admin/Auctions';
 
 // Components
 import Navbar from './components/common/Navbar/Navbar';
@@ -58,8 +62,10 @@ function App() {
                     <Route index element={<AdminDashboard />} />
                     <Route path="dashboard" element={<AdminDashboard />} />
                     <Route path="users" element={<AdminUsers />} />
-                    <Route path="products" element={<AdminProducts />} />
-                    <Route path="orders" element={<AdminOrders />} />
+                    <Route path="posts" element={<AdminPosts />} />
+                    <Route path="artworks" element={<AdminArtworks />} />
+                    <Route path="auctions" element={<AdminAuctions />} />
+                    <Route path="artist-requests" element={<AdminArtistRequests />} />
                     <Route path="settings" element={<AdminSettings />} />
                   </Route>
                 </Route>

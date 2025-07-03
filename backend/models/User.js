@@ -1,7 +1,6 @@
-// backend/models/User.js - Updated with consistent schema
+// backend/models/User.js - UPDATED with ban/pause functionality
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   username: {
@@ -9,28 +8,28 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Username is required'],
     unique: true,
     trim: true,
-    minlength: [3, 'Username must be at least 3 characters']
+    minlength: [3, 'Username must be at least 3 characters long'],
+    maxlength: [20, 'Username cannot exceed 20 characters']
   },
   email: {
     type: String,
     required: [true, 'Email is required'],
     unique: true,
-    trim: true,
     lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email']
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
   password: {
     type: String,
     required: [true, 'Password is required'],
-    minlength: [6, 'Password must be at least 6 characters'],
-    select: false
+    minlength: [6, 'Password must be at least 6 characters long']
   },
   profileImage: {
     type: String,
-    default: 'uploads/default-profile.jpg'
+    default: ''
   },
   bio: {
     type: String,
+    maxlength: [500, 'Bio cannot exceed 500 characters'],
     default: ''
   },
   website: {
@@ -41,26 +40,36 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  // Social media links
-  socialLinks: {
-    instagram: {
-      type: String,
-      default: ''
-    },
-    twitter: {
-      type: String,
-      default: ''
-    },
-    facebook: {
-      type: String,
-      default: ''
-    },
-    pinterest: {
-      type: String,
-      default: ''
-    }
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
   },
-  // User relationships
+  active: {
+    type: Boolean,
+    default: true
+  },
+  
+  // NEW: Ban functionality
+  banUntil: {
+    type: Date,
+    default: undefined
+  },
+  banReason: {
+    type: String,
+    default: undefined
+  },
+  
+  // NEW: Pause functionality (temporary account suspension)
+  pauseUntil: {
+    type: Date,
+    default: undefined
+  },
+  pauseReason: {
+    type: String,
+    default: undefined
+  },
+  
   following: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -73,114 +82,58 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'
   }],
-  // User settings
+  socialLinks: {
+    instagram: { type: String, default: '' },
+    twitter: { type: String, default: '' },
+    facebook: { type: String, default: '' },
+    pinterest: { type: String, default: '' }
+  },
   settings: {
-    emailNotifications: {
-      type: Boolean,
-      default: true
-    },
-    privateProfile: {
-      type: Boolean,
-      default: false
-    }
+    emailNotifications: { type: Boolean, default: true },
+    privateProfile: { type: Boolean, default: false }
   },
-  // System fields
-  role: {
-    type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
+  lastLogin: {
+    type: Date
   },
-  active: {
-    type: Boolean,
-    default: true
-  },
-  // Authentication fields
-  resetPasswordToken: String,
-  resetPasswordExpire: Date,
-  lastLogin: Date, // Changed from lastActive to lastLogin for consistency
-  // Legacy field for migration compatibility
-  lastActive: Date, // Will be removed after migration
-  // Timestamps
-  createdAt: {
+  lastActive: {
     type: Date,
     default: Date.now
-  }
+  },
+  resetPasswordToken: String,
+  resetPasswordExpire: Date
 }, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  timestamps: true
 });
 
-// Indexes
-userSchema.index({ username: 1 });
-userSchema.index({ email: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ active: 1 });
-userSchema.index({ isArtist: 1 });
-userSchema.index({ createdAt: -1 });
-
-// Virtual for artworks (not stored in DB)
-userSchema.virtual('artworks', {
-  ref: 'Artwork',
-  localField: '_id',
-  foreignField: 'creator',
-  justOne: false
+// Virtual for checking if user is currently banned
+userSchema.virtual('isBanned').get(function() {
+  return this.banUntil && this.banUntil > new Date();
 });
 
-// Virtual for full name (if you add firstName/lastName later)
-userSchema.virtual('displayName').get(function() {
-  return this.username; // For now, just return username
+// Virtual for checking if user is currently paused
+userSchema.virtual('isPaused').get(function() {
+  return this.pauseUntil && this.pauseUntil > new Date();
 });
 
-// Pre-save middleware
+// Virtual for checking if user account is accessible
+userSchema.virtual('isAccessible').get(function() {
+  return this.active && !this.isBanned && !this.isPaused;
+});
+
+// Pre-save middleware to hash password
 userSchema.pre('save', async function(next) {
-  // Hash password only if it's been modified
   if (!this.isModified('password')) {
     return next();
   }
-
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Migration middleware to handle lastActive -> lastLogin
-userSchema.pre('save', function(next) {
-  // If lastActive exists but lastLogin doesn't, copy it over
-  if (this.lastActive && !this.lastLogin) {
-    this.lastLogin = this.lastActive;
-  }
+  
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-// Instance methods
-userSchema.methods.matchPassword = async function(enteredPassword) {
+// Method to compare password
+userSchema.methods.comparePassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
-};
-
-userSchema.methods.generateResetToken = function() {
-  // Generate random token
-  const resetToken = crypto.randomBytes(20).toString('hex');
-
-  // Hash token and set to resetPasswordToken field
-  this.resetPasswordToken = crypto
-    .createHash('sha256')
-    .update(resetToken)
-    .digest('hex');
-
-  // Set token expire time (10 minutes)
-  this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
-
-  return resetToken;
-};
-
-userSchema.methods.updateLastLogin = function() {
-  this.lastLogin = new Date();
-  return this.save();
 };
 
 // Method to follow another user
@@ -242,17 +195,86 @@ userSchema.methods.removeFromFavorites = function(artworkId) {
   return Promise.resolve(this);
 };
 
+// NEW: Method to ban user
+userSchema.methods.banUser = function(duration = 7, reason = 'Violation of platform rules') {
+  const banUntil = new Date();
+  banUntil.setDate(banUntil.getDate() + duration);
+  
+  this.banUntil = banUntil;
+  this.banReason = reason;
+  this.active = false;
+  
+  return this.save();
+};
+
+// NEW: Method to unban user
+userSchema.methods.unbanUser = function() {
+  this.banUntil = undefined;
+  this.banReason = undefined;
+  this.active = true;
+  
+  return this.save();
+};
+
+// NEW: Method to pause user account
+userSchema.methods.pauseUser = function(duration = 7, reason = 'Account temporarily paused') {
+  const pauseUntil = new Date();
+  pauseUntil.setDate(pauseUntil.getDate() + duration);
+  
+  this.pauseUntil = pauseUntil;
+  this.pauseReason = reason;
+  
+  return this.save();
+};
+
+// NEW: Method to unpause user account
+userSchema.methods.unpauseUser = function() {
+  this.pauseUntil = undefined;
+  this.pauseReason = undefined;
+  
+  return this.save();
+};
+
 // Static methods
 userSchema.statics.findByEmail = function(email) {
   return this.findOne({ email: email.toLowerCase() });
 };
 
 userSchema.statics.findActiveUsers = function() {
-  return this.find({ active: true });
+  return this.find({ 
+    active: true,
+    $or: [
+      { banUntil: { $exists: false } },
+      { banUntil: { $lt: new Date() } }
+    ],
+    $or: [
+      { pauseUntil: { $exists: false } },
+      { pauseUntil: { $lt: new Date() } }
+    ]
+  });
 };
 
 userSchema.statics.findArtists = function() {
-  return this.find({ isArtist: true, active: true });
+  return this.find({ 
+    isArtist: true, 
+    active: true,
+    $or: [
+      { banUntil: { $exists: false } },
+      { banUntil: { $lt: new Date() } }
+    ]
+  });
+};
+
+userSchema.statics.findBannedUsers = function() {
+  return this.find({ 
+    banUntil: { $gt: new Date() } 
+  });
+};
+
+userSchema.statics.findPausedUsers = function() {
+  return this.find({ 
+    pauseUntil: { $gt: new Date() } 
+  });
 };
 
 const User = mongoose.model('User', userSchema);

@@ -40,24 +40,26 @@ const AdminLayout = () => {
           </NavLink>
           
           <NavLink 
-            to="/admin/products" 
-            className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}
-          >
-            Manage Products
-          </NavLink>
-          
-          <NavLink 
-            to="/admin/orders" 
-            className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}
-          >
-            Manage Orders
-          </NavLink>
-          
-          <NavLink 
             to="/admin/settings" 
             className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}
           >
             Site Settings
+          </NavLink>
+
+          <NavLink to="/admin/posts" className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}>
+            Manage Posts
+          </NavLink>
+
+          <NavLink to="/admin/artworks" className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}>
+            Manage Artworks
+          </NavLink>
+
+          <NavLink to="/admin/auctions" className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}>
+            Auctions
+          </NavLink>
+
+          <NavLink to="/admin/artist-requests" className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}>
+            Artist Requests
           </NavLink>
         </nav>
         

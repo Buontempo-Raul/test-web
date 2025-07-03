@@ -58,7 +58,7 @@ const admin = (req, res, next) => {
   } else {
     res.status(403).json({
       success: false,
-      message: 'Not authorized as an admin'
+      message: 'Access denied. Admin privileges required.'
     });
   }
 };
