@@ -1,18 +1,18 @@
-/* src/pages/Shop/ProductDetail.css - Enhanced to match Shop page design */
+/* Enhanced ProductDetail.css - Modern, luxurious design with advanced animations */
 
-/* Main Container with Animated Background - This is the actual root div */
+/* Main Container with Dynamic Animated Background */
 .product-detail-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #7209b7 100%);
   position: relative;
   overflow-x: hidden;
   padding: 20px;
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  max-width: none; /* Remove the max-width constraint */
+  max-width: none;
 }
 
-/* Animated background elements matching Shop page */
+/* Animated background with floating particles */
 .product-detail-container::before {
   content: '';
   position: absolute;
@@ -20,164 +20,142 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(255,255,255,0.05)"/><circle cx="75" cy="75" r="1.5" fill="rgba(255,255,255,0.03)"/><circle cx="50" cy="10" r="0.5" fill="rgba(255,255,255,0.07)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(255, 107, 107, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(254, 202, 87, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 40% 60%, rgba(102, 126, 234, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 60% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 30%);
+  animation: floatingParticles 20s ease-in-out infinite;
   pointer-events: none;
   z-index: 0;
-  animation: float 20s ease-in-out infinite;
 }
 
-/* Floating orbs animation */
+/* Floating orbs with complex motion */
 .product-detail-container::after {
   content: '';
   position: absolute;
-  width: 300px;
-  height: 300px;
+  width: 400px;
+  height: 400px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-  top: -150px;
-  right: -150px;
-  animation: orbit 25s linear infinite;
+  background: radial-gradient(circle, rgba(255, 107, 107, 0.15) 0%, rgba(254, 202, 87, 0.1) 50%, transparent 70%);
+  top: -200px;
+  right: -200px;
+  animation: complexOrbit 30s linear infinite;
   z-index: 0;
 }
 
-/* Additional floating elements */
+/* Additional moving elements */
 .product-detail-container {
   background: 
-    radial-gradient(circle at 20% 80%, rgba(254, 202, 87, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 107, 107, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 40% 40%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
-    linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  animation: gradientShift 15s ease-in-out infinite;
+    radial-gradient(ellipse at top left, rgba(255, 107, 107, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(254, 202, 87, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at center, rgba(102, 126, 234, 0.08) 0%, transparent 50%),
+    linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #7209b7 100%);
+  animation: breathingGlow 12s ease-in-out infinite;
 }
 
-/* Keyframe animations */
-@keyframes float {
+/* Enhanced keyframe animations */
+@keyframes floatingParticles {
   0%, 100% { 
-    transform: translateY(0px) rotate(0deg);
+    transform: translate(0px, 0px) rotate(0deg);
     opacity: 0.7;
   }
+  25% { 
+    transform: translate(30px, -20px) rotate(90deg);
+    opacity: 1;
+  }
   50% { 
-    transform: translateY(-20px) rotate(180deg);
+    transform: translate(-20px, -40px) rotate(180deg);
+    opacity: 0.8;
+  }
+  75% { 
+    transform: translate(-30px, 20px) rotate(270deg);
     opacity: 1;
   }
 }
 
-@keyframes orbit {
+@keyframes complexOrbit {
   0% { 
-    transform: rotate(0deg) translateX(100px) rotate(0deg);
+    transform: rotate(0deg) translateX(150px) rotate(0deg) scale(1);
+    opacity: 0.6;
+  }
+  25% { 
+    transform: rotate(90deg) translateX(150px) rotate(-90deg) scale(1.2);
+    opacity: 0.8;
+  }
+  50% { 
+    transform: rotate(180deg) translateX(150px) rotate(-180deg) scale(1);
+    opacity: 0.6;
+  }
+  75% { 
+    transform: rotate(270deg) translateX(150px) rotate(-270deg) scale(1.2);
+    opacity: 0.8;
   }
   100% { 
-    transform: rotate(360deg) translateX(100px) rotate(-360deg);
+    transform: rotate(360deg) translateX(150px) rotate(-360deg) scale(1);
+    opacity: 0.6;
   }
 }
 
-@keyframes gradientShift {
+@keyframes breathingGlow {
   0%, 100% {
-    background: 
-      radial-gradient(circle at 20% 80%, rgba(254, 202, 87, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 107, 107, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
-      linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
-  25% {
-    background: 
-      radial-gradient(circle at 80% 20%, rgba(254, 202, 87, 0.2) 0%, transparent 50%),
-      radial-gradient(circle at 20% 80%, rgba(255, 107, 107, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 60% 60%, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
-      linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    filter: brightness(1) contrast(1);
   }
   50% {
-    background: 
-      radial-gradient(circle at 60% 60%, rgba(254, 202, 87, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(255, 107, 107, 0.2) 0%, transparent 50%),
-      radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
-      linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
-  75% {
-    background: 
-      radial-gradient(circle at 40% 40%, rgba(254, 202, 87, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 60% 60%, rgba(255, 107, 107, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(102, 126, 234, 0.2) 0%, transparent 50%),
-      linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    filter: brightness(1.1) contrast(1.05);
   }
 }
 
-/* Particle effect for modern touch */
-.product-detail-container {
-  position: relative;
-}
-
-.product-detail-container:before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: 
-    radial-gradient(2px 2px at 20px 30px, rgba(255, 255, 255, 0.3), transparent),
-    radial-gradient(2px 2px at 40px 70px, rgba(255, 107, 107, 0.3), transparent),
-    radial-gradient(1px 1px at 90px 40px, rgba(254, 202, 87, 0.4), transparent),
-    radial-gradient(1px 1px at 130px 80px, rgba(255, 255, 255, 0.2), transparent),
-    radial-gradient(2px 2px at 160px 30px, rgba(255, 107, 107, 0.2), transparent);
-  background-repeat: repeat;
-  background-size: 200px 100px;
-  animation: sparkle 8s linear infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-
-@keyframes sparkle {
-  0%, 100% { 
-    opacity: 0.6;
-    transform: translateY(-50%) scale(1);
-  }
-  50% { 
-    opacity: 1;
-    transform: translateY(-50%) scale(1.2);
-  }
-}
-
-
-/* Inner Content Wrapper */
+/* Content positioning */
 .product-detail-container > * {
   position: relative;
   z-index: 1;
 }
 
-/* Breadcrumbs with glassmorphism */
+/* Enhanced Breadcrumbs */
 .product-breadcrumbs {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin-bottom: 30px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 12px 20px;
-  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  padding: 16px 24px;
+  border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
+  transition: all 0.3s ease;
+}
+
+.product-breadcrumbs:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
 .product-breadcrumbs a {
   color: rgba(255, 255, 255, 0.9);
   text-decoration: none;
-  transition: color 0.2s;
-  font-weight: 500;
+  transition: all 0.3s ease;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 8px;
 }
 
 .product-breadcrumbs a:hover {
   color: #feca57;
-  text-decoration: underline;
+  background: rgba(254, 202, 87, 0.1);
+  transform: scale(1.05);
 }
 
 .product-breadcrumbs span {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 16px;
 }
 
 /* Loading States with modern styling */
@@ -195,13 +173,14 @@
 }
 
 .loading-spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top: 4px solid #feca57;
+  width: 80px;
+  height: 80px;
+  border: 5px solid rgba(255, 255, 255, 0.1);
+  border-top: 5px solid #feca57;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 24px;
+  margin-bottom: 30px;
+  box-shadow: 0 0 20px rgba(254, 202, 87, 0.3);
 }
 
 @keyframes spin {
@@ -212,52 +191,71 @@
 .product-error h2,
 .product-not-found h2 {
   color: #ff6b6b;
-  margin-bottom: 15px;
-  font-size: 2rem;
-  font-weight: 800;
+  margin-bottom: 20px;
+  font-size: 2.5rem;
+  font-weight: 900;
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .product-loading p,
 .product-error p,
 .product-not-found p {
   color: rgba(255, 255, 255, 0.9);
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .back-to-shop {
   display: inline-block;
-  padding: 16px 32px;
+  padding: 18px 36px;
   background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
   color: white;
   text-decoration: none;
-  border-radius: 60px;
-  margin-top: 20px;
+  border-radius: 50px;
+  margin-top: 25px;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  box-shadow: 0 8px 24px rgba(255, 107, 107, 0.4);
+  letter-spacing: 1.5px;
+  box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.back-to-shop::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.back-to-shop:hover::before {
+  left: 100%;
 }
 
 .back-to-shop:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(255, 107, 107, 0.6);
+  transform: translateY(-6px) scale(1.05);
+  box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
   text-decoration: none;
   color: white;
 }
 
-/* Main Layout - Center content */
+/* Enhanced Main Layout */
 .product-main {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  gap: 50px;
   align-items: start;
   max-width: 1200px;
   margin: 0 auto;
 }
 
-/* Image Gallery with enhanced styling */
+/* Enhanced Image Gallery */
 .product-gallery {
   position: sticky;
   top: 20px;
@@ -265,33 +263,38 @@
 
 .main-image-container {
   position: relative;
-  margin-bottom: 20px;
-  border-radius: 24px;
+  margin-bottom: 25px;
+  border-radius: 30px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(25px);
   box-shadow: 
-    0 20px 40px rgba(0, 0, 0, 0.1),
-    0 8px 16px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    0 25px 50px rgba(0, 0, 0, 0.15),
+    0 10px 20px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .main-image-container:hover {
-  transform: translateY(-4px);
+  transform: translateY(-8px) scale(1.02);
   box-shadow: 
-    0 32px 64px rgba(0, 0, 0, 0.15),
-    0 16px 32px rgba(0, 0, 0, 0.1),
+    0 40px 80px rgba(0, 0, 0, 0.2),
+    0 20px 40px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .main-image {
   width: 100%;
-  height: 500px;
+  height: 550px;
   object-fit: contain;
   display: block;
   background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  transition: transform 0.3s ease;
+}
+
+.main-image-container:hover .main-image {
+  transform: scale(1.05);
 }
 
 .sold-overlay-large {
@@ -305,327 +308,374 @@
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 48px;
-  font-weight: 800;
-  backdrop-filter: blur(4px);
+  font-size: 52px;
+  font-weight: 900;
+  backdrop-filter: blur(8px);
   text-transform: uppercase;
-  letter-spacing: 3px;
+  letter-spacing: 4px;
   z-index: 2;
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Image Thumbnails Enhanced */
+/* Enhanced Image Thumbnails */
 .image-thumbnails {
   display: flex;
-  gap: 12px;
+  gap: 15px;
   overflow-x: auto;
-  padding: 10px 0;
+  padding: 15px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #667eea rgba(102, 126, 234, 0.1);
 }
 
 .image-thumbnails::-webkit-scrollbar {
-  height: 6px;
+  height: 8px;
 }
 
 .image-thumbnails::-webkit-scrollbar-track {
   background: rgba(102, 126, 234, 0.1);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .image-thumbnails::-webkit-scrollbar-thumb {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .thumbnail {
   flex-shrink: 0;
-  width: 80px;
-  height: 80px;
-  border-radius: 12px;
+  width: 90px;
+  height: 90px;
+  border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
-  border: 2px solid transparent;
-  transition: all 0.3s ease;
+  border: 3px solid transparent;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(15px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .thumbnail:hover {
   border-color: #667eea;
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transform: scale(1.15) rotate(2deg);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
 }
 
 .thumbnail.active {
   border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.3);
+  transform: scale(1.1);
 }
 
 .thumbnail img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.3s ease;
 }
 
-/* Product Information Section */
+.thumbnail:hover img {
+  transform: scale(1.1);
+}
+
+/* Enhanced Product Information Section */
 .product-info-section {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 24px;
-  padding: 40px;
+  backdrop-filter: blur(25px);
+  border-radius: 30px;
+  padding: 50px;
   box-shadow: 
-    0 20px 40px rgba(0, 0, 0, 0.1),
-    0 8px 16px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    0 25px 50px rgba(0, 0, 0, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.3);
   margin-bottom: 30px;
+  transition: all 0.3s ease;
+}
+
+.product-info-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.15),
+    0 15px 30px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .product-title {
-  font-size: 3.5rem;
+  font-size: 4rem;
   font-weight: 900;
-  color: #ffffff;
-  margin-bottom: 20px;
+  color: #1a1a2e;
+  margin-bottom: 25px;
   line-height: 1.1;
-  /*text-shadow: 
-    0 4px 8px rgba(0, 0, 0, 0.3),
-    0 2px 4px rgba(0, 0, 0, 0.2);*/
-  background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #ffffff 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #533483 50%, #7209b7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   position: relative;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .product-title::after {
   content: '';
   position: absolute;
-  bottom: -8px;
+  bottom: -10px;
   left: 0;
-  width: 80px;
-  height: 4px;
+  width: 100px;
+  height: 6px;
   background: linear-gradient(90deg, #feca57 0%, #ff6b6b 100%);
-  border-radius: 2px;
-  box-shadow: 0 2px 8px rgba(254, 202, 87, 0.4);
+  border-radius: 3px;
+  animation: glow 2s ease-in-out infinite alternate;
 }
 
-.product-artist {
-  color: #feca57;
-  font-weight: 700;
-  margin-bottom: 25px;
-  font-size: 1.4rem;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  /*text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);*/
-  background: linear-gradient(135deg, #feca57 0%, #ff6b6b 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  position: relative;
-  display: inline-block;
-}
-
-.product-artist::before {
-  content: '✦';
-  position: absolute;
-  left: -25px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #feca57;
-  font-size: 1rem;
-  animation: sparkle 2s ease-in-out infinite;
-}
-
-.product-artist::after {
-  content: '✦';
-  position: absolute;
-  right: -25px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #ff6b6b;
-  font-size: 1rem;
-  animation: sparkle 2s ease-in-out infinite reverse;
+@keyframes glow {
+  from {
+    box-shadow: 0 0 5px rgba(254, 202, 87, 0.5);
+  }
+  to {
+    box-shadow: 0 0 20px rgba(254, 202, 87, 0.8);
+  }
 }
 
 .product-description {
-  color: rgba(255, 255, 255, 0.9);
   font-size: 1.2rem;
+  color: #4a5568;
   line-height: 1.8;
   margin-bottom: 30px;
   font-weight: 400;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  background: rgba(255, 255, 255, 0.1);
-  padding: 20px;
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-align: justify;
 }
 
-/* Live Auction Section Enhanced */
-.live-auction-section {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 30px;
-  margin-bottom: 25px;
-  border: 2px solid rgba(102, 126, 234, 0.2);
-  box-shadow: 
-    0 8px 32px rgba(102, 126, 234, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  position: relative;
-  overflow: hidden;
-}
-
-.live-auction-section::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%);
-  animation: shimmer 2s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-.live-auction-section h3 {
-  margin-bottom: 25px;
-  color: #ffffff;
-  font-size: 1.8rem;
+.product-price {
+  font-size: 2.8rem;
   font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.live-icon {
-  animation: pulse 2s infinite;
-  color: #28a745;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-/* Auction Management Enhanced */
-.auction-management {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(15px);
-  border-radius: 16px;
-  padding: 25px;
-  margin-bottom: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.auction-management h3 {
-  margin-bottom: 20px;
-  color: #1a1a1a;
-  font-size: 1.3rem;
-  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 30px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Enhanced Buttons */
-.start-auction-button,
-.end-auction-button {
+.artist-info {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px 32px;
-  border: none;
-  border-radius: 60px;
-  font-size: 1.1rem;
+  gap: 20px;
+  padding: 25px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-radius: 20px;
+  margin-bottom: 30px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+  transition: all 0.3s ease;
+}
+
+.artist-info:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+}
+
+.artist-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(102, 126, 234, 0.2);
+  transition: all 0.3s ease;
+}
+
+.artist-avatar:hover {
+  border-color: #667eea;
+  transform: scale(1.1);
+}
+
+.artist-details h4 {
+  margin: 0 0 5px 0;
+  color: #1a1a2e;
+  font-size: 1.3rem;
   font-weight: 700;
-  cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.artist-details p {
+  margin: 0;
+  color: #718096;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Enhanced Auction Section */
+.auction-section {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(25px);
+  border-radius: 30px;
+  padding: 40px;
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  margin-bottom: 30px;
+  min-height: fit-content;
+  overflow: visible;
+}
+
+.auction-section h3 {
+  margin-bottom: 30px;
+  color: #1a1a2e;
+  font-size: 1.8rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   position: relative;
-  overflow: hidden;
+  padding-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.start-auction-button {
-  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-  color: white;
-  box-shadow: 0 8px 24px rgba(40, 167, 69, 0.4);
-}
-
-.start-auction-button::before {
+.auction-section h3::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.6s;
+  bottom: 0;
+  left: 0;
+  width: 80px;
+  height: 4px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 2px;
 }
 
-.start-auction-button:hover::before {
-  left: 100%;
-}
-
-.start-auction-button:hover:not(:disabled) {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(40, 167, 69, 0.6);
-}
-
-.end-auction-button {
-  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-  color: white;
-  box-shadow: 0 8px 24px rgba(220, 53, 69, 0.4);
-}
-
-.end-auction-button:hover:not(:disabled) {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(220, 53, 69, 0.6);
-}
-
-.start-auction-button:disabled,
-.end-auction-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-/* Duration Selector Enhanced */
-.duration-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.duration-selector label {
+/* Auction Status Indicator */
+.auction-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: #2d3748;
-  font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.duration-selector select {
-  padding: 16px 20px;
-  border: 2px solid rgba(102, 126, 234, 0.2);
-  border-radius: 16px;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%);
-  color: #2d3748;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
+.auction-status.active {
+  background: linear-gradient(135deg, rgba(72, 187, 120, 0.1) 0%, rgba(56, 161, 105, 0.1) 100%);
+  color: #38a169;
+  border: 1px solid rgba(72, 187, 120, 0.2);
+}
+
+.auction-status.ended {
+  background: linear-gradient(135deg, rgba(229, 62, 62, 0.1) 0%, rgba(197, 48, 48, 0.1) 100%);
+  color: #e53e3e;
+  border: 1px solid rgba(229, 62, 62, 0.2);
+}
+
+.auction-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Auction Information Layout */
+.auction-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+.auction-info-item {
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
   transition: all 0.3s ease;
+}
+
+.auction-info-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
+}
+
+.auction-info-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.auction-info-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.current-bid {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #2d3748;
+  margin-bottom: 25px;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+  padding: 20px;
+  border-radius: 20px;
+  background-color: rgba(72, 187, 120, 0.05);
+  border: 1px solid rgba(72, 187, 120, 0.1);
+}
+
+/* Auction Management Section */
+.auction-management {
+  margin-bottom: 30px;
+  padding: 25px;
+  background: linear-gradient(135deg, rgba(254, 202, 87, 0.05) 0%, rgba(255, 179, 0, 0.05) 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(254, 202, 87, 0.2);
+}
+
+.auction-management h4 {
+  margin-bottom: 20px;
+  color: #1a1a2e;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Duration selector */
+.duration-selector {
+  margin-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.duration-selector label {
+  font-weight: 600;
+  color: #1a1a2e;
+  font-size: 1.1rem;
+}
+
+.duration-selector select {
+  padding: 15px 20px;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 15px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  width: 100%;
 }
 
 .duration-selector select:focus {
@@ -634,72 +684,45 @@
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
 
-/* Auction Status Enhanced */
-.auction-status {
+/* Auction Actions */
+.auction-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 24px;
-  border-radius: 16px;
-  font-weight: 600;
+  flex-direction: column;
+  gap: 15px;
   margin-bottom: 25px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.auction-active {
-  background: linear-gradient(135deg, 
-    rgba(40, 167, 69, 0.95) 0%, 
-    rgba(32, 201, 151, 0.95) 100%);
-  color: white;
-  box-shadow: 
-    0 6px 24px rgba(40, 167, 69, 0.4),
-    0 0 20px rgba(40, 167, 69, 0.3);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.auction-ended {
-  background: linear-gradient(135deg, 
-    rgba(220, 53, 69, 0.95) 0%, 
-    rgba(200, 35, 51, 0.95) 100%);
-  color: white;
-  box-shadow: 
-    0 6px 24px rgba(220, 53, 69, 0.4),
-    0 0 20px rgba(220, 53, 69, 0.3);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.auction-ended h3 {
-  margin-bottom: 15px;
-  color: #dc3545;
-}
-
-/* Time Remaining Enhanced */
-.time-remaining {
-  font-size: 2.2rem;
-  font-weight: 900;
-  color: #ffffff;
-  margin-bottom: 25px;
-  text-align: center;
-  padding: 25px 30px;
-  background: linear-gradient(135deg, 
-    rgba(254, 202, 87, 0.9) 0%, 
-    rgba(255, 107, 107, 0.9) 50%,
-    rgba(220, 53, 69, 0.9) 100%);
-  border-radius: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(15px);
-  box-shadow: 
-    0 8px 32px rgba(254, 202, 87, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+/* Enhanced Button Styles */
+.start-auction-button,
+.end-auction-button {
+  padding: 18px 36px;
+  border: none;
+  border-radius: 25px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
   position: relative;
   overflow: hidden;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  width: 100%;
 }
 
-.time-remaining::before {
+.start-auction-button {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(72, 187, 120, 0.3);
+}
+
+.end-auction-button {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(229, 62, 62, 0.3);
+}
+
+.start-auction-button::before,
+.end-auction-button::before {
   content: '';
   position: absolute;
   top: 0;
@@ -707,144 +730,154 @@
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  animation: shimmerTime 3s ease-in-out infinite;
+  transition: left 0.6s ease;
 }
 
-@keyframes shimmerTime {
-  0% { left: -100%; }
-  50% { left: 100%; }
-  100% { left: 100%; }
+.start-auction-button:hover::before,
+.end-auction-button:hover::before {
+  left: 100%;
 }
 
-.time-remaining .label {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 8px;
-  opacity: 0.9;
+.start-auction-button:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 30px rgba(72, 187, 120, 0.4);
 }
 
-/* Current Bid Enhanced */
-.current-bid {
-  font-size: 3rem;
-  font-weight: 900;
-  text-align: center;
-  margin-bottom: 30px;
-  padding: 30px;
-  background: linear-gradient(135deg, 
-    rgba(102, 126, 234, 0.9) 0%, 
-    rgba(118, 75, 162, 0.9) 50%,
-    rgba(79, 70, 229, 0.9) 100%);
-  border-radius: 24px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(15px);
-  color: #ffffff;
-  box-shadow: 
-    0 12px 40px rgba(102, 126, 234, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  position: relative;
-  overflow: hidden;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+.end-auction-button:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 30px rgba(229, 62, 62, 0.4);
 }
 
-.current-bid::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-  animation: shimmerBid 4s ease-in-out infinite;
+.start-auction-button:disabled,
+.end-auction-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
-@keyframes shimmerBid {
-  0% { left: -100%; }
-  50% { left: 100%; }
-  100% { left: 100%; }
-}
-
-.current-bid .label {
-  display: block;
-  font-size: 1rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 10px;
-  opacity: 0.9;
-}
-
-.current-bid .amount {
-  font-size: 3.5rem;
-  font-weight: 900;
-  background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #ffffff 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-}
-
-/* Bidding Section Enhanced */
-.bidding-section {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
+/* Auction Results Section */
+.auction-results {
+  padding: 25px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
   border-radius: 20px;
-  padding: 30px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
   margin-bottom: 25px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-.bidding-section h3 {
+.auction-results h4 {
   margin-bottom: 20px;
-  color: #1a1a1a;
-  font-size: 1.4rem;
+  color: #1a1a2e;
+  font-size: 1.5rem;
   font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
 }
 
+.winner-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 15px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.winner-trophy {
+  font-size: 2rem;
+  color: #feca57;
+}
+
+.winner-details {
+  flex: 1;
+}
+
+.winner-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 5px;
+}
+
+.winning-bid {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #48bb78;
+}
+
+/* Bid Form Improvements */
 .bid-form {
   display: flex;
+  flex-direction: column;
   gap: 15px;
-  align-items: flex-end;
+  margin-bottom: 25px;
+  padding: 25px;
+  background: rgba(248, 249, 250, 0.5);
+  border-radius: 20px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+.bid-input-group {
+  display: flex;
+  gap: 15px;
 }
 
 .bid-input {
   flex: 1;
-  padding: 16px 20px;
+  padding: 18px 24px;
   border: 2px solid rgba(102, 126, 234, 0.2);
-  border-radius: 16px;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%);
-  color: #2d3748;
+  border-radius: 15px;
   font-size: 1.1rem;
   font-weight: 600;
   transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
 }
 
 .bid-input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
 }
 
 .bid-button {
-  padding: 16px 32px;
+  padding: 18px 32px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 60px;
+  border-radius: 15px;
+  font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   text-transform: uppercase;
   letter-spacing: 1px;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+  position: relative;
+  overflow: hidden;
+  min-width: 140px;
 }
 
-.bid-button:hover:not(:disabled) {
+.bid-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.bid-button:hover::before {
+  left: 100%;
+}
+
+.bid-button:hover {
   transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6);
+  box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);
 }
 
 .bid-button:disabled {
@@ -853,123 +886,164 @@
   transform: none;
 }
 
-/* Bid History Enhanced */
+/* Time Remaining Enhanced */
+.time-remaining {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #e53e3e;
+  background: rgba(229, 62, 62, 0.1);
+  padding: 20px 25px;
+  border-radius: 20px;
+  text-align: center;
+  border: 2px solid rgba(229, 62, 62, 0.2);
+  margin-bottom: 25px;
+  animation: urgentPulse 2s infinite;
+}
+
+@keyframes urgentPulse {
+  0%, 100% { 
+    border-color: rgba(229, 62, 62, 0.2);
+    background: rgba(229, 62, 62, 0.1);
+  }
+  50% { 
+    border-color: rgba(229, 62, 62, 0.4);
+    background: rgba(229, 62, 62, 0.15);
+  }
+}
+
+.time-remaining.ended {
+  color: #718096;
+  background: rgba(113, 128, 150, 0.1);
+  border-color: rgba(113, 128, 150, 0.2);
+  animation: none;
+}
+
 .bid-history {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
+  background: rgba(248, 249, 250, 0.8);
   border-radius: 20px;
   padding: 30px;
-  margin-bottom: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-}
-
-.bid-history h3 {
-  margin-bottom: 25px;
-  color: #1a1a1a;
-  font-size: 1.4rem;
-  font-weight: 800;
-}
-
-.bid-list {
-  max-height: 300px;
+  margin-top: 25px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+  max-height: 400px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #667eea rgba(102, 126, 234, 0.1);
 }
 
-/* Custom scrollbar */
-.bid-list::-webkit-scrollbar {
-  width: 6px;
+.bid-history::-webkit-scrollbar {
+  width: 8px;
 }
 
-.bid-list::-webkit-scrollbar-track {
+.bid-history::-webkit-scrollbar-track {
   background: rgba(102, 126, 234, 0.1);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
-.bid-list::-webkit-scrollbar-thumb {
+.bid-history::-webkit-scrollbar-thumb {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 3px;
+  border-radius: 4px;
+}
+
+.bid-history::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+}
+
+.bid-history h4 {
+  margin-bottom: 25px;
+  color: #1a1a2e;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: sticky;
+  top: 0;
+  background: rgba(248, 249, 250, 0.95);
+  backdrop-filter: blur(10px);
+  padding-bottom: 15px;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
 }
 
 .bid-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-radius: 12px;
-  margin-bottom: 10px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  padding: 20px;
+  margin-bottom: 15px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(102, 126, 234, 0.05);
   transition: all 0.3s ease;
-  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .bid-item:hover {
-  transform: translateX(4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
 }
 
-.bid-item.highest {
-  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-  color: white;
+.bid-item:last-child {
+  margin-bottom: 0;
+}
+
+.bid-user {
   font-weight: 600;
-  box-shadow: 0 4px 20px rgba(40, 167, 69, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.bid-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex: 1;
-}
-
-.bidder {
-  font-weight: 600;
+  color: #1a1a2e;
+  font-size: 1.1rem;
 }
 
 .bid-amount {
+  font-weight: 700;
+  color: #667eea;
   font-size: 1.2rem;
-  font-weight: 800;
-  margin-left: 20px;
 }
 
 .bid-time {
   font-size: 0.9rem;
-  opacity: 0.7;
-  margin-left: 15px;
+  color: #718096;
+  font-weight: 500;
+  margin-top: 5px;
+}
+
+/* Empty state for bid history */
+.bid-history-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #718096;
+  font-size: 1.1rem;
   font-weight: 500;
 }
 
-.no-bids {
-  text-align: center;
-  color: #666;
-  font-style: italic;
-  padding: 40px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-  border-radius: 12px;
-  border: 2px dashed rgba(102, 126, 234, 0.2);
+.bid-history-empty::before {
+  content: '🎯';
+  display: block;
+  font-size: 3rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
 }
 
-/* Artwork Details Enhanced */
+/* Enhanced Artwork Details */
 .artwork-details {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 30px;
-  margin-bottom: 30px;
+  backdrop-filter: blur(25px);
+  border-radius: 30px;
+  padding: 40px;
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
 .artwork-details h3 {
-  margin-bottom: 25px;
-  color: #1a1a1a;
-  font-size: 1.4rem;
+  margin-bottom: 30px;
+  color: #1a1a2e;
+  font-size: 1.8rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   position: relative;
-  padding-bottom: 10px;
+  padding-bottom: 15px;
 }
 
 .artwork-details h3::after {
@@ -977,15 +1051,15 @@
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 60px;
-  height: 3px;
+  width: 80px;
+  height: 4px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 2px;
 }
 
 .details-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
 }
 
@@ -993,16 +1067,16 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-radius: 12px;
+  padding: 20px 25px;
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-radius: 20px;
   border: 1px solid rgba(102, 126, 234, 0.1);
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .detail-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
 }
 
@@ -1015,30 +1089,41 @@
 }
 
 .detail-value {
-  color: #1a1a1a;
+  color: #1a1a2e;
   font-weight: 600;
   font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-/* Tags Enhanced */
+.views-icon,
+.likes-icon {
+  opacity: 0.7;
+}
+
+/* Enhanced Tags */
 .artwork-tags {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 30px;
+  backdrop-filter: blur(25px);
+  border-radius: 30px;
+  padding: 40px;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.1),
+    0 10px 20px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .artwork-tags h3 {
-  margin-bottom: 20px;
-  color: #1a1a1a;
-  font-size: 1.4rem;
+  margin-bottom: 30px;
+  color: #1a1a2e;
+  font-size: 1.8rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   position: relative;
-  padding-bottom: 10px;
+  padding-bottom: 15px;
 }
 
 .artwork-tags h3::after {
@@ -1046,8 +1131,8 @@
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 60px;
-  height: 3px;
+  width: 80px;
+  height: 4px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 2px;
 }
@@ -1055,256 +1140,256 @@
 .tag-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 15px;
 }
 
 .tag {
   display: inline-block;
-  padding: 10px 20px;
+  padding: 12px 24px;
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
   color: #667eea;
   text-decoration: none;
-  border-radius: 30px;
-  font-size: 0.95rem;
+  border-radius: 50px;
+  font-size: 1rem;
   font-weight: 600;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  border: 1px solid rgba(102, 126, 234, 0.2);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 2px solid rgba(102, 126, 234, 0.2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  position: relative;
+  overflow: hidden;
+}
+
+.tag::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.tag:hover::before {
+  left: 100%;
 }
 
 .tag:hover {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   text-decoration: none;
-  transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+  border-color: transparent;
 }
 
-/* Auction Info Messages Enhanced */
+/* Enhanced Auction Info Messages */
 .auction-info {
-  padding: 20px 25px;
-  border-radius: 16px;
-  margin-bottom: 20px;
+  padding: 25px 30px;
+  border-radius: 20px;
+  margin-bottom: 25px;
   font-weight: 600;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(15px);
   border: 2px solid rgba(255, 255, 255, 0.3);
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 1rem;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  gap: 15px;
+  font-size: 1.1rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.auction-info:hover {
+  transform: translateY(-2px);
 }
 
 .auction-info.warning {
   background: linear-gradient(135deg, rgba(255, 193, 7, 0.9) 0%, rgba(255, 179, 0, 0.9) 100%);
   color: #856404;
-  box-shadow: 0 4px 20px rgba(255, 193, 7, 0.3);
+  box-shadow: 0 8px 25px rgba(255, 193, 7, 0.3);
 }
 
 .auction-info.info {
   background: linear-gradient(135deg, rgba(13, 202, 240, 0.9) 0%, rgba(11, 124, 181, 0.9) 100%);
   color: #0c5460;
-  box-shadow: 0 4px 20px rgba(13, 202, 240, 0.3);
+  box-shadow: 0 8px 25px rgba(13, 202, 240, 0.3);
+}
+
+.auction-info.success {
+  background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(34, 139, 58, 0.9) 100%);
+  color: #155724;
+  box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
 }
 
 .auction-info.error {
-  background: linear-gradient(135deg, rgba(220, 53, 69, 0.9) 0%, rgba(200, 35, 51, 0.9) 100%);
-  color: white;
-  box-shadow: 0 4px 20px rgba(220, 53, 69, 0.3);
+  background: linear-gradient(135deg, rgba(220, 53, 69, 0.9) 0%, rgba(176, 42, 55, 0.9) 100%);
+  color: #721c24;
+  box-shadow: 0 8px 25px rgba(220, 53, 69, 0.3);
 }
 
-/* Artist Controls Enhanced */
-.artist-auction-controls {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 30px;
-  margin-bottom: 25px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+/* Enhanced Button Styles */
+.start-auction-button,
+.end-auction-button {
+  padding: 18px 36px;
+  border: none;
+  border-radius: 50px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 10px 5px;
   position: relative;
+  overflow: hidden;
 }
 
-.artist-auction-controls::before {
+.start-auction-button {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(72, 187, 120, 0.3);
+}
+
+.end-auction-button {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  color: white;
+  box-shadow: 0 8px 20px rgba(229, 62, 62, 0.3);
+}
+
+.start-auction-button::before,
+.end-auction-button::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #feca57 100%);
-  border-radius: 20px 20px 0 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
 }
 
-.auction-active-notice {
+.start-auction-button:hover::before,
+.end-auction-button:hover::before {
+  left: 100%;
+}
+
+.start-auction-button:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 30px rgba(72, 187, 120, 0.4);
+}
+
+.end-auction-button:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 30px rgba(229, 62, 62, 0.4);
+}
+
+.start-auction-button:disabled,
+.end-auction-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Duration selector */
+.duration-selector {
+  margin-bottom: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #28a745;
-  font-weight: 500;
-  margin: 0;
-  padding: 10px 12px;
-  background: rgba(40, 167, 69, 0.15);
-  border-radius: 6px;
-  border-left: 4px solid #28a745;
+  gap: 15px;
 }
 
-/* Special styling for auction ending warning */
-.auction-ending {
-  animation: auctionEnding 2s ease-in-out infinite;
+.duration-selector label {
+  font-weight: 600;
+  color: #1a1a2e;
+  font-size: 1.1rem;
 }
 
-/* Icons styling */
-.live-icon, .play-icon, .stop-icon {
-  flex-shrink: 0;
+.duration-selector select {
+  padding: 12px 20px;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-radius: 15px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
 }
 
-.loading-spinner {
-  animation: spin 1s linear infinite;
-}
-
-/* Views and likes icons */
-.views-icon, .likes-icon {
-  margin-right: 6px;
-  vertical-align: middle;
+.duration-selector select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
 
 /* Responsive Design */
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .product-main {
     grid-template-columns: 1fr;
     gap: 30px;
   }
   
-  .product-gallery {
-    position: static;
+  .product-title {
+    font-size: 2.5rem;
+  }
+  
+  .product-info-section,
+  .auction-section,
+  .artwork-details,
+  .artwork-tags {
+    padding: 25px;
   }
   
   .main-image {
     height: 400px;
   }
-}
-
-@media (max-width: 768px) {
-  .product-detail-container {
-    padding: 15px;
-  }
   
-  .product-info-section,
-  .live-auction-section,
-  .bidding-section,
-  .bid-history,
-  .artwork-details,
-  .artwork-tags,
-  .artist-auction-controls {
-    padding: 20px;
-    border-radius: 16px;
-  }
-  
-  .product-title {
-    font-size: 2rem;
-  }
-  
-  .current-bid {
-    font-size: 2rem;
+  .bid-form {
     padding: 20px;
   }
   
-  .time-remaining {
-    font-size: 1.5rem;
-    padding: 16px;
+  .bid-input-group {
+    flex-direction: column;
+  }
+  
+  .auction-info-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .auction-actions {
+    gap: 12px;
   }
   
   .details-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
   }
   
-  .bid-form {
-    flex-direction: column;
-    align-items: stretch;
+  .thumbnail {
+    width: 70px;
+    height: 70px;
   }
   
-  .bid-button {
-    margin-top: 10px;
-  }
-  
-  .tag-list {
-    gap: 8px;
-  }
-  
-  .tag {
-    padding: 8px 16px;
-    font-size: 0.85rem;
-  }
-  
-  .product-breadcrumbs {
-    padding: 10px 15px;
-    margin-bottom: 20px;
-  }
-}
-
-@media (max-width: 768px) {
-  .product-title {
-    font-size: 2.5rem;
-  }
-  
-  .product-artist {
-    font-size: 1.2rem;
-    letter-spacing: 1px;
-  }
-  
-  .current-bid {
-    font-size: 2.2rem;
+  .bid-history {
+    max-height: 300px;
     padding: 20px;
-  }
-  
-  .current-bid .amount {
-    font-size: 2.8rem;
-  }
-  
-  .time-remaining {
-    font-size: 1.8rem;
-    padding: 20px;
-  }
-}
-
-@media (max-width: 480px) {
-  .product-title {
-    font-size: 2rem;
-  }
-  
-  .product-artist {
-    font-size: 1rem;
-  }
-  
-  .current-bid {
-    font-size: 1.8rem;
-    padding: 15px;
-  }
-  
-  .current-bid .amount {
-    font-size: 2.2rem;
-  }
-  
-  .time-remaining {
-    font-size: 1.5rem;
-    padding: 15px;
   }
 }
 
 @media (max-width: 480px) {
   .product-detail-container {
-    padding: 10px;
+    padding: 15px;
   }
   
   .product-title {
-    font-size: 1.8rem;
+    font-size: 2rem;
   }
   
-  .product-artist {
-    font-size: 1rem;
+  .product-info-section,
+  .auction-section,
+  .artwork-details,
+  .artwork-tags {
+    padding: 20px;
   }
   
   .current-bid {
@@ -1312,98 +1397,37 @@
     padding: 15px;
   }
   
-  .time-remaining {
-    font-size: 1.3rem;
-    padding: 12px;
+  .main-image {
+    height: 300px;
   }
   
-  .start-auction-button,
-  .end-auction-button,
-  .bid-button {
-    padding: 14px 24px;
-    font-size: 1rem;
+  .auction-section h3 {
+    font-size: 1.4rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .auction-status {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+  }
+  
+  .bid-history {
+    max-height: 250px;
+    padding: 15px;
   }
   
   .bid-item {
-    padding: 12px 15px;
-  }
-  
-  .bid-amount {
-    font-size: 1.1rem;
-  }
-  
-  .detail-item {
-    padding: 12px 15px;
-  }
-  
-  .product-info-section,
-  .live-auction-section,
-  .bidding-section,
-  .bid-history,
-  .artwork-details,
-  .artwork-tags,
-  .artist-auction-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
     padding: 15px;
   }
-}
-
-/* Loading states for buttons */
-.button-loading {
-  position: relative;
-  color: transparent !important;
-}
-
-.button-loading::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Enhanced focus states for accessibility */
-.bid-input:focus,
-.duration-selector select:focus {
-  outline: 3px solid rgba(102, 126, 234, 0.3);
-  outline-offset: 2px;
-}
-
-.start-auction-button:focus,
-.end-auction-button:focus,
-.bid-button:focus {
-  outline: 3px solid rgba(255, 255, 255, 0.5);
-  outline-offset: 3px;
-}
-
-/* Animation for new bids */
-@keyframes newBid {
-  0% {
-    background: linear-gradient(135deg, #feca57 0%, #ff6b6b 100%);
-    transform: scale(1.05);
-  }
-  100% {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    transform: scale(1);
-  }
-}
-
-.bid-item.new-bid {
-  animation: newBid 1s ease-out;
-}
-
-/* Auction ending animation */
-@keyframes auctionEnding {
-  0%, 100% { 
-    border-color: rgba(220, 53, 69, 0.3);
-  }
-  50% { 
-    border-color: rgba(220, 53, 69, 0.8);
-    box-shadow: 0 0 20px rgba(220, 53, 69, 0.4);
+  
+  .start-auction-button,
+  .end-auction-button {
+    padding: 15px 24px;
+    font-size: 1rem;
   }
 }
