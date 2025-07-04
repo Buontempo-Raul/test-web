@@ -85,6 +85,47 @@ const AdminPosts = () => {
     return text.substring(0, maxLength) + '...';
   };
 
+  // FIXED: Helper function to get the primary image from a post
+  const getPostImage = (post) => {
+    // Check for images array first (new format)
+    if (post.images && post.images.length > 0) {
+      return post.images[0];
+    }
+    
+    // Check for content field (old format)
+    if (post.content) {
+      if (post.content.url) {
+        return post.content.url;
+      }
+      if (post.content.items && post.content.items.length > 0) {
+        return post.content.items[0].url;
+      }
+    }
+    
+    // Return placeholder if no image found
+    return null;
+  };
+
+  // FIXED: Helper function to get all images from a post
+  const getAllPostImages = (post) => {
+    // Check for images array first (new format)
+    if (post.images && post.images.length > 0) {
+      return post.images;
+    }
+    
+    // Check for content field (old format)
+    if (post.content) {
+      if (post.content.url) {
+        return [post.content.url];
+      }
+      if (post.content.items && post.content.items.length > 0) {
+        return post.content.items.map(item => item.url);
+      }
+    }
+    
+    return [];
+  };
+
   const handleViewPost = (post) => {
     setSelectedPost(post);
     setShowPostModal(true);
@@ -126,6 +167,10 @@ const AdminPosts = () => {
     }
     
     return { status: 'normal', color: '#27ae60', text: 'Normal' };
+  };
+
+  const getPlaceholderImage = () => {
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0yMCAyNy41QzI0LjE0MjEgMjcuNSAyNy41IDI0LjE0MjEgMjcuNSAyMEMyNy41IDE1Ljg1NzkgMjQuMTQyMSAxMi41IDIwIDEyLjVDMTUuODU3OSAxMi41IDEyLjUgMTUuODU3OSAxMi41IDIwQzEyLjUgMjQuMTQyMSAxNS44NTc5IDI3LjUgMjAgMjcuNVoiIGZpbGw9IiM2Qzc1N0QiLz4KPC9zdmc+';
   };
 
   if (isLoading) {
@@ -171,16 +216,18 @@ const AdminPosts = () => {
           <tbody>
             {posts.map(post => {
               const status = getPostStatus(post);
+              const primaryImage = getPostImage(post);
+              
               return (
                 <tr key={post._id}>
                   <td>
                     <div className="post-preview">
                       <div className="post-image">
                         <img 
-                          src={post.content[0]} 
+                          src={primaryImage || getPlaceholderImage()} 
                           alt="Post preview"
                           onError={(e) => {
-                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0yMCAyNy41QzI0LjE0MjEgMjcuNSAyNy41IDI0LjE0MjEgMjcuNSAyMEMyNy41IDE1Ljg1NzkgMjQuMTQyMSAxMi41IDIwIDEyLjVDMTUuODU3OSAxMi41IDEyLjUgMTUuODU3OSAxMi41IDIwQzEyLjUgMjQuMTQyMSAxNS44NTc5IDI3LjUgMjAgMjcuNVoiIGZpbGw9IiM2Qzc1N0QiLz4KPC9zdmc+';
+                            e.target.src = getPlaceholderImage();
                           }}
                         />
                       </div>
@@ -189,7 +236,7 @@ const AdminPosts = () => {
                           {truncateText(post.caption)}
                         </div>
                         <div className="post-tags">
-                          {post.tags.slice(0, 3).map(tag => (
+                          {post.tags && post.tags.slice(0, 3).map(tag => (
                             <span key={tag} className="tag">#{tag}</span>
                           ))}
                         </div>
@@ -199,11 +246,11 @@ const AdminPosts = () => {
                   <td>
                     <div className="creator-info">
                       <div className="creator-avatar">
-                        {post.creator.username.charAt(0).toUpperCase()}
+                        {post.creator?.username?.charAt(0).toUpperCase() || 'U'}
                       </div>
-                      <div>
-                        <div className="creator-name">{post.creator.username}</div>
-                        <div className="creator-email">{post.creator.email}</div>
+                      <div className="creator-details">
+                        <div className="creator-name">{post.creator?.username || 'Unknown User'}</div>
+                        <div className="creator-email">{post.creator?.email || 'No email'}</div>
                       </div>
                     </div>
                   </td>
@@ -211,42 +258,45 @@ const AdminPosts = () => {
                     <div className="engagement-stats">
                       <div className="stat">
                         <span className="stat-icon">❤️</span>
-                        <span>{post.likes}</span>
+                        <span>{post.likes || 0}</span>
                       </div>
                       <div className="stat">
                         <span className="stat-icon">💬</span>
-                        <span>{post.comments.length}</span>
+                        <span>{post.comments ? post.comments.length : 0}</span>
                       </div>
-                      {post.linkedShopItems.length > 0 && (
-                        <div className="stat">
-                          <span className="stat-icon">🛒</span>
-                          <span>{post.linkedShopItems.length}</span>
-                        </div>
-                      )}
                     </div>
                   </td>
                   <td>
                     <span 
                       className="status-badge"
-                      style={{ backgroundColor: status.color }}
+                      style={{ 
+                        background: status.color,
+                        color: 'white',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600'
+                      }}
                     >
                       {status.text}
                     </span>
                   </td>
                   <td>{formatDate(post.createdAt)}</td>
-                  <td className="action-buttons">
-                    <button
-                      className="view-button"
-                      onClick={() => handleViewPost(post)}
-                    >
-                      View
-                    </button>
-                    <button
-                      className="delete-button"
-                      onClick={() => handleDeleteClick(post)}
-                    >
-                      Delete
-                    </button>
+                  <td>
+                    <div className="action-buttons">
+                      <button 
+                        onClick={() => handleViewPost(post)}
+                        className="view-button"
+                      >
+                        View
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteClick(post)}
+                        className="delete-button"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -255,94 +305,112 @@ const AdminPosts = () => {
         </table>
       </div>
 
-      {/* Post Details Modal */}
+      {/* FIXED: Post Detail Modal */}
       {showPostModal && selectedPost && (
         <div className="modal-overlay" onClick={() => setShowPostModal(false)}>
-          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Post Details</h3>
               <button onClick={() => setShowPostModal(false)} className="close-button">×</button>
             </div>
             <div className="modal-body">
               <div className="post-detail">
-                <div className="post-detail-image">
-                  <img 
-                    src={selectedPost.content[0]} 
-                    alt="Post content"
-                    onError={(e) => {
-                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0xMDAgMTM3LjVDMTIwLjcxMSAxMzcuNSAxMzcuNSAxMjAuNzExIDEzNy41IDEwMEMxMzcuNSA3OS4yODkzIDEyMC43MTEgNjIuNSAxMDAgNjIuNUM3OS4yODkzIDYyLjUgNjIuNSA3OS4yODkzIDYyLjUgMTAwQzYyLjUgMTIwLjcxMSA3OS4yODkzIDEzNy41IDEwMCAxMzcuNVoiIGZpbGw9IiM2Qzc1N0QiLz4KPC9zdmc+';
-                    }}
-                  />
+                {/* FIXED: Post Images Section - Full Width */}
+                <div className="post-images-section">
+                  <h4>Images ({getAllPostImages(selectedPost).length})</h4>
+                  <div className="post-images-grid">
+                    {getAllPostImages(selectedPost).length > 0 ? (
+                      getAllPostImages(selectedPost).map((imageUrl, index) => (
+                        <div key={index} className="post-image-item">
+                          <img 
+                            src={imageUrl} 
+                            alt={`Post image ${index + 1}`}
+                            onError={(e) => {
+                              e.target.src = getPlaceholderImage();
+                            }}
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="no-images">
+                        <img src={getPlaceholderImage()} alt="No image available" />
+                        <p>No images available</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Two-column layout for detailed information */}
                 <div className="post-detail-content">
-                  <div className="detail-section">
-                    <h4>Creator</h4>
-                    <div className="creator-info">
-                      <div className="creator-avatar">
-                        {selectedPost.creator.username.charAt(0).toUpperCase()}
+                  <div className="post-info-left">
+                    <div className="info-section">
+                      <h4>Creator Information</h4>
+                      <div className="creator-info">
+                        <div className="creator-avatar">
+                          {selectedPost.creator?.username?.charAt(0).toUpperCase() || 'U'}
+                        </div>
+                        <div className="creator-details">
+                          <div className="creator-name">{selectedPost.creator?.username || 'Unknown User'}</div>
+                          <div className="creator-email">{selectedPost.creator?.email || 'No email'}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="creator-name">{selectedPost.creator.username}</div>
-                        <div className="creator-email">{selectedPost.creator.email}</div>
+                    </div>
+
+                    <div className="info-section">
+                      <h4>Post Details</h4>
+                      <div className="detail-item">
+                        <strong>Caption:</strong>
+                        <p>{selectedPost.caption || 'No caption'}</p>
+                      </div>
+                      <div className="detail-item">
+                        <strong>Tags:</strong>
+                        <div className="post-tags">
+                          {selectedPost.tags && selectedPost.tags.length > 0 ? (
+                            selectedPost.tags.map(tag => (
+                              <span key={tag} className="tag">#{tag}</span>
+                            ))
+                          ) : (
+                            <span className="no-tags">No tags</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="detail-item">
+                        <strong>Created:</strong>
+                        <p>{formatDate(selectedPost.createdAt)}</p>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="detail-section">
-                    <h4>Caption</h4>
-                    <p className="post-caption-full">{selectedPost.caption}</p>
-                  </div>
-                  
-                  <div className="detail-section">
-                    <h4>Tags</h4>
-                    <div className="post-tags">
-                      {selectedPost.tags.map(tag => (
-                        <span key={tag} className="tag">#{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="detail-section">
-                    <h4>Engagement</h4>
-                    <div className="engagement-detail">
-                      <div className="engagement-item">
-                        <span className="engagement-label">Likes:</span>
-                        <span className="engagement-value">{selectedPost.likes}</span>
-                      </div>
-                      <div className="engagement-item">
-                        <span className="engagement-label">Comments:</span>
-                        <span className="engagement-value">{selectedPost.comments.length}</span>
+
+                  <div className="post-info-right">
+                    <div className="info-section">
+                      <h4>Engagement</h4>
+                      <div className="engagement-stats">
+                        <div className="stat">
+                          <span className="stat-icon">❤️</span>
+                          <span>{selectedPost.likes || 0} likes</span>
+                        </div>
+                        <div className="stat">
+                          <span className="stat-icon">💬</span>
+                          <span>{selectedPost.comments ? selectedPost.comments.length : 0} comments</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  {selectedPost.linkedShopItems.length > 0 && (
-                    <div className="detail-section">
-                      <h4>Linked Products</h4>
-                      <div className="linked-products">
-                        {selectedPost.linkedShopItems.map(item => (
-                          <div key={item._id} className="linked-product">
-                            <span className="product-title">{item.title}</span>
-                            <span className="product-price">${item.price}</span>
-                          </div>
-                        ))}
+
+                    {/* Comments Section */}
+                    <div className="info-section">
+                      <h4>Comments ({selectedPost.comments ? selectedPost.comments.length : 0})</h4>
+                      <div className="comments-list">
+                        {selectedPost.comments && selectedPost.comments.length > 0 ? (
+                          selectedPost.comments.map((comment, index) => (
+                            <div key={index} className="comment-item">
+                              <span className="comment-user">{comment.user?.username || 'Unknown User'}:</span>
+                              <span className="comment-text">{comment.text}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="no-comments">No comments yet</p>
+                        )}
                       </div>
-                    </div>
-                  )}
-                  
-                  <div className="detail-section">
-                    <h4>Comments</h4>
-                    <div className="comments-list">
-                      {selectedPost.comments.length > 0 ? (
-                        selectedPost.comments.map((comment, index) => (
-                          <div key={index} className="comment-item">
-                            <span className="comment-user">{comment.user.username}:</span>
-                            <span className="comment-text">{comment.text}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="no-comments">No comments yet</p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -361,40 +429,40 @@ const AdminPosts = () => {
               <button onClick={() => setShowDeleteModal(false)} className="close-button">×</button>
             </div>
             <div className="modal-body">
-              <p>Are you sure you want to delete this post by <strong>{selectedPost.creator.username}</strong>?</p>
+              <p>Are you sure you want to delete this post by <strong>{selectedPost.creator?.username || 'Unknown User'}</strong>?</p>
               <p className="warning-text">This action cannot be undone.</p>
               
               <div className="delete-preview">
                 <div className="post-preview small">
                   <div className="post-image">
                     <img 
-                      src={selectedPost.content[0]} 
+                      src={getPostImage(selectedPost) || getPlaceholderImage()} 
                       alt="Post preview"
                       onError={(e) => {
-                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjhGOUZBIi8+CjxwYXRoIGQ9Ik0yMCAyNy41QzI0LjE0MjEgMjcuNSAyNy41IDI0LjE0MjEgMjcuNSAyMEMyNy41IDE1Ljg1NzkgMjQuMTQyMSAxMi41IDIwIDEyLjVDMTUuODU3OSAxMi41IDEyLjUgMTUuODU3OSAxMi41IDIwQzEyLjUgMjQuMTQyMSAxNS44NTc5IDI3LjUgMjAgMjcuNVoiIGZpbGw9IiM2Qzc1N0QiLz4KPC9zdmc+';
+                        e.target.src = getPlaceholderImage();
                       }}
                     />
                   </div>
                   <div className="post-content">
                     <div className="post-caption">
-                      {truncateText(selectedPost.caption, 60)}
+                      {truncateText(selectedPost.caption)}
                     </div>
                   </div>
                 </div>
               </div>
-              
+
               <div className="form-actions">
                 <button 
-                  onClick={handleDeleteConfirm} 
-                  className="delete-confirm-button"
-                >
-                  Delete Post
-                </button>
-                <button 
-                  onClick={() => setShowDeleteModal(false)} 
+                  onClick={() => setShowDeleteModal(false)}
                   className="cancel-button"
                 >
                   Cancel
+                </button>
+                <button 
+                  onClick={handleDeleteConfirm}
+                  className="delete-confirm-button"
+                >
+                  Delete Post
                 </button>
               </div>
             </div>
@@ -404,7 +472,9 @@ const AdminPosts = () => {
 
       <style jsx>{`
         .admin-page {
-          padding: 0;
+          padding: 2rem;
+          max-width: 1400px;
+          margin: 0 auto;
         }
 
         .admin-header {
@@ -412,34 +482,34 @@ const AdminPosts = () => {
         }
 
         .admin-header h1 {
-          margin: 0 0 0.5rem 0;
           color: #2c3e50;
+          margin-bottom: 0.5rem;
         }
 
         .admin-header p {
-          margin: 0;
           color: #7f8c8d;
         }
 
         .admin-filters {
+          margin-bottom: 2rem;
           display: flex;
           gap: 1rem;
-          margin-bottom: 2rem;
-          flex-wrap: wrap;
+          align-items: center;
         }
 
         .filter-group {
-          flex: 1;
-          min-width: 300px;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
         }
 
         .search-input {
-          width: 100%;
-          padding: 0.75rem;
+          padding: 0.75rem 1rem;
           border: 2px solid #e9ecef;
           border-radius: 8px;
           font-size: 1rem;
           transition: border-color 0.3s ease;
+          min-width: 300px;
         }
 
         .search-input:focus {
@@ -450,8 +520,8 @@ const AdminPosts = () => {
         .admin-table-container {
           background: white;
           border-radius: 12px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
           overflow: hidden;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
 
         .admin-table {
@@ -526,6 +596,12 @@ const AdminPosts = () => {
           font-size: 0.8rem;
         }
 
+        .no-tags {
+          color: #6c757d;
+          font-style: italic;
+          font-size: 0.9rem;
+        }
+
         .creator-info {
           display: flex;
           align-items: center;
@@ -542,6 +618,11 @@ const AdminPosts = () => {
           justify-content: center;
           color: white;
           font-weight: bold;
+        }
+
+        .creator-details {
+          display: flex;
+          flex-direction: column;
         }
 
         .creator-name {
@@ -571,18 +652,9 @@ const AdminPosts = () => {
           font-size: 1rem;
         }
 
-        .status-badge {
-          padding: 0.25rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: white;
-        }
-
         .action-buttons {
           display: flex;
           gap: 0.5rem;
-          flex-wrap: wrap;
         }
 
         .view-button,
@@ -590,7 +662,6 @@ const AdminPosts = () => {
           padding: 0.5rem 1rem;
           border: none;
           border-radius: 6px;
-          font-size: 0.9rem;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
@@ -630,14 +701,10 @@ const AdminPosts = () => {
         .modal-content {
           background: white;
           border-radius: 12px;
-          max-width: 500px;
-          width: 90%;
-          max-height: 80vh;
+          max-width: 90vw;
+          max-height: 90vh;
           overflow-y: auto;
-        }
-
-        .modal-content.large {
-          max-width: 800px;
+          width: 800px;
         }
 
         .modal-header {
@@ -659,13 +726,13 @@ const AdminPosts = () => {
           font-size: 1.5rem;
           cursor: pointer;
           color: #7f8c8d;
-          width: 30px;
-          height: 30px;
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
           justify-content: center;
           border-radius: 50%;
-          transition: background 0.3s ease;
+          transition: background-color 0.3s ease;
         }
 
         .close-button:hover {
@@ -677,90 +744,107 @@ const AdminPosts = () => {
         }
 
         .post-detail {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+
+        .post-detail-content {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 2rem;
         }
 
-        .post-detail-image img {
+        .post-images-section {
           width: 100%;
-          max-width: 300px;
-          height: auto;
-          border-radius: 8px;
+          margin-bottom: 3rem;
         }
 
-        .detail-section {
+        .post-images-section h4 {
+          color: #2c3e50;
           margin-bottom: 1.5rem;
+          text-align: center;
         }
 
-        .detail-section h4 {
-          margin: 0 0 0.75rem 0;
-          color: #2c3e50;
-          font-size: 1rem;
+        .post-images-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+          gap: 2rem;
+          justify-items: center;
+          max-width: 1000px;
+          margin: 0 auto;
         }
 
-        .post-caption-full {
-          margin: 0;
-          line-height: 1.5;
-          color: #495057;
-        }
-
-        .engagement-detail {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .engagement-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .engagement-label {
-          color: #6c757d;
-        }
-
-        .engagement-value {
-          font-weight: 600;
-          color: #2c3e50;
-        }
-
-        .linked-products {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .linked-product {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.5rem;
+        .post-image-item {
+          border-radius: 12px;
+          overflow: hidden;
           background: #f8f9fa;
-          border-radius: 6px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
-        .product-title {
-          font-weight: 500;
+        .post-image-item img {
+          width: 100%;
+          height: 400px;
+          object-fit: cover;
         }
 
-        .product-price {
-          font-weight: 600;
-          color: #27ae60;
+        .no-images {
+          text-align: center;
+          padding: 2rem;
+          color: #7f8c8d;
+        }
+
+        .no-images img {
+          width: 100px;
+          height: 100px;
+          opacity: 0.5;
+          margin-bottom: 1rem;
+        }
+
+        .info-section {
+          margin-bottom: 2rem;
+        }
+
+        .info-section h4 {
+          color: #2c3e50;
+          margin-bottom: 1rem;
+          border-bottom: 2px solid #e9ecef;
+          padding-bottom: 0.5rem;
+        }
+
+        .detail-item {
+          margin-bottom: 1rem;
+        }
+
+        .detail-item strong {
+          display: block;
+          color: #2c3e50;
+          margin-bottom: 0.25rem;
+        }
+
+        .detail-item p {
+          margin: 0;
+          color: #7f8c8d;
+          line-height: 1.6;
         }
 
         .comments-list {
           max-height: 200px;
           overflow-y: auto;
+          border: 1px solid #e9ecef;
+          border-radius: 8px;
+          padding: 1rem;
         }
 
         .comment-item {
-          padding: 0.5rem 0;
+          margin-bottom: 0.75rem;
+          padding-bottom: 0.75rem;
           border-bottom: 1px solid #f8f9fa;
         }
 
         .comment-item:last-child {
+          margin-bottom: 0;
+          padding-bottom: 0;
           border-bottom: none;
         }
 
@@ -771,12 +855,13 @@ const AdminPosts = () => {
         }
 
         .comment-text {
-          color: #495057;
+          color: #7f8c8d;
         }
 
         .no-comments {
           color: #7f8c8d;
           font-style: italic;
+          text-align: center;
           margin: 0;
         }
 
@@ -866,7 +951,7 @@ const AdminPosts = () => {
             margin: 1rem;
           }
 
-          .post-detail {
+          .post-detail-content {
             grid-template-columns: 1fr;
             gap: 1rem;
           }

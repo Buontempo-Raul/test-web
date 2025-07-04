@@ -1,6 +1,28 @@
 // backend/controllers/adminController.js - Enhanced with proper ban/pause distinction
 const User = require('../models/User');
 const Artwork = require('../models/Artwork');
+const Post = require('../models/Post');
+
+try {
+  User = require('../models/User');
+  console.log('✅ User model loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load User model:', error.message);
+}
+
+try {
+  Post = require('../models/Post');
+  console.log('✅ Post model loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load Post model:', error.message);
+}
+
+try {
+  Artwork = require('../models/Artwork');
+  console.log('✅ Artwork model loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load Artwork model:', error.message);
+}
 
 // Get dashboard statistics with enhanced ban/pause tracking
 const getDashboardStats = async (req, res) => {
@@ -478,36 +500,44 @@ const fullyRestoreUser = async (req, res) => {
 };
 
 // Get all posts (unchanged)
+// Complete fixed getAllPosts function for backend/controllers/adminController.js
+
 const getAllPosts = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || '';
-
-    let Post;
-    try {
-      Post = require('../models/Post');
-    } catch (error) {
-      console.log('Post model not found, returning empty array');
+    console.log('🔍 Admin Get Posts - User:', req.user?.username);
+    
+    if (!Post) {
       return res.json({
-        success: true,
-        posts: [],
-        pagination: { current: 1, pages: 1, total: 0 }
+        success: false,
+        message: 'Post model not available',
+        posts: []
       });
     }
 
-    let filter = {};
+    const { page = 1, limit = 10, search = '' } = req.query;
+    
+    // Build query for search functionality
+    let query = {};
     if (search) {
-      filter.content = { $regex: search, $options: 'i' };
+      query = {
+        $or: [
+          { caption: { $regex: search, $options: 'i' } },
+          { tags: { $in: [new RegExp(search, 'i')] } }
+        ]
+      };
     }
 
-    const posts = await Post.find(filter)
-      .populate('author', 'username profileImage')
+    // Get posts with pagination
+    const posts = await Post.find(query)
+      .populate('creator', 'username profileImage')
+      .populate('linkedShopItems', 'title price images')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    const total = await Post.countDocuments(filter);
+    const total = await Post.countDocuments(query);
+
+    console.log(`✅ Found ${posts.length} posts out of ${total} total`);
 
     res.json({
       success: true,
@@ -519,12 +549,16 @@ const getAllPosts = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Get posts error:', error);
+    console.error('❌ Get posts error:', error);
     res.json({
       success: false,
       message: error.message,
       posts: [],
-      pagination: { current: 1, pages: 1, total: 0 }
+      pagination: {
+        current: 1,
+        pages: 0,
+        total: 0
+      }
     });
   }
 };
