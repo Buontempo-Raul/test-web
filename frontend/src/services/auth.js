@@ -1,4 +1,4 @@
-// frontend/src/services/auth.js
+// frontend/src/services/auth.js - Enhanced with ban/pause support
 import api from './api';
 
 // Set user in local storage
@@ -32,17 +32,30 @@ export const register = async (userData) => {
   }
 };
 
-// Login user
+// Enhanced login with ban/pause handling
 export const login = async (credentials) => {
   try {
     const response = await api.post('/api/auth/login', credentials);
+    
     if (response.data.success) {
       setUserData(response.data.user);
+      return response.data;
+    } else {
+      return response.data;
     }
-    return response.data;
   } catch (error) {
     console.error('Login error in service:', error);
-    // Return error as an object rather than throwing it
+    
+    // Handle ban/pause responses (status 403)
+    if (error.response?.status === 403 && error.response?.data?.accountStatus) {
+      return {
+        success: false,
+        message: error.response.data.message,
+        accountStatus: error.response.data.accountStatus
+      };
+    }
+    
+    // Handle other errors
     return { 
       success: false, 
       message: error.response?.data?.message || 'Invalid email or password' 
@@ -62,7 +75,41 @@ export const getCurrentUser = async () => {
     const response = await api.get('/api/auth/profile');
     return response.data;
   } catch (error) {
+    // Handle ban/pause responses
+    if (error.response?.status === 403 && error.response?.data?.accountStatus) {
+      return {
+        success: false,
+        message: error.response.data.message,
+        accountStatus: error.response.data.accountStatus
+      };
+    }
+    
     throw error.response?.data || { success: false, message: 'Failed to get user profile' };
+  }
+};
+
+// NEW: Check account status (ban/pause)
+export const checkAccountStatus = async () => {
+  try {
+    const response = await api.get('/api/auth/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error checking account status:', error);
+    
+    // If the status endpoint doesn't exist, try the profile endpoint
+    try {
+      const profileResponse = await api.get('/api/auth/profile');
+      return {
+        success: true,
+        accountStatus: profileResponse.data.accountStatus || { allowed: true, status: 'active' }
+      };
+    } catch (profileError) {
+      // If both fail, assume account is active
+      return {
+        success: true,
+        accountStatus: { allowed: true, status: 'active' }
+      };
+    }
   }
 };
 
@@ -71,11 +118,36 @@ export const isAuthenticated = () => {
   return !!localStorage.getItem('token');
 };
 
+// NEW: Handle API errors globally for ban/pause detection
+export const handleApiError = (error) => {
+  if (error.response?.status === 403 && error.response?.data?.accountStatus) {
+    const accountStatus = error.response.data.accountStatus;
+    
+    // Notify the app about the ban/pause status
+    window.dispatchEvent(new CustomEvent('accountStatusChanged', {
+      detail: accountStatus
+    }));
+    
+    return {
+      isBanPause: true,
+      accountStatus: accountStatus,
+      message: error.response.data.message
+    };
+  }
+  
+  return {
+    isBanPause: false,
+    message: error.response?.data?.message || error.message || 'An error occurred'
+  };
+};
+
 export default {
   register,
   login,
   logout,
   getCurrentUser,
+  checkAccountStatus,
   isAuthenticated,
-  getUserFromStorage
+  getUserFromStorage,
+  handleApiError
 };

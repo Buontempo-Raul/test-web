@@ -1,197 +1,221 @@
-// Working Admin Controller - backend/controllers/adminController.js
-// This version handles database errors gracefully and always returns valid JSON
+// backend/controllers/adminController.js - Enhanced with proper ban/pause distinction
+const User = require('../models/User');
+const Artwork = require('../models/Artwork');
 
-// Import models with error handling
-let User, Post, Artwork;
-
-try {
-  User = require('../models/User');
-  Post = require('../models/Post');
-  Artwork = require('../models/Artwork');
-} catch (error) {
-  console.warn('⚠️ Some models not found, using fallbacks:', error.message);
-}
-
-// Dashboard stats with robust error handling
+// Get dashboard statistics with enhanced ban/pause tracking
 const getDashboardStats = async (req, res) => {
   try {
-    console.log('🔍 Admin Dashboard Stats - User:', req.user?.username);
+    // Get total users
+    const totalUsers = await User.countDocuments();
     
-    // Initialize stats with default values
-    let stats = {
-      totalUsers: 0,
-      totalPosts: 0,
-      totalArtworks: 0,
-      totalOrders: 0,
-      activeAuctions: 0,
-      pendingArtistRequests: 0,
-      revenue: 0
-    };
-
-    // Safely query each model with fallbacks
-    try {
-      if (User) {
-        stats.totalUsers = await User.countDocuments();
-        console.log('✅ User count:', stats.totalUsers);
-      }
-    } catch (error) {
-      console.warn('⚠️ User count failed:', error.message);
-    }
-
-    try {
-      if (Post) {
-        stats.totalPosts = await Post.countDocuments();
-        console.log('✅ Post count:', stats.totalPosts);
-      }
-    } catch (error) {
-      console.warn('⚠️ Post count failed:', error.message);
-    }
-
-    try {
-      if (Artwork) {
-        stats.totalArtworks = await Artwork.countDocuments();
-        console.log('✅ Artwork count:', stats.totalArtworks);
-        
-        // Count active auctions if the field exists
-        try {
-          stats.activeAuctions = await Artwork.countDocuments({ 
-            'auction.isActive': true 
-          });
-          console.log('✅ Active auctions:', stats.activeAuctions);
-        } catch (auctionError) {
-          console.warn('⚠️ Auction count failed:', auctionError.message);
+    // Get active users (not banned, not paused)
+    const activeUsers = await User.countDocuments({
+      active: true,
+      $and: [
+        {
+          $or: [
+            { banUntil: { $exists: false } },
+            { banUntil: { $lt: new Date() } }
+          ]
+        },
+        {
+          $or: [
+            { pauseUntil: { $exists: false } },
+            { pauseUntil: { $lt: new Date() } }
+          ]
         }
-      }
-    } catch (error) {
-      console.warn('⚠️ Artwork count failed:', error.message);
-    }
-
-    // Log final stats
-    console.log('📊 Final stats:', stats);
-
-    // Always return a successful response with current data
-    res.json({
-      success: true,
-      stats: stats,
-      timestamp: new Date().toISOString(),
-      user: req.user?.username || 'unknown'
+      ]
     });
 
+    // Get currently banned users (temporary bans)
+    const currentlyBannedUsers = await User.countDocuments({
+      banUntil: { $gt: new Date() }
+    });
+
+    // Get permanently banned users
+    const permanentlyBannedUsers = await User.countDocuments({
+      permanentlyBanned: true
+    });
+
+    // Get currently paused users
+    const currentlyPausedUsers = await User.countDocuments({
+      pauseUntil: { $gt: new Date() }
+    });
+
+    // Get artists
+    const totalArtists = await User.countDocuments({ isArtist: true });
+
+    // Get artworks
+    const totalArtworks = await Artwork.countDocuments();
+
+    // Get active auctions
+    const activeAuctions = await Artwork.countDocuments({
+      'auction.isActive': true
+    });
+
+    res.json({
+      success: true,
+      stats: {
+        totalUsers,
+        activeUsers,
+        currentlyBannedUsers,
+        permanentlyBannedUsers,
+        currentlyPausedUsers,
+        totalArtists,
+        totalArtworks,
+        activeAuctions
+      }
+    });
   } catch (error) {
-    console.error('❌ Dashboard stats error:', error);
-    
-    // Even if everything fails, return a valid response
+    console.error('Dashboard stats error:', error);
     res.json({
       success: false,
-      message: 'Failed to fetch some statistics',
+      message: error.message,
       stats: {
         totalUsers: 0,
-        totalPosts: 0,
+        activeUsers: 0,
+        currentlyBannedUsers: 0,
+        permanentlyBannedUsers: 0,
+        currentlyPausedUsers: 0,
+        totalArtists: 0,
         totalArtworks: 0,
-        totalOrders: 0,
-        activeAuctions: 0,
-        pendingArtistRequests: 0,
-        revenue: 0
-      },
-      error: error.message,
-      timestamp: new Date().toISOString()
+        activeAuctions: 0
+      }
     });
   }
 };
 
-// Simple activity endpoint (can be enhanced later)
+// Get recent activity
 const getRecentActivity = async (req, res) => {
   try {
-    console.log('🔍 Admin Recent Activity - User:', req.user?.username);
+    const limit = parseInt(req.query.limit) || 10;
     
-    const activities = [];
-    
-    // Try to get recent users
-    try {
-      if (User) {
-        const recentUsers = await User.find({})
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .select('username createdAt');
+    // Get recent user registrations
+    const recentUsers = await User.find()
+      .select('username email createdAt isArtist banUntil pauseUntil permanentlyBanned')
+      .sort({ createdAt: -1 })
+      .limit(limit);
 
-        recentUsers.forEach(user => {
-          activities.push({
-            type: 'user_registration',
-            description: `New user registered: ${user.username}`,
-            timestamp: user.createdAt
-          });
-        });
+    const activities = recentUsers.map(user => {
+      let description = `New ${user.isArtist ? 'artist' : 'user'} registered: ${user.username}`;
+      let type = 'user_registration';
+      
+      // Add status if user has restrictions
+      if (user.permanentlyBanned) {
+        description += ' (Permanently Banned)';
+        type = 'banned_user_registration';
+      } else if (user.banUntil && user.banUntil > new Date()) {
+        description += ' (Currently Banned)';
+        type = 'banned_user_registration';
+      } else if (user.pauseUntil && user.pauseUntil > new Date()) {
+        description += ' (Currently Paused)';
+        type = 'paused_user_registration';
       }
-    } catch (error) {
-      console.warn('⚠️ Recent users failed:', error.message);
-    }
-
-    // Try to get recent posts
-    try {
-      if (Post) {
-        const recentPosts = await Post.find({})
-          .populate('creator', 'username')
-          .sort({ createdAt: -1 })
-          .limit(3)
-          .select('caption creator createdAt');
-
-        recentPosts.forEach(post => {
-          activities.push({
-            type: 'post_created',
-            description: `New post by ${post.creator?.username || 'Unknown user'}`,
-            timestamp: post.createdAt
-          });
-        });
-      }
-    } catch (error) {
-      console.warn('⚠️ Recent posts failed:', error.message);
-    }
-
-    // Sort activities by timestamp
-    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    console.log('📋 Activities found:', activities.length);
+      
+      return {
+        type: type,
+        description: description,
+        timestamp: user.createdAt,
+        user: {
+          username: user.username,
+          email: user.email
+        }
+      };
+    });
 
     res.json({
       success: true,
-      activities: activities.slice(0, 10),
-      timestamp: new Date().toISOString()
+      activities
     });
-
   } catch (error) {
-    console.error('❌ Recent activity error:', error);
+    console.error('Recent activity error:', error);
     res.json({
       success: false,
-      message: 'Failed to fetch recent activity',
-      activities: [],
-      error: error.message,
-      timestamp: new Date().toISOString()
+      message: error.message,
+      activities: []
     });
   }
 };
 
-// Simple placeholder functions for other endpoints
+// Get all users with enhanced filtering
 const getAllUsers = async (req, res) => {
   try {
-    console.log('🔍 Admin Get Users - User:', req.user?.username);
-    
-    if (!User) {
-      return res.json({
-        success: false,
-        message: 'User model not available',
-        users: []
-      });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const role = req.query.role || '';
+    const status = req.query.status || '';
+
+    // Build filter object
+    let filter = {};
+
+    // Search filter
+    if (search) {
+      filter.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
     }
 
-    const { page = 1, limit = 10 } = req.query;
-    
-    const users = await User.find({})
+    // Role filter
+    if (role) {
+      if (role === 'admin') {
+        filter.role = 'admin';
+      } else if (role === 'artist') {
+        filter.isArtist = true;
+        filter.role = { $ne: 'admin' };
+      } else if (role === 'user') {
+        filter.isArtist = false;
+        filter.role = { $ne: 'admin' };
+      }
+    }
+
+    // Enhanced status filter
+    if (status) {
+      const now = new Date();
+      switch (status) {
+        case 'active':
+          filter.active = true;
+          filter.$and = [
+            {
+              $or: [
+                { banUntil: { $exists: false } },
+                { banUntil: { $lt: now } }
+              ]
+            },
+            {
+              $or: [
+                { pauseUntil: { $exists: false } },
+                { pauseUntil: { $lt: now } }
+              ]
+            }
+          ];
+          break;
+        case 'banned':
+          filter.banUntil = { $gt: now };
+          break;
+        case 'permanently_banned':
+          filter.permanentlyBanned = true;
+          break;
+        case 'paused':
+          filter.pauseUntil = { $gt: now };
+          break;
+        case 'inactive':
+          filter.active = false;
+          break;
+      }
+    }
+
+    // Get users with pagination
+    const users = await User.find(filter)
       .select('-password')
+      .populate('followers', 'username')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    const total = await User.countDocuments();
+    // Get total count for pagination
+    const total = await User.countDocuments(filter);
 
     res.json({
       success: true,
@@ -207,32 +231,283 @@ const getAllUsers = async (req, res) => {
     res.json({
       success: false,
       message: error.message,
-      users: []
+      users: [],
+      pagination: { current: 1, pages: 1, total: 0 }
     });
   }
 };
 
-const getAllPosts = async (req, res) => {
+// Enhanced ban user functionality
+const banUser = async (req, res) => {
   try {
-    console.log('🔍 Admin Get Posts - User:', req.user?.username);
-    
-    if (!Post) {
-      return res.json({
+    const { userId } = req.params;
+    const { action, duration, reason } = req.body;
+
+    // Validate input
+    if (!action || !['ban', 'unban'].includes(action)) {
+      return res.status(400).json({
         success: false,
-        message: 'Post model not available',
-        posts: []
+        message: 'Invalid action. Must be "ban" or "unban"'
       });
     }
 
-    const { page = 1, limit = 10 } = req.query;
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Prevent banning admins
+    if (user.role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot ban admin users'
+      });
+    }
+
+    // Prevent self-banning
+    if (userId === req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot ban yourself'
+      });
+    }
+
+    if (action === 'ban') {
+      // Validate ban parameters
+      if (!duration || duration < 1 || duration > 365) {
+        return res.status(400).json({
+          success: false,
+          message: 'Duration must be between 1 and 365 days'
+        });
+      }
+
+      if (!reason || reason.trim().length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ban reason is required and must be at least 3 characters'
+        });
+      }
+
+      // IMPORTANT: Ban the user (this marks email as permanently banned)
+      await user.banUser(parseInt(duration), reason.trim());
+      
+      res.json({
+        success: true,
+        message: `User ${user.username} has been banned for ${duration} days. Email is now permanently banned from re-registration.`,
+        action: 'banned',
+        user: {
+          _id: user._id,
+          username: user.username,
+          banUntil: user.banUntil,
+          banReason: user.banReason,
+          permanentlyBanned: user.permanentlyBanned,
+          active: user.active
+        }
+      });
+    } else {
+      // Unban the user (removes current ban but keeps permanent ban flag)
+      await user.unbanUser();
+      
+      res.json({
+        success: true,
+        message: `User ${user.username} has been unbanned. Note: Email remains permanently banned from re-registration.`,
+        action: 'unbanned',
+        user: {
+          _id: user._id,
+          username: user.username,
+          banUntil: user.banUntil,
+          banReason: user.banReason,
+          permanentlyBanned: user.permanentlyBanned,
+          active: user.active
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Ban user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while processing ban request'
+    });
+  }
+};
+
+// Enhanced pause user functionality (temporary restriction only)
+const pauseUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { action, duration, reason } = req.body;
+
+    // Validate input
+    if (!action || !['pause', 'unpause'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid action. Must be "pause" or "unpause"'
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Prevent pausing admins
+    if (user.role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot pause admin users'
+      });
+    }
+
+    // Prevent self-pausing
+    if (userId === req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot pause yourself'
+      });
+    }
+
+    if (action === 'pause') {
+      // Validate pause parameters
+      if (!duration || duration < 1 || duration > 90) {
+        return res.status(400).json({
+          success: false,
+          message: 'Duration must be between 1 and 90 days'
+        });
+      }
+
+      if (!reason || reason.trim().length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'Pause reason is required and must be at least 3 characters'
+        });
+      }
+
+      // IMPORTANT: Pause the user (temporary restriction, does NOT mark email as permanently banned)
+      await user.pauseUser(parseInt(duration), reason.trim());
+      
+      res.json({
+        success: true,
+        message: `User ${user.username} has been paused for ${duration} days. This is a temporary restriction.`,
+        action: 'paused',
+        user: {
+          _id: user._id,
+          username: user.username,
+          pauseUntil: user.pauseUntil,
+          pauseReason: user.pauseReason,
+          permanentlyBanned: user.permanentlyBanned
+        }
+      });
+    } else {
+      // Unpause the user
+      await user.unpauseUser();
+      
+      res.json({
+        success: true,
+        message: `User ${user.username} has been unpaused and can now access their account normally.`,
+        action: 'unpaused',
+        user: {
+          _id: user._id,
+          username: user.username,
+          pauseUntil: user.pauseUntil,
+          pauseReason: user.pauseReason,
+          permanentlyBanned: user.permanentlyBanned
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Pause user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while processing pause request'
+    });
+  }
+};
+
+// NEW: Fully restore user (removes permanent ban flag)
+const fullyRestoreUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Only allow if user is currently restricted
+    if (!user.permanentlyBanned && !user.banUntil && !user.pauseUntil && user.active) {
+      return res.status(400).json({
+        success: false,
+        message: 'User account is already fully active'
+      });
+    }
+
+    // Fully restore the user
+    await user.fullyRestoreUser();
     
-    const posts = await Post.find({})
-      .populate('creator', 'username')
+    res.json({
+      success: true,
+      message: `User ${user.username} has been fully restored. Email is now eligible for re-registration if account is deleted.`,
+      action: 'fully_restored',
+      user: {
+        _id: user._id,
+        username: user.username,
+        permanentlyBanned: user.permanentlyBanned,
+        active: user.active
+      }
+    });
+  } catch (error) {
+    console.error('Fully restore user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while restoring user'
+    });
+  }
+};
+
+// Get all posts (unchanged)
+const getAllPosts = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    let Post;
+    try {
+      Post = require('../models/Post');
+    } catch (error) {
+      console.log('Post model not found, returning empty array');
+      return res.json({
+        success: true,
+        posts: [],
+        pagination: { current: 1, pages: 1, total: 0 }
+      });
+    }
+
+    let filter = {};
+    if (search) {
+      filter.content = { $regex: search, $options: 'i' };
+    }
+
+    const posts = await Post.find(filter)
+      .populate('author', 'username profileImage')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    const total = await Post.countDocuments();
+    const total = await Post.countDocuments(filter);
 
     res.json({
       success: true,
@@ -248,32 +523,47 @@ const getAllPosts = async (req, res) => {
     res.json({
       success: false,
       message: error.message,
-      posts: []
+      posts: [],
+      pagination: { current: 1, pages: 1, total: 0 }
     });
   }
 };
 
+// Get all artworks (unchanged)
 const getAllArtworks = async (req, res) => {
   try {
-    console.log('🔍 Admin Get Artworks - User:', req.user?.username);
-    
-    if (!Artwork) {
-      return res.json({
-        success: false,
-        message: 'Artwork model not available',
-        artworks: []
-      });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const category = req.query.category || '';
+    const status = req.query.status || '';
+
+    let filter = {};
+
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
     }
 
-    const { page = 1, limit = 10 } = req.query;
-    
-    const artworks = await Artwork.find({})
-      .populate('creator', 'username')
+    if (category) {
+      filter.category = category;
+    }
+
+    if (status === 'auction') {
+      filter['auction.isActive'] = true;
+    } else if (status === 'sold') {
+      filter.sold = true;
+    }
+
+    const artworks = await Artwork.find(filter)
+      .populate('creator', 'username profileImage')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    const total = await Artwork.countDocuments();
+    const total = await Artwork.countDocuments(filter);
 
     res.json({
       success: true,
@@ -289,36 +579,36 @@ const getAllArtworks = async (req, res) => {
     res.json({
       success: false,
       message: error.message,
-      artworks: []
+      artworks: [],
+      pagination: { current: 1, pages: 1, total: 0 }
     });
   }
 };
 
+// Get all auctions (unchanged)
 const getAllAuctions = async (req, res) => {
   try {
-    console.log('🔍 Admin Get Auctions - User:', req.user?.username);
-    
-    if (!Artwork) {
-      return res.json({
-        success: false,
-        message: 'Artwork model not available',
-        auctions: []
-      });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const status = req.query.status || 'all';
+
+    let filter = {
+      auction: { $exists: true }
+    };
+
+    if (status === 'active') {
+      filter['auction.isActive'] = true;
+    } else if (status === 'ended') {
+      filter['auction.isActive'] = false;
     }
 
-    const { page = 1, limit = 10 } = req.query;
-    
-    const auctions = await Artwork.find({
-      auction: { $exists: true }
-    })
+    const auctions = await Artwork.find(filter)
       .populate('creator', 'username')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    const total = await Artwork.countDocuments({
-      auction: { $exists: true }
-    });
+    const total = await Artwork.countDocuments(filter);
 
     res.json({
       success: true,
@@ -334,64 +624,64 @@ const getAllAuctions = async (req, res) => {
     res.json({
       success: false,
       message: error.message,
-      auctions: []
+      auctions: [],
+      pagination: { current: 1, pages: 1, total: 0 }
     });
   }
 };
 
-// Placeholder action functions
-const banUser = (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Ban user functionality will be implemented soon' 
-  });
-};
-
-const pauseUser = (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Pause user functionality will be implemented soon' 
-  });
-};
-
+// Delete post (unchanged)
 const deletePost = async (req, res) => {
   try {
-    if (!Post) {
-      return res.json({
+    let Post;
+    try {
+      Post = require('../models/Post');
+    } catch (error) {
+      return res.status(404).json({
         success: false,
         message: 'Post model not available'
       });
     }
 
-    await Post.findByIdAndDelete(req.params.postId);
+    const post = await Post.findByIdAndDelete(req.params.postId);
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
     res.json({ 
       success: true, 
       message: 'Post deleted successfully' 
     });
   } catch (error) {
-    res.json({ 
+    console.error('Delete post error:', error);
+    res.status(500).json({ 
       success: false, 
       message: error.message 
     });
   }
 };
 
+// Delete artwork (unchanged)
 const deleteArtwork = async (req, res) => {
   try {
-    if (!Artwork) {
-      return res.json({
+    const artwork = await Artwork.findByIdAndDelete(req.params.artworkId);
+    if (!artwork) {
+      return res.status(404).json({
         success: false,
-        message: 'Artwork model not available'
+        message: 'Artwork not found'
       });
     }
 
-    await Artwork.findByIdAndDelete(req.params.artworkId);
     res.json({ 
       success: true, 
       message: 'Artwork deleted successfully' 
     });
   } catch (error) {
-    res.json({ 
+    console.error('Delete artwork error:', error);
+    res.status(500).json({ 
       success: false, 
       message: error.message 
     });
@@ -407,6 +697,7 @@ module.exports = {
   getAllAuctions,
   banUser,
   pauseUser,
+  fullyRestoreUser,
   deletePost,
   deleteArtwork
 };

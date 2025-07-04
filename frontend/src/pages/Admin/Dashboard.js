@@ -1,4 +1,3 @@
-// Admin Dashboard with Real Data - frontend/src/pages/Admin/Dashboard.js
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -6,6 +5,10 @@ const AdminDashboard = () => {
   const { currentUser } = useAuth();
   const [stats, setStats] = useState({
     totalUsers: 0,
+    activeUsers: 0,
+    bannedUsers: 0,
+    pausedUsers: 0,
+    totalArtists: 0,
     totalPosts: 0,
     totalArtworks: 0,
     activeAuctions: 0
@@ -13,9 +16,17 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [dataSource, setDataSource] = useState('loading'); // 'api', 'mock', or 'loading'
+  const [dataSource, setDataSource] = useState('loading');
 
-  // API helper function with better error handling
+  // Safe number formatter that handles undefined/null values
+  const safeToLocaleString = (value) => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return '0';
+    }
+    return Number(value).toLocaleString();
+  };
+
+  // API helper function
   const fetchWithFallback = async (url, options = {}) => {
     try {
       const response = await fetch(url, {
@@ -27,7 +38,6 @@ const AdminDashboard = () => {
         }
       });
 
-      // Check if we got HTML instead of JSON (proxy issue)
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('Backend API not reachable - check proxy configuration');
@@ -50,9 +60,9 @@ const AdminDashboard = () => {
     setError(null);
 
     try {
-      console.log('🔍 Fetching real dashboard data...');
+      console.log('🔍 Fetching dashboard data...');
 
-      // Test backend connectivity first
+      // Test backend connectivity
       await fetchWithFallback('/api/test');
       console.log('✅ Backend connection successful');
 
@@ -60,9 +70,21 @@ const AdminDashboard = () => {
       const statsResponse = await fetchWithFallback('/api/admin/dashboard/stats');
       
       if (statsResponse.success && statsResponse.stats) {
-        setStats(statsResponse.stats);
+        // Ensure all required fields exist with default values
+        const safeStats = {
+          totalUsers: statsResponse.stats.totalUsers || 0,
+          activeUsers: statsResponse.stats.activeUsers || 0,
+          bannedUsers: statsResponse.stats.bannedUsers || 0,
+          pausedUsers: statsResponse.stats.pausedUsers || 0,
+          totalArtists: statsResponse.stats.totalArtists || 0,
+          totalPosts: statsResponse.stats.totalPosts || 0,
+          totalArtworks: statsResponse.stats.totalArtworks || 0,
+          activeAuctions: statsResponse.stats.activeAuctions || 0
+        };
+        
+        setStats(safeStats);
         setDataSource('api');
-        console.log('📊 Real stats loaded:', statsResponse.stats);
+        console.log('📊 Stats loaded:', safeStats);
       } else {
         throw new Error(statsResponse.message || 'Invalid stats response format');
       }
@@ -73,13 +95,19 @@ const AdminDashboard = () => {
     } catch (error) {
       console.warn('❌ API failed, using fallback data:', error.message);
       
-      // Fallback to mock data if API fails
-      setStats({
+      // Fallback to mock data
+      const fallbackStats = {
         totalUsers: 42,
+        activeUsers: 38,
+        bannedUsers: 2,
+        pausedUsers: 2,
+        totalArtists: 15,
         totalPosts: 128,
         totalArtworks: 67,
         activeAuctions: 8
-      });
+      };
+      
+      setStats(fallbackStats);
       setDataSource('mock');
       setError(`API Error: ${error.message}`);
       setLastUpdated(new Date());
@@ -117,78 +145,43 @@ const AdminDashboard = () => {
   if (isLoading) {
     return (
       <div className="dashboard-container">
-        <div className="loading-state">
+        <div className="loading-container">
           <div className="loading-spinner"></div>
-          <h2>Loading Dashboard...</h2>
-          <p>Connecting to backend API...</p>
+          <p>Loading dashboard...</p>
         </div>
-        
-        <style jsx>{`
-          .dashboard-container {
-            padding: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-          }
-
-          .loading-state {
-            text-align: center;
-            padding: 4rem 2rem;
-          }
-
-          .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #f0f0f0;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1.5rem auto;
-          }
-
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-
-          .loading-state h2 {
-            color: #2c3e50;
-            margin-bottom: 0.5rem;
-          }
-
-          .loading-state p {
-            color: #666;
-          }
-        `}</style>
       </div>
     );
   }
 
   return (
     <div className="dashboard-container">
-      {/* Header Section */}
+      {/* Header */}
       <div className="dashboard-header">
         <div className="header-content">
-          <h1>👋 Welcome back, {currentUser?.username || 'Admin'}!</h1>
-          <p className="header-subtitle">Platform Overview & Statistics</p>
-          <div className="status-row">
+          <h1>Admin Dashboard</h1>
+          <p>Welcome back, {currentUser?.username || 'Admin'}!</p>
+          <div className="dashboard-meta">
+            <span>Last updated: {formatTime(lastUpdated)}</span>
             {getDataSourceBadge()}
-            {error && <span className="error-indicator">⚠️ {error}</span>}
           </div>
         </div>
-        <div className="header-actions">
-          <button onClick={refreshStats} className="refresh-btn" disabled={isLoading}>
-            🔄 {isLoading ? 'Loading...' : 'Refresh Stats'}
-          </button>
-        </div>
+        <button 
+          className="refresh-btn" 
+          onClick={refreshStats}
+          disabled={isLoading}
+        >
+          🔄 Refresh
+        </button>
       </div>
 
-      {/* API Connection Help */}
-      {dataSource === 'mock' && (
+      {/* Error/Connection Issues */}
+      {error && dataSource === 'mock' && (
         <div className="connection-help">
-          <h3>🔧 API Connection Issue</h3>
-          <p>Dashboard is showing demo data because the backend API is not reachable.</p>
+          <h3>⚠️ Using Demo Data</h3>
+          <p>Cannot connect to backend API. Here are some common fixes:</p>
+          
           <details>
-            <summary>🛠️ How to fix this</summary>
+            <summary>🔧 Troubleshooting Steps</summary>
             <div className="fix-steps">
               <p><strong>1. Make sure your backend is running:</strong></p>
               <code>cd backend && npm run dev</code>
@@ -212,8 +205,25 @@ const AdminDashboard = () => {
           <div className="stat-icon">👥</div>
           <div className="stat-content">
             <h3>Total Users</h3>
-            <div className="stat-number">{stats.totalUsers.toLocaleString()}</div>
-            <div className="stat-label">Registered accounts</div>
+            <div className="stat-number">{safeToLocaleString(stats.totalUsers)}</div>
+            <div className="stat-sublabel">
+              <span className="stat-detail active">🟢 {safeToLocaleString(stats.activeUsers)} Active</span>
+              {(stats.bannedUsers > 0 || stats.pausedUsers > 0) && (
+                <span className="stat-detail warning">
+                  🔴 {safeToLocaleString(stats.bannedUsers)} Banned
+                  {stats.pausedUsers > 0 && ` • ⏸️ ${safeToLocaleString(stats.pausedUsers)} Paused`}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="stat-card artists">
+          <div className="stat-icon">🎨</div>
+          <div className="stat-content">
+            <h3>Artists</h3>
+            <div className="stat-number">{safeToLocaleString(stats.totalArtists)}</div>
+            <div className="stat-label">Verified creators</div>
           </div>
         </div>
 
@@ -221,16 +231,16 @@ const AdminDashboard = () => {
           <div className="stat-icon">📝</div>
           <div className="stat-content">
             <h3>Posts</h3>
-            <div className="stat-number">{stats.totalPosts.toLocaleString()}</div>
+            <div className="stat-number">{safeToLocaleString(stats.totalPosts)}</div>
             <div className="stat-label">Community posts</div>
           </div>
         </div>
 
         <div className="stat-card artworks">
-          <div className="stat-icon">🎨</div>
+          <div className="stat-icon">🖼️</div>
           <div className="stat-content">
             <h3>Artworks</h3>
-            <div className="stat-number">{stats.totalArtworks.toLocaleString()}</div>
+            <div className="stat-number">{safeToLocaleString(stats.totalArtworks)}</div>
             <div className="stat-label">Published artworks</div>
           </div>
         </div>
@@ -239,7 +249,7 @@ const AdminDashboard = () => {
           <div className="stat-icon">🔨</div>
           <div className="stat-content">
             <h3>Active Auctions</h3>
-            <div className="stat-number">{stats.activeAuctions.toLocaleString()}</div>
+            <div className="stat-number">{safeToLocaleString(stats.activeAuctions)}</div>
             <div className="stat-label">Currently running</div>
           </div>
         </div>
@@ -252,7 +262,7 @@ const AdminDashboard = () => {
           <a href="/admin/users" className="action-card">
             <div className="action-icon">👥</div>
             <h3>Manage Users</h3>
-            <p>View and manage user accounts</p>
+            <p>View, ban, pause user accounts</p>
           </a>
 
           <a href="/admin/posts" className="action-card">
@@ -264,24 +274,24 @@ const AdminDashboard = () => {
           <a href="/admin/artworks" className="action-card">
             <div className="action-icon">🎨</div>
             <h3>Artwork Gallery</h3>
-            <p>Browse published artworks</p>
+            <p>Manage published artworks</p>
           </a>
 
           <a href="/admin/auctions" className="action-card">
             <div className="action-icon">🔨</div>
-            <h3>Auction Management</h3>
-            <p>Monitor auction activity</p>
+            <h3>Auction Control</h3>
+            <p>Monitor auction activities</p>
           </a>
 
           <a href="/admin/artist-requests" className="action-card">
-            <div className="action-icon">🎭</div>
+            <div className="action-icon">✨</div>
             <h3>Artist Requests</h3>
-            <p>Review new artist applications</p>
+            <p>Review artist applications</p>
           </a>
 
           <a href="/admin/settings" className="action-card">
             <div className="action-icon">⚙️</div>
-            <h3>Settings</h3>
+            <h3>Site Settings</h3>
             <p>Configure platform settings</p>
           </a>
         </div>
@@ -290,19 +300,44 @@ const AdminDashboard = () => {
       {/* Footer Info */}
       <div className="dashboard-footer">
         <div className="system-info">
-          <span>🕒 Last updated: {formatTime(lastUpdated)}</span>
-          <span>💻 Data source: {dataSource === 'api' ? 'Live API' : 'Demo Data'}</span>
-          <span>🌐 Environment: Development</span>
+          <span>📊 Dashboard Version: 2.0</span>
+          <span>🛡️ Admin Level: {currentUser?.role || 'Admin'}</span>
+          <span>⏰ Session: {formatTime(new Date())}</span>
+          <span>🌐 Environment: {process.env.NODE_ENV || 'development'}</span>
         </div>
       </div>
 
       <style jsx>{`
         .dashboard-container {
           padding: 2rem;
-          max-width: 1200px;
+          max-width: 1400px;
           margin: 0 auto;
           background: #f8f9fa;
           min-height: 100vh;
+        }
+
+        .loading-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 4rem 2rem;
+          text-align: center;
+        }
+
+        .loading-spinner {
+          width: 50px;
+          height: 50px;
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
 
         .dashboard-header {
@@ -319,20 +354,23 @@ const AdminDashboard = () => {
         .header-content h1 {
           margin: 0 0 0.5rem 0;
           color: #2c3e50;
-          font-size: 2rem;
+          font-size: 2.5rem;
           font-weight: 700;
         }
 
-        .header-subtitle {
+        .header-content p {
           margin: 0 0 1rem 0;
           color: #666;
           font-size: 1.1rem;
         }
 
-        .status-row {
+        .dashboard-meta {
           display: flex;
           gap: 1rem;
+          flex-wrap: wrap;
           align-items: center;
+          font-size: 0.9rem;
+          color: #666;
         }
 
         .badge {
@@ -354,12 +392,7 @@ const AdminDashboard = () => {
 
         .badge.loading {
           background: #e2e3e5;
-          color: #6c757d;
-        }
-
-        .error-indicator {
-          font-size: 0.9rem;
-          color: #dc3545;
+          color: #495057;
         }
 
         .refresh-btn {
@@ -438,27 +471,45 @@ const AdminDashboard = () => {
           display: flex;
           align-items: center;
           gap: 1.5rem;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          transition: transform 0.2s ease;
         }
 
         .stat-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+          transform: translateY(-2px);
         }
 
-        .stat-card.users { border-left: 4px solid #3498db; }
-        .stat-card.posts { border-left: 4px solid #e74c3c; }
-        .stat-card.artworks { border-left: 4px solid #9b59b6; }
-        .stat-card.auctions { border-left: 4px solid #f39c12; }
+        .stat-card.users {
+          border-left: 4px solid #3498db;
+        }
+
+        .stat-card.artists {
+          border-left: 4px solid #9b59b6;
+        }
+
+        .stat-card.posts {
+          border-left: 4px solid #2ecc71;
+        }
+
+        .stat-card.artworks {
+          border-left: 4px solid #e67e22;
+        }
+
+        .stat-card.auctions {
+          border-left: 4px solid #e74c3c;
+        }
 
         .stat-icon {
           font-size: 3rem;
           opacity: 0.8;
         }
 
+        .stat-content {
+          flex: 1;
+        }
+
         .stat-content h3 {
           margin: 0 0 0.5rem 0;
-          color: #555;
+          color: #2c3e50;
           font-size: 1rem;
           font-weight: 600;
           text-transform: uppercase;
@@ -469,20 +520,40 @@ const AdminDashboard = () => {
           font-size: 2.5rem;
           font-weight: 700;
           color: #2c3e50;
-          margin-bottom: 0.25rem;
+          line-height: 1;
+          margin-bottom: 0.5rem;
         }
 
         .stat-label {
-          color: #888;
+          color: #666;
           font-size: 0.9rem;
         }
 
+        .stat-sublabel {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .stat-detail {
+          font-size: 0.8rem;
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+          display: inline-block;
+        }
+
+        .stat-detail.active {
+          background: #d4edda;
+          color: #155724;
+        }
+
+        .stat-detail.warning {
+          background: #f8d7da;
+          color: #721c24;
+        }
+
         .quick-actions {
-          background: white;
-          border-radius: 12px;
-          padding: 2rem;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-          margin-bottom: 2rem;
+          margin-bottom: 3rem;
         }
 
         .quick-actions h2 {
@@ -494,14 +565,14 @@ const AdminDashboard = () => {
         .action-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          gap: 1rem;
+          gap: 1.5rem;
         }
 
         .action-card {
-          background: #f8f9fa;
+          background: white;
           border: 2px solid #e9ecef;
-          border-radius: 8px;
-          padding: 1.5rem;
+          border-radius: 12px;
+          padding: 2rem;
           text-decoration: none;
           color: inherit;
           transition: all 0.2s ease;

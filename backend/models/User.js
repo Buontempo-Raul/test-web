@@ -1,4 +1,4 @@
-// backend/models/User.js - UPDATED with ban/pause functionality
+// backend/models/User.js - Enhanced with permanent ban distinction
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -50,7 +50,7 @@ const userSchema = new mongoose.Schema({
     default: true
   },
   
-  // NEW: Ban functionality
+  // ENHANCED: Ban functionality with permanent ban tracking
   banUntil: {
     type: Date,
     default: undefined
@@ -59,14 +59,26 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: undefined
   },
+  permanentlyBanned: {
+    type: Boolean,
+    default: false
+  },
+  bannedAt: {
+    type: Date,
+    default: undefined
+  },
   
-  // NEW: Pause functionality (temporary account suspension)
+  // Pause functionality (temporary restriction only)
   pauseUntil: {
     type: Date,
     default: undefined
   },
   pauseReason: {
     type: String,
+    default: undefined
+  },
+  pausedAt: {
+    type: Date,
     default: undefined
   },
   
@@ -80,154 +92,77 @@ const userSchema = new mongoose.Schema({
   }],
   favorites: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Artwork'
+    ref: 'User'
   }],
-  socialLinks: {
-    instagram: { type: String, default: '' },
-    twitter: { type: String, default: '' },
-    facebook: { type: String, default: '' },
-    pinterest: { type: String, default: '' }
-  },
-  settings: {
-    emailNotifications: { type: Boolean, default: true },
-    privateProfile: { type: Boolean, default: false }
-  },
   lastLogin: {
-    type: Date
-  },
-  lastActive: {
     type: Date,
     default: Date.now
-  },
-  resetPasswordToken: String,
-  resetPasswordExpire: Date
+  }
 }, {
   timestamps: true
 });
 
-// Virtual for checking if user is currently banned
-userSchema.virtual('isBanned').get(function() {
-  return this.banUntil && this.banUntil > new Date();
-});
-
-// Virtual for checking if user is currently paused
-userSchema.virtual('isPaused').get(function() {
-  return this.pauseUntil && this.pauseUntil > new Date();
-});
-
-// Virtual for checking if user account is accessible
-userSchema.virtual('isAccessible').get(function() {
-  return this.active && !this.isBanned && !this.isPaused;
-});
-
-// Pre-save middleware to hash password
+// Hash password before saving
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) {
     return next();
   }
   
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
-// Method to compare password
-userSchema.methods.comparePassword = async function(enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to follow another user
-userSchema.methods.followUser = async function(targetUserId) {
-  if (!this.following.includes(targetUserId)) {
-    this.following.push(targetUserId);
-    
-    // Add this user to target's followers
-    const targetUser = await this.constructor.findById(targetUserId);
-    if (targetUser && !targetUser.followers.includes(this._id)) {
-      targetUser.followers.push(this._id);
-      await targetUser.save();
-    }
-    
-    await this.save();
-    return true;
-  }
-  return false;
-};
-
-// Method to unfollow another user
-userSchema.methods.unfollowUser = async function(targetUserId) {
-  const followingIndex = this.following.indexOf(targetUserId);
-  if (followingIndex > -1) {
-    this.following.splice(followingIndex, 1);
-    
-    // Remove this user from target's followers
-    const targetUser = await this.constructor.findById(targetUserId);
-    if (targetUser) {
-      const followerIndex = targetUser.followers.indexOf(this._id);
-      if (followerIndex > -1) {
-        targetUser.followers.splice(followerIndex, 1);
-        await targetUser.save();
-      }
-    }
-    
-    await this.save();
-    return true;
-  }
-  return false;
-};
-
-// Method to add artwork to favorites
-userSchema.methods.addToFavorites = function(artworkId) {
-  if (!this.favorites.includes(artworkId)) {
-    this.favorites.push(artworkId);
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// Method to remove artwork from favorites
-userSchema.methods.removeFromFavorites = function(artworkId) {
-  const index = this.favorites.indexOf(artworkId);
-  if (index > -1) {
-    this.favorites.splice(index, 1);
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// NEW: Method to ban user
-userSchema.methods.banUser = function(duration = 7, reason = 'Violation of platform rules') {
+// ENHANCED: Method to ban user (marks email as permanently banned)
+userSchema.methods.banUser = function(duration = 7, reason = 'Violation of community guidelines') {
   const banUntil = new Date();
   banUntil.setDate(banUntil.getDate() + duration);
   
   this.banUntil = banUntil;
   this.banReason = reason;
+  this.bannedAt = new Date();
+  this.permanentlyBanned = true; // IMPORTANT: Email becomes permanently banned
   this.active = false;
   
   return this.save();
 };
 
-// NEW: Method to unban user
+// ENHANCED: Method to unban user (removes current ban but keeps permanent ban flag)
 userSchema.methods.unbanUser = function() {
   this.banUntil = undefined;
   this.banReason = undefined;
   this.active = true;
   
+  // NOTE: We keep permanentlyBanned = true to prevent re-registration
+  // Only an admin can manually set permanentlyBanned = false if needed
+  
   return this.save();
 };
 
-// NEW: Method to pause user account
+// Method to pause user account (temporary restriction only)
 userSchema.methods.pauseUser = function(duration = 7, reason = 'Account temporarily paused') {
   const pauseUntil = new Date();
   pauseUntil.setDate(pauseUntil.getDate() + duration);
   
   this.pauseUntil = pauseUntil;
   this.pauseReason = reason;
+  this.pausedAt = new Date();
+  
+  // NOTE: Pause does NOT set permanentlyBanned - user can return normally
   
   return this.save();
 };
 
-// NEW: Method to unpause user account
+// Method to unpause user account
 userSchema.methods.unpauseUser = function() {
   this.pauseUntil = undefined;
   this.pauseReason = undefined;
@@ -235,21 +170,94 @@ userSchema.methods.unpauseUser = function() {
   return this.save();
 };
 
+// ENHANCED: Method to fully restore user (removes permanent ban flag)
+userSchema.methods.fullyRestoreUser = function() {
+  this.banUntil = undefined;
+  this.banReason = undefined;
+  this.pauseUntil = undefined;
+  this.pauseReason = undefined;
+  this.permanentlyBanned = false; // Fully restore - allows re-registration
+  this.active = true;
+  
+  return this.save();
+};
+
+// Method to check current account status
+userSchema.methods.getAccountStatus = function() {
+  const now = new Date();
+  
+  // Check if currently banned
+  if (this.banUntil && this.banUntil > now) {
+    return {
+      allowed: false,
+      status: 'banned',
+      restriction: 'temporary_ban',
+      until: this.banUntil,
+      reason: this.banReason,
+      isPermanentlyBanned: this.permanentlyBanned
+    };
+  }
+  
+  // Check if currently paused
+  if (this.pauseUntil && this.pauseUntil > now) {
+    return {
+      allowed: false,
+      status: 'paused',
+      restriction: 'temporary_pause',
+      until: this.pauseUntil,
+      reason: this.pauseReason,
+      isPermanentlyBanned: this.permanentlyBanned
+    };
+  }
+  
+  // Check if inactive
+  if (!this.active) {
+    return {
+      allowed: false,
+      status: 'inactive',
+      restriction: 'account_disabled',
+      reason: 'Account has been deactivated',
+      isPermanentlyBanned: this.permanentlyBanned
+    };
+  }
+  
+  return {
+    allowed: true,
+    status: 'active',
+    isPermanentlyBanned: this.permanentlyBanned
+  };
+};
+
 // Static methods
 userSchema.statics.findByEmail = function(email) {
   return this.findOne({ email: email.toLowerCase() });
 };
 
+// ENHANCED: Check if email is permanently banned (for registration prevention)
+userSchema.statics.isEmailPermanentlyBanned = async function(email) {
+  const user = await this.findOne({ 
+    email: email.toLowerCase(),
+    permanentlyBanned: true 
+  });
+  return !!user;
+};
+
 userSchema.statics.findActiveUsers = function() {
   return this.find({ 
     active: true,
-    $or: [
-      { banUntil: { $exists: false } },
-      { banUntil: { $lt: new Date() } }
-    ],
-    $or: [
-      { pauseUntil: { $exists: false } },
-      { pauseUntil: { $lt: new Date() } }
+    $and: [
+      {
+        $or: [
+          { banUntil: { $exists: false } },
+          { banUntil: { $lt: new Date() } }
+        ]
+      },
+      {
+        $or: [
+          { pauseUntil: { $exists: false } },
+          { pauseUntil: { $lt: new Date() } }
+        ]
+      }
     ]
   });
 };
@@ -258,9 +266,19 @@ userSchema.statics.findArtists = function() {
   return this.find({ 
     isArtist: true, 
     active: true,
-    $or: [
-      { banUntil: { $exists: false } },
-      { banUntil: { $lt: new Date() } }
+    $and: [
+      {
+        $or: [
+          { banUntil: { $exists: false } },
+          { banUntil: { $lt: new Date() } }
+        ]
+      },
+      {
+        $or: [
+          { pauseUntil: { $exists: false } },
+          { pauseUntil: { $lt: new Date() } }
+        ]
+      }
     ]
   });
 };
@@ -275,6 +293,32 @@ userSchema.statics.findPausedUsers = function() {
   return this.find({ 
     pauseUntil: { $gt: new Date() } 
   });
+};
+
+userSchema.statics.findPermanentlyBannedUsers = function() {
+  return this.find({ 
+    permanentlyBanned: true 
+  });
+};
+
+// Get users by ban/pause status
+userSchema.statics.getUsersByStatus = function(status) {
+  const now = new Date();
+  
+  switch (status) {
+    case 'active':
+      return this.findActiveUsers();
+    case 'banned':
+      return this.findBannedUsers();
+    case 'paused':
+      return this.findPausedUsers();
+    case 'permanently_banned':
+      return this.findPermanentlyBannedUsers();
+    case 'inactive':
+      return this.find({ active: false });
+    default:
+      return this.find();
+  }
 };
 
 const User = mongoose.model('User', userSchema);

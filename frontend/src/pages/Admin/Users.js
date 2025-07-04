@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-// Import the admin API service
+// Enhanced Admin API service
 const adminAPI = {
   getAllUsers: (params = {}) => {
     const { page = 1, limit = 10, search = '', role = '', status = '' } = params;
@@ -40,6 +40,17 @@ const adminAPI = {
       },
       body: JSON.stringify(data)
     }).then(res => res.json());
+  },
+
+  fullyRestoreUser: (userId, data) => {
+    return fetch(`/api/admin/users/${userId}/restore`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    }).then(res => res.json());
   }
 };
 
@@ -51,10 +62,10 @@ const AdminUsers = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [showActionModal, setShowActionModal] = useState(false);
   const [actionForm, setActionForm] = useState({
     action: '',
+    type: '', // 'ban', 'pause', or 'restore'
     duration: 7,
     reason: ''
   });
@@ -63,6 +74,9 @@ const AdminUsers = () => {
     pages: 1,
     total: 0
   });
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [actionSuccess, setActionSuccess] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -71,6 +85,7 @@ const AdminUsers = () => {
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
+      setActionError(null);
       
       const response = await adminAPI.getAllUsers({
         page: pagination.current,
@@ -90,21 +105,60 @@ const AdminUsers = () => {
       setIsLoading(false);
     } catch (error) {
       console.error('Error fetching users:', error);
+      setActionError('Failed to fetch users. Please try again.');
       setIsLoading(false);
     }
   };
 
   const getUserStatus = (user) => {
-    if (user.banUntil && new Date(user.banUntil) > new Date()) {
-      return { status: 'banned', color: '#e74c3c', text: 'Banned' };
+    const now = new Date();
+    
+    // Check current ban status
+    if (user.banUntil && new Date(user.banUntil) > now) {
+      return { 
+        status: 'banned', 
+        color: '#e74c3c', 
+        text: user.permanentlyBanned ? 'Banned (Permanent Email Ban)' : 'Banned',
+        isPermanent: user.permanentlyBanned
+      };
     }
-    if (user.pauseUntil && new Date(user.pauseUntil) > new Date()) {
-      return { status: 'paused', color: '#f39c12', text: 'Paused' };
+    
+    // Check current pause status
+    if (user.pauseUntil && new Date(user.pauseUntil) > now) {
+      return { 
+        status: 'paused', 
+        color: '#f39c12', 
+        text: 'Paused (Temporary)',
+        isPermanent: false
+      };
     }
+    
+    // Check if permanently banned but not currently restricted
+    if (user.permanentlyBanned) {
+      return { 
+        status: 'permanently_banned', 
+        color: '#8e44ad', 
+        text: 'Email Permanently Banned',
+        isPermanent: true
+      };
+    }
+    
+    // Check if inactive
     if (!user.active) {
-      return { status: 'inactive', color: '#95a5a6', text: 'Inactive' };
+      return { 
+        status: 'inactive', 
+        color: '#95a5a6', 
+        text: 'Inactive',
+        isPermanent: false
+      };
     }
-    return { status: 'active', color: '#27ae60', text: 'Active' };
+    
+    return { 
+      status: 'active', 
+      color: '#27ae60', 
+      text: 'Active',
+      isPermanent: false
+    };
   };
 
   const getUserRole = (user) => {
@@ -114,10 +168,13 @@ const AdminUsers = () => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -126,66 +183,109 @@ const AdminUsers = () => {
     setShowUserModal(true);
   };
 
-  const handleBanClick = (user) => {
+  const handleActionClick = (user, actionType) => {
     setSelectedUser(user);
+    const userStatus = getUserStatus(user);
+    
+    let action = '';
+    let defaultReason = '';
+    
+    if (actionType === 'ban') {
+      action = userStatus.status === 'banned' ? 'unban' : 'ban';
+      defaultReason = action === 'ban' ? 'Violation of community guidelines' : '';
+    } else if (actionType === 'pause') {
+      action = userStatus.status === 'paused' ? 'unpause' : 'pause';
+      defaultReason = action === 'pause' ? 'Account under review' : '';
+    } else if (actionType === 'restore') {
+      action = 'restore';
+      defaultReason = 'Admin decision to fully restore account';
+    }
+    
     setActionForm({
-      action: user.banUntil && new Date(user.banUntil) > new Date() ? 'unban' : 'ban',
-      duration: 7,
-      reason: ''
+      action: action,
+      type: actionType,
+      duration: actionType === 'pause' ? 7 : 30,
+      reason: defaultReason
     });
-    setShowBanModal(true);
+    setShowActionModal(true);
+    setActionError(null);
+    setActionSuccess(null);
   };
 
-  const handlePauseClick = (user) => {
-    setSelectedUser(user);
-    setActionForm({
-      action: user.pauseUntil && new Date(user.pauseUntil) > new Date() ? 'unpause' : 'pause',
-      duration: 7,
-      reason: ''
-    });
-    setShowPauseModal(true);
-  };
+  const handleActionSubmit = async () => {
+    const { action, type, duration, reason } = actionForm;
+    
+    // Validation
+    if ((action === 'ban' || action === 'pause') && (!reason || reason.trim().length < 3)) {
+      setActionError(`${action === 'ban' ? 'Ban' : 'Pause'} reason is required and must be at least 3 characters`);
+      return;
+    }
 
-  const handleBanSubmit = async () => {
     try {
-      const response = await adminAPI.banUser(selectedUser._id, {
-        action: actionForm.action,
-        duration: actionForm.duration,
-        reason: actionForm.reason
-      });
+      setActionLoading(true);
+      setActionError(null);
+
+      let response;
+      const requestData = { action, duration, reason };
+
+      if (type === 'ban') {
+        response = await adminAPI.banUser(selectedUser._id, requestData);
+      } else if (type === 'pause') {
+        response = await adminAPI.pauseUser(selectedUser._id, requestData);
+      } else if (type === 'restore') {
+        response = await adminAPI.fullyRestoreUser(selectedUser._id, requestData);
+      }
 
       if (response.success) {
-        console.log('Ban action successful:', response);
-        setShowBanModal(false);
-        fetchUsers(); // Refresh the list
+        setActionSuccess(response.message);
+        setTimeout(() => {
+          setShowActionModal(false);
+          setActionSuccess(null);
+          fetchUsers(); // Refresh the list
+        }, 2000);
       } else {
-        throw new Error(response.message || 'Failed to update user ban status');
+        throw new Error(response.message || `Failed to ${action} user`);
       }
     } catch (error) {
-      console.error('Error with ban action:', error);
-      // You could show an error message to the user here
+      console.error(`Error with ${action} action:`, error);
+      setActionError(error.message || `Failed to process ${action} request`);
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handlePauseSubmit = async () => {
-    try {
-      const response = await adminAPI.pauseUser(selectedUser._id, {
-        action: actionForm.action,
-        duration: actionForm.duration,
-        reason: actionForm.reason
-      });
+  // Component for user avatar
+  const UserAvatar = ({ user, size = '40px' }) => {
+    const [imageError, setImageError] = useState(false);
+    
+    const handleImageError = () => {
+      setImageError(true);
+    };
 
-      if (response.success) {
-        console.log('Pause action successful:', response);
-        setShowPauseModal(false);
-        fetchUsers(); // Refresh the list
-      } else {
-        throw new Error(response.message || 'Failed to update user pause status');
-      }
-    } catch (error) {
-      console.error('Error with pause action:', error);
-      // You could show an error message to the user here
+    if (!user.profileImage || imageError) {
+      return (
+        <div 
+          className="user-avatar fallback" 
+          style={{ 
+            width: size, 
+            height: size,
+            fontSize: parseInt(size) * 0.4 + 'px'
+          }}
+        >
+          {user.username.charAt(0).toUpperCase()}
+        </div>
+      );
     }
+
+    return (
+      <img 
+        src={user.profileImage} 
+        alt={user.username}
+        className="user-avatar image"
+        style={{ width: size, height: size }}
+        onError={handleImageError}
+      />
+    );
   };
 
   if (isLoading) {
@@ -201,8 +301,25 @@ const AdminUsers = () => {
     <div className="admin-page">
       <div className="admin-header">
         <h1>User Management</h1>
-        <p>Manage platform users, artists, and administrators</p>
+        <p>Manage platform users with ban and pause controls</p>
+        <div className="legend">
+          <div className="legend-item">
+            <span className="legend-color banned"></span>
+            <span>Ban = Permanent email restriction</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color paused"></span>
+            <span>Pause = Temporary restriction</span>
+          </div>
+        </div>
       </div>
+
+      {(actionError || actionSuccess) && (
+        <div className={`message-banner ${actionSuccess ? 'success' : 'error'}`}>
+          <span>{actionSuccess || actionError}</span>
+          <button onClick={() => {setActionError(null); setActionSuccess(null)}}>×</button>
+        </div>
+      )}
 
       <div className="admin-filters">
         <div className="filter-group">
@@ -236,8 +353,9 @@ const AdminUsers = () => {
           >
             <option value="">All Status</option>
             <option value="active">Active</option>
-            <option value="banned">Banned</option>
-            <option value="paused">Paused</option>
+            <option value="banned">Currently Banned</option>
+            <option value="permanently_banned">Permanently Banned</option>
+            <option value="paused">Currently Paused</option>
             <option value="inactive">Inactive</option>
           </select>
         </div>
@@ -252,7 +370,6 @@ const AdminUsers = () => {
               <th>Status</th>
               <th>Followers</th>
               <th>Joined</th>
-              <th>Last Login</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -263,9 +380,7 @@ const AdminUsers = () => {
                 <tr key={user._id}>
                   <td>
                     <div className="user-info">
-                      <div className="user-avatar">
-                        {user.username.charAt(0).toUpperCase()}
-                      </div>
+                      <UserAvatar user={user} />
                       <div>
                         <div className="user-name">{user.username}</div>
                         <div className="user-email">{user.email}</div>
@@ -279,38 +394,49 @@ const AdminUsers = () => {
                   </td>
                   <td>
                     <span 
-                      className="status-badge"
+                      className="status-badge" 
                       style={{ backgroundColor: status.color }}
+                      title={status.isPermanent ? 'Email permanently banned from registration' : ''}
                     >
                       {status.text}
                     </span>
                   </td>
-                  <td>{user.followers.length}</td>
+                  <td>{user.followers?.length || 0}</td>
                   <td>{formatDate(user.createdAt)}</td>
-                  <td>{formatDate(user.lastLogin)}</td>
-                  <td className="action-buttons">
-                    <button
-                      className="view-button"
-                      onClick={() => handleUserClick(user)}
-                    >
-                      View
-                    </button>
-                    {user.role !== 'admin' && (
-                      <>
-                        <button
-                          className={`ban-button ${status.status === 'banned' ? 'unban' : ''}`}
-                          onClick={() => handleBanClick(user)}
-                        >
-                          {status.status === 'banned' ? 'Unban' : 'Ban'}
-                        </button>
-                        <button
-                          className={`pause-button ${status.status === 'paused' ? 'unpause' : ''}`}
-                          onClick={() => handlePauseClick(user)}
-                        >
-                          {status.status === 'paused' ? 'Unpause' : 'Pause'}
-                        </button>
-                      </>
-                    )}
+                  <td>
+                    <div className="action-buttons">
+                      <button 
+                        className="view-button"
+                        onClick={() => handleUserClick(user)}
+                      >
+                        View
+                      </button>
+                      {user.role !== 'admin' && (
+                        <>
+                          <button 
+                            className={`ban-button ${status.status === 'banned' ? 'unban' : ''}`}
+                            onClick={() => handleActionClick(user, 'ban')}
+                          >
+                            {status.status === 'banned' ? 'Unban' : 'Ban'}
+                          </button>
+                          <button 
+                            className={`pause-button ${status.status === 'paused' ? 'unpause' : ''}`}
+                            onClick={() => handleActionClick(user, 'pause')}
+                          >
+                            {status.status === 'paused' ? 'Unpause' : 'Pause'}
+                          </button>
+                          {user.permanentlyBanned && (
+                            <button 
+                              className="restore-button"
+                              onClick={() => handleActionClick(user, 'restore')}
+                              title="Fully restore account and allow email re-registration"
+                            >
+                              Restore
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -318,6 +444,25 @@ const AdminUsers = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="pagination">
+          <button 
+            onClick={() => setPagination({...pagination, current: pagination.current - 1})}
+            disabled={pagination.current === 1}
+          >
+            Previous
+          </button>
+          <span>Page {pagination.current} of {pagination.pages}</span>
+          <button 
+            onClick={() => setPagination({...pagination, current: pagination.current + 1})}
+            disabled={pagination.current === pagination.pages}
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {/* User Details Modal */}
       {showUserModal && selectedUser && (
@@ -329,120 +474,85 @@ const AdminUsers = () => {
             </div>
             <div className="modal-body">
               <div className="user-details">
-                <div className="detail-row">
-                  <strong>Username:</strong> {selectedUser.username}
+                <div className="user-detail-avatar">
+                  <UserAvatar user={selectedUser} size="80px" />
                 </div>
-                <div className="detail-row">
-                  <strong>Email:</strong> {selectedUser.email}
+                <div className="user-detail-info">
+                  <h4>{selectedUser.username}</h4>
+                  <p><strong>Email:</strong> {selectedUser.email}</p>
+                  <p><strong>Role:</strong> {getUserRole(selectedUser)}</p>
+                  <p><strong>Status:</strong> {getUserStatus(selectedUser).text}</p>
+                  <p><strong>Followers:</strong> {selectedUser.followers?.length || 0}</p>
+                  <p><strong>Joined:</strong> {formatDate(selectedUser.createdAt)}</p>
+                  <p><strong>Last Login:</strong> {formatDate(selectedUser.lastLogin)}</p>
+                  
+                  {selectedUser.permanentlyBanned && (
+                    <div className="permanent-ban-warning">
+                      <p><strong>⚠️ Email Permanently Banned:</strong> This email cannot be used for new registrations</p>
+                    </div>
+                  )}
+                  
+                  {selectedUser.banUntil && new Date(selectedUser.banUntil) > new Date() && (
+                    <div className="ban-info">
+                      <p><strong>Banned until:</strong> {formatDate(selectedUser.banUntil)}</p>
+                      <p><strong>Ban reason:</strong> {selectedUser.banReason}</p>
+                    </div>
+                  )}
+                  
+                  {selectedUser.pauseUntil && new Date(selectedUser.pauseUntil) > new Date() && (
+                    <div className="pause-info">
+                      <p><strong>Paused until:</strong> {formatDate(selectedUser.pauseUntil)}</p>
+                      <p><strong>Pause reason:</strong> {selectedUser.pauseReason}</p>
+                    </div>
+                  )}
                 </div>
-                <div className="detail-row">
-                  <strong>Role:</strong> {getUserRole(selectedUser)}
-                </div>
-                <div className="detail-row">
-                  <strong>Status:</strong> 
-                  <span 
-                    className="status-badge"
-                    style={{ backgroundColor: getUserStatus(selectedUser).color, marginLeft: '8px' }}
-                  >
-                    {getUserStatus(selectedUser).text}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <strong>Followers:</strong> {selectedUser.followers.length}
-                </div>
-                <div className="detail-row">
-                  <strong>Following:</strong> {selectedUser.following.length}
-                </div>
-                <div className="detail-row">
-                  <strong>Joined:</strong> {formatDate(selectedUser.createdAt)}
-                </div>
-                <div className="detail-row">
-                  <strong>Last Login:</strong> {formatDate(selectedUser.lastLogin)}
-                </div>
-                {selectedUser.banReason && (
-                  <div className="detail-row">
-                    <strong>Ban Reason:</strong> {selectedUser.banReason}
-                  </div>
-                )}
-                {selectedUser.pauseReason && (
-                  <div className="detail-row">
-                    <strong>Pause Reason:</strong> {selectedUser.pauseReason}
-                  </div>
-                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Ban Modal */}
-      {showBanModal && (
-        <div className="modal-overlay" onClick={() => setShowBanModal(false)}>
+      {/* Action Modal */}
+      {showActionModal && (
+        <div className="modal-overlay" onClick={() => setShowActionModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{actionForm.action === 'ban' ? 'Ban User' : 'Unban User'}</h3>
-              <button onClick={() => setShowBanModal(false)} className="close-button">×</button>
+              <h3>
+                {actionForm.action === 'ban' && 'Ban User (Permanent Email Restriction)'}
+                {actionForm.action === 'unban' && 'Unban User'}
+                {actionForm.action === 'pause' && 'Pause User (Temporary Restriction)'}
+                {actionForm.action === 'unpause' && 'Unpause User'}
+                {actionForm.action === 'restore' && 'Fully Restore User'}
+              </h3>
+              <button onClick={() => setShowActionModal(false)} className="close-button">×</button>
             </div>
             <div className="modal-body">
               {actionForm.action === 'ban' && (
-                <>
-                  <div className="form-group">
-                    <label>Duration (days):</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="365"
-                      value={actionForm.duration}
-                      onChange={(e) => setActionForm({...actionForm, duration: e.target.value})}
-                      className="form-input"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Reason:</label>
-                    <textarea
-                      value={actionForm.reason}
-                      onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
-                      className="form-textarea"
-                      placeholder="Enter reason for ban..."
-                      required
-                    />
-                  </div>
-                </>
+                <div className="warning-box">
+                  <p><strong>⚠️ Warning:</strong> Banning a user will permanently prevent this email from registering new accounts, even after the ban period expires.</p>
+                </div>
               )}
-              <div className="form-actions">
-                <button 
-                  type="button" 
-                  onClick={handleBanSubmit} 
-                  className="submit-button"
-                >
-                  {actionForm.action === 'ban' ? 'Ban User' : 'Unban User'}
-                </button>
-                <button type="button" onClick={() => setShowBanModal(false)} className="cancel-button">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pause Modal */}
-      {showPauseModal && (
-        <div className="modal-overlay" onClick={() => setShowPauseModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{actionForm.action === 'pause' ? 'Pause User' : 'Unpause User'}</h3>
-              <button onClick={() => setShowPauseModal(false)} className="close-button">×</button>
-            </div>
-            <div className="modal-body">
+              
               {actionForm.action === 'pause' && (
+                <div className="info-box">
+                  <p><strong>ℹ️ Info:</strong> Pausing is temporary. The user can return normally after the pause period without permanent restrictions.</p>
+                </div>
+              )}
+              
+              {actionForm.action === 'restore' && (
+                <div className="info-box">
+                  <p><strong>ℹ️ Info:</strong> This will fully restore the user account and allow the email to be used for new registrations if the account is deleted.</p>
+                </div>
+              )}
+
+              {(actionForm.action === 'ban' || actionForm.action === 'pause') && (
                 <>
                   <div className="form-group">
                     <label>Duration (days):</label>
                     <input
                       type="number"
                       min="1"
-                      max="90"
+                      max={actionForm.action === 'ban' ? 365 : 90}
                       value={actionForm.duration}
                       onChange={(e) => setActionForm({...actionForm, duration: e.target.value})}
                       className="form-input"
@@ -454,21 +564,53 @@ const AdminUsers = () => {
                       value={actionForm.reason}
                       onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
                       className="form-textarea"
-                      placeholder="Enter reason for pause..."
+                      placeholder={`Enter reason for ${actionForm.action}...`}
                       required
                     />
                   </div>
                 </>
               )}
+              
+              {actionForm.action === 'restore' && (
+                <div className="form-group">
+                  <label>Reason for restoration:</label>
+                  <textarea
+                    value={actionForm.reason}
+                    onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
+                    className="form-textarea"
+                    placeholder="Enter reason for full restoration..."
+                  />
+                </div>
+              )}
+
+              {actionError && (
+                <div className="error-message">{actionError}</div>
+              )}
+              
+              {actionSuccess && (
+                <div className="success-message">{actionSuccess}</div>
+              )}
+
               <div className="form-actions">
                 <button 
                   type="button" 
-                  onClick={handlePauseSubmit} 
+                  onClick={handleActionSubmit} 
                   className="submit-button"
+                  disabled={actionLoading}
                 >
-                  {actionForm.action === 'pause' ? 'Pause User' : 'Unpause User'}
+                  {actionLoading ? 'Processing...' : 
+                   actionForm.action === 'ban' ? 'Ban User' :
+                   actionForm.action === 'unban' ? 'Unban User' :
+                   actionForm.action === 'pause' ? 'Pause User' :
+                   actionForm.action === 'unpause' ? 'Unpause User' :
+                   'Restore User'}
                 </button>
-                <button type="button" onClick={() => setShowPauseModal(false)} className="cancel-button">
+                <button 
+                  type="button" 
+                  onClick={() => setShowActionModal(false)} 
+                  className="cancel-button"
+                  disabled={actionLoading}
+                >
                   Cancel
                 </button>
               </div>
@@ -492,8 +634,68 @@ const AdminUsers = () => {
         }
 
         .admin-header p {
-          margin: 0;
+          margin: 0 0 1rem 0;
           color: #7f8c8d;
+        }
+
+        .legend {
+          display: flex;
+          gap: 2rem;
+          margin-top: 0.5rem;
+        }
+
+        .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.9rem;
+          color: #666;
+        }
+
+        .legend-color {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+        }
+
+        .legend-color.banned {
+          background: #e74c3c;
+        }
+
+        .legend-color.paused {
+          background: #f39c12;
+        }
+
+        .message-banner {
+          padding: 1rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .message-banner.success {
+          background: #d4edda;
+          border: 1px solid #c3e6cb;
+          color: #155724;
+        }
+
+        .message-banner.error {
+          background: #f8d7da;
+          border: 1px solid #f5c6cb;
+          color: #721c24;
+        }
+
+        .message-banner button {
+          background: none;
+          border: none;
+          color: inherit;
+          font-size: 1.2rem;
+          cursor: pointer;
+          padding: 0;
+          width: 24px;
+          height: 24px;
         }
 
         .admin-filters {
@@ -561,9 +763,7 @@ const AdminUsers = () => {
           gap: 0.75rem;
         }
 
-        .user-avatar {
-          width: 40px;
-          height: 40px;
+        .user-avatar.fallback {
           border-radius: 50%;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           display: flex;
@@ -571,6 +771,13 @@ const AdminUsers = () => {
           justify-content: center;
           color: white;
           font-weight: bold;
+          flex-shrink: 0;
+        }
+
+        .user-avatar.image {
+          border-radius: 50%;
+          object-fit: cover;
+          flex-shrink: 0;
         }
 
         .user-name {
@@ -622,7 +829,8 @@ const AdminUsers = () => {
 
         .view-button,
         .ban-button,
-        .pause-button {
+        .pause-button,
+        .restore-button {
           padding: 0.5rem 1rem;
           border: none;
           border-radius: 6px;
@@ -675,6 +883,36 @@ const AdminUsers = () => {
           background: #229954;
         }
 
+        .restore-button {
+          background: #8e44ad;
+          color: white;
+        }
+
+        .restore-button:hover {
+          background: #7d3c98;
+        }
+
+        .pagination {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 1rem;
+          margin-top: 2rem;
+        }
+
+        .pagination button {
+          padding: 0.5rem 1rem;
+          border: 1px solid #ddd;
+          background: white;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+
+        .pagination button:disabled {
+          background: #f5f5f5;
+          cursor: not-allowed;
+        }
+
         .modal-overlay {
           position: fixed;
           top: 0;
@@ -686,14 +924,16 @@ const AdminUsers = () => {
           align-items: center;
           justify-content: center;
           z-index: 1000;
+          padding: 1rem;
         }
 
         .modal-content {
           background: white;
           border-radius: 12px;
-          max-width: 500px;
-          width: 90%;
-          max-height: 80vh;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+          max-width: 600px;
+          width: 100%;
+          max-height: 90vh;
           overflow-y: auto;
         }
 
@@ -701,7 +941,7 @@ const AdminUsers = () => {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 1.5rem;
+          padding: 1.5rem 1.5rem 1rem 1.5rem;
           border-bottom: 1px solid #e9ecef;
         }
 
@@ -715,33 +955,70 @@ const AdminUsers = () => {
           border: none;
           font-size: 1.5rem;
           cursor: pointer;
-          color: #7f8c8d;
-          width: 30px;
-          height: 30px;
+          color: #6c757d;
+          padding: 0;
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
           justify-content: center;
           border-radius: 50%;
-          transition: background 0.3s ease;
         }
 
         .close-button:hover {
-          background: #f8f9fa;
+          background-color: #f8f9fa;
         }
 
         .modal-body {
           padding: 1.5rem;
         }
 
-        .user-details .detail-row {
+        .user-details {
           display: flex;
-          align-items: center;
-          padding: 0.75rem 0;
-          border-bottom: 1px solid #f8f9fa;
+          gap: 1rem;
+          align-items: flex-start;
         }
 
-        .user-details .detail-row:last-child {
-          border-bottom: none;
+        .user-detail-info h4 {
+          margin: 0 0 1rem 0;
+          color: #2c3e50;
+        }
+
+        .user-detail-info p {
+          margin: 0.5rem 0;
+          color: #666;
+        }
+
+        .permanent-ban-warning {
+          background: #fff3cd;
+          border: 1px solid #faebcc;
+          border-radius: 8px;
+          padding: 1rem;
+          margin: 1rem 0;
+        }
+
+        .ban-info,
+        .pause-info {
+          margin-top: 1rem;
+          padding: 1rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+        }
+
+        .warning-box {
+          background: #fff3cd;
+          border: 1px solid #faebcc;
+          border-radius: 8px;
+          padding: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .info-box {
+          background: #d1ecf1;
+          border: 1px solid #bee5eb;
+          border-radius: 8px;
+          padding: 1rem;
+          margin-bottom: 1rem;
         }
 
         .form-group {
@@ -763,6 +1040,7 @@ const AdminUsers = () => {
           border-radius: 8px;
           font-size: 1rem;
           transition: border-color 0.3s ease;
+          box-sizing: border-box;
         }
 
         .form-input:focus,
@@ -774,6 +1052,26 @@ const AdminUsers = () => {
         .form-textarea {
           min-height: 100px;
           resize: vertical;
+        }
+
+        .error-message {
+          background: #f8d7da;
+          border: 1px solid #f5c6cb;
+          color: #721c24;
+          padding: 0.75rem;
+          border-radius: 6px;
+          margin-bottom: 1rem;
+          font-size: 0.9rem;
+        }
+
+        .success-message {
+          background: #d4edda;
+          border: 1px solid #c3e6cb;
+          color: #155724;
+          padding: 0.75rem;
+          border-radius: 6px;
+          margin-bottom: 1rem;
+          font-size: 0.9rem;
         }
 
         .form-actions {
@@ -793,12 +1091,18 @@ const AdminUsers = () => {
           transition: all 0.3s ease;
         }
 
+        .submit-button:disabled,
+        .cancel-button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
         .submit-button {
           background: #667eea;
           color: white;
         }
 
-        .submit-button:hover {
+        .submit-button:hover:not(:disabled) {
           background: #5a6fd8;
         }
 
@@ -807,7 +1111,7 @@ const AdminUsers = () => {
           color: #6c757d;
         }
 
-        .cancel-button:hover {
+        .cancel-button:hover:not(:disabled) {
           background: #dee2e6;
         }
 
@@ -845,16 +1149,28 @@ const AdminUsers = () => {
           }
 
           .admin-table {
-            min-width: 800px;
+            min-width: 900px;
           }
 
           .action-buttons {
             flex-direction: column;
+            gap: 0.25rem;
           }
 
           .modal-content {
             width: 95%;
             margin: 1rem;
+          }
+
+          .user-details {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+
+          .legend {
+            flex-direction: column;
+            gap: 0.5rem;
           }
         }
       `}</style>

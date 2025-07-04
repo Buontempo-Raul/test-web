@@ -1,4 +1,4 @@
-// backend/controllers/authController.js - FIXED: Changed matchPassword to comparePassword
+// backend/controllers/authController.js - Enhanced with permanent ban prevention
 const userService = require('../services/userService');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
@@ -10,7 +10,12 @@ const generateToken = (id) => {
   });
 };
 
-// @desc    Register new user
+// Helper function to check user account status
+const checkAccountStatus = (user) => {
+  return user.getAccountStatus();
+};
+
+// @desc    Register new user with permanent ban prevention
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
@@ -25,15 +30,38 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Check if user already exists
+    // IMPORTANT: Check if email is permanently banned
+    const isEmailBanned = await User.isEmailPermanentlyBanned(email);
+    if (isEmailBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'This email address is not eligible for registration. If you believe this is an error, please contact support.',
+        reason: 'email_permanently_banned'
+      });
+    }
+
+    // Check if user already exists (for active accounts)
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
+      $or: [
+        { email: email.toLowerCase() },
+        { username: username }
+      ]
     });
 
     if (existingUser) {
+      // If user exists and is permanently banned
+      if (existingUser.permanentlyBanned) {
+        return res.status(403).json({
+          success: false,
+          message: 'This email address is not eligible for registration. If you believe this is an error, please contact support.',
+          reason: 'email_permanently_banned'
+        });
+      }
+      
+      // If user exists and is active
       return res.status(400).json({
         success: false,
-        message: existingUser.email === email 
+        message: existingUser.email === email.toLowerCase()
           ? 'Email already in use' 
           : 'Username already taken' 
       });
@@ -42,7 +70,7 @@ const registerUser = async (req, res) => {
     // Create new user
     const userData = {
       username,
-      email,
+      email: email.toLowerCase(),
       password,
       role: 'user' // Default role
     };
@@ -69,6 +97,7 @@ const registerUser = async (req, res) => {
       });
     }
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -76,7 +105,7 @@ const registerUser = async (req, res) => {
   }
 };
 
-// @desc    Login user & get token
+// @desc    Login user & get token with enhanced ban/pause enforcement
 // @route   POST /api/auth/login
 // @access  Public
 const loginUser = async (req, res) => {
@@ -84,11 +113,62 @@ const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
 
     // Check if user exists and password matches
-    // FIXED: Changed from matchPassword to comparePassword to match User model
     if (user && (await user.comparePassword(password))) {
+      
+      // Get detailed account status
+      const accountStatus = checkAccountStatus(user);
+      
+      if (!accountStatus.allowed) {
+        // Enhanced error messages based on restriction type
+        let message = accountStatus.reason;
+        let statusDetails = {
+          status: accountStatus.status,
+          restriction: accountStatus.restriction,
+          isPermanentlyBanned: accountStatus.isPermanentlyBanned
+        };
+
+        if (accountStatus.status === 'banned') {
+          if (accountStatus.isPermanentlyBanned) {
+            message = `Your account has been permanently banned. ${accountStatus.reason}`;
+          } else {
+            const banEndsAt = accountStatus.until.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+            message = `Your account is banned until ${banEndsAt}. Reason: ${accountStatus.reason}`;
+          }
+          statusDetails.banUntil = accountStatus.until;
+          statusDetails.banReason = accountStatus.reason;
+        } else if (accountStatus.status === 'paused') {
+          const pauseEndsAt = accountStatus.until.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          message = `Your account is temporarily suspended until ${pauseEndsAt}. Reason: ${accountStatus.reason}`;
+          statusDetails.pauseUntil = accountStatus.until;
+          statusDetails.pauseReason = accountStatus.reason;
+        }
+        
+        return res.status(403).json({
+          success: false,
+          message: message,
+          accountStatus: statusDetails
+        });
+      }
+      
+      // Update last login time
+      user.lastLogin = new Date();
+      await user.save();
+      
       res.json({
         success: true,
         user: {
@@ -98,6 +178,7 @@ const loginUser = async (req, res) => {
           isArtist: user.isArtist,
           profileImage: user.profileImage,
           role: user.role,
+          lastLogin: user.lastLogin,
           token: generateToken(user._id)
         }
       });
@@ -108,6 +189,7 @@ const loginUser = async (req, res) => {
       });
     }
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -115,12 +197,15 @@ const loginUser = async (req, res) => {
   }
 };
 
-// @desc    Get user profile
+// @desc    Get user profile with account status check
 // @route   GET /api/auth/profile
 // @access  Private
 const getUserProfile = async (req, res) => {
   try {
     const user = await userService.getUserById(req.user._id);
+    
+    // Check account status
+    const accountStatus = checkAccountStatus(user);
 
     res.json({
       success: true,
@@ -133,8 +218,10 @@ const getUserProfile = async (req, res) => {
         bio: user.bio,
         website: user.website,
         role: user.role,
-        createdAt: user.createdAt
-      }
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
+      },
+      accountStatus: accountStatus
     });
   } catch (error) {
     res.status(error.message === 'User not found' ? 404 : 500).json({
@@ -161,8 +248,17 @@ const changePassword = async (req, res) => {
       });
     }
     
+    // Check account status
+    const accountStatus = checkAccountStatus(user);
+    if (!accountStatus.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot change password: ' + accountStatus.reason,
+        accountStatus: accountStatus
+      });
+    }
+    
     // Check if current password is correct
-    // FIXED: Changed from matchPassword to comparePassword
     const isMatch = await user.comparePassword(currentPassword);
     
     if (!isMatch) {
@@ -203,7 +299,7 @@ const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
       return res.status(404).json({
@@ -212,15 +308,92 @@ const forgotPassword = async (req, res) => {
       });
     }
     
+    // Check if user is permanently banned
+    if (user.permanentlyBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Password reset is not available for this account. Please contact support.',
+        reason: 'account_permanently_banned'
+      });
+    }
+    
+    // Check if user is currently banned/paused
+    const accountStatus = checkAccountStatus(user);
+    if (!accountStatus.allowed && accountStatus.status !== 'inactive') {
+      return res.status(403).json({
+        success: false,
+        message: `Password reset not available: ${accountStatus.reason}`,
+        accountStatus: accountStatus
+      });
+    }
+    
     // In a real application, you would:
     // 1. Generate a password reset token
     // 2. Save it to the user model with an expiration
     // 3. Send an email with a reset link
     
-    // For this example, we'll just return a success message
     res.json({
       success: true,
       message: 'If an account with that email exists, a password reset link will be sent'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Check current account status
+// @route   GET /api/auth/status
+// @access  Private
+const checkAccountStatusEndpoint = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    const accountStatus = checkAccountStatus(user);
+    
+    res.json({
+      success: true,
+      accountStatus: accountStatus
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Check if email is banned (public endpoint for frontend validation)
+// @route   POST /api/auth/check-email
+// @access  Public
+const checkEmailStatus = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+    
+    const isEmailBanned = await User.isEmailPermanentlyBanned(email);
+    
+    res.json({
+      success: true,
+      isEmailBanned: isEmailBanned,
+      message: isEmailBanned 
+        ? 'This email address is not eligible for registration' 
+        : 'Email is available for registration'
     });
   } catch (error) {
     res.status(500).json({
@@ -235,5 +408,8 @@ module.exports = {
   loginUser,
   getUserProfile,
   changePassword,
-  forgotPassword
+  forgotPassword,
+  checkAccountStatusEndpoint,
+  checkEmailStatus,
+  checkAccountStatus // Export helper function for use in middleware
 };
