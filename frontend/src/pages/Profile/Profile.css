@@ -689,3 +689,62 @@
     height: 200px;
   }
 }
+
+/* Quick CSS additions for Profile.css - Add these to your existing Profile.css */
+
+/* Profile Posts Grid Layout */
+.profile-posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+/* Make posts smaller in profile view */
+.profile-posts-grid .post-card {
+  transform: scale(0.85);
+  transform-origin: top;
+  margin-bottom: 0;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.profile-posts-grid .post-card:hover {
+  transform: scale(0.88);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Purple borders for avatars */
+.user-avatar.purple-border {
+  border: 3px solid #8b5cf6 !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+}
+
+.user-avatar.purple-border:hover {
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .profile-posts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .profile-posts-grid .post-card {
+    transform: scale(0.95);
+  }
+  
+  .profile-posts-grid .post-card:hover {
+    transform: scale(0.97);
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-posts-grid .post-card {
+    transform: scale(1);
+  }
+  
+  .profile-posts-grid .post-card:hover {
+    transform: scale(1.02);
+  }
+}

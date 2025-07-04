@@ -1,0 +1,87 @@
+/* frontend/src/components/common/UserAvatar/UserAvatar.css */
+.user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.user-avatar.with-border {
+  border: 2px solid #e5e7eb;
+}
+
+.user-avatar.clickable {
+  cursor: pointer;
+}
+
+.user-avatar.clickable:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Image avatar styles */
+.user-avatar.image {
+  background: #f3f4f6;
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Initials avatar styles */
+.user-avatar.initials {
+  color: white;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.user-avatar-initials {
+  line-height: 1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+}
+
+/* Size variants */
+.user-avatar.small {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+.user-avatar.medium {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.user-avatar.large {
+  width: 80px;
+  height: 80px;
+  font-size: 32px;
+}
+
+.user-avatar.extra-large {
+  width: 120px;
+  height: 120px;
+  font-size: 48px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .user-avatar.clickable:hover {
+    transform: scale(1.02);
+  }
+}
+
+/* Accessibility */
+.user-avatar:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}

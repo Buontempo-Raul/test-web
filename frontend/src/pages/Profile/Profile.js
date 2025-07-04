@@ -1,4 +1,4 @@
-// src/pages/Profile/Profile.js
+// frontend/src/pages/Profile/Profile.js - Complete Fixed Version
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { userAPI, postAPI } from '../../services/api';
 import PostCard from '../../components/explore/PostCard/PostCard';
 import FollowersModal from '../../components/profile/FollowersModal/FollowersModal';
+import UserAvatar from '../../components/common/UserAvatar/UserAvatar';
 
 const Profile = () => {
   const { username } = useParams();
@@ -71,6 +72,30 @@ const Profile = () => {
     }
   };
 
+  // FIXED: Function to fetch user's posts using user ID
+  const fetchUserPosts = async (userId) => {
+    if (!userId) {
+      console.error('No user ID provided for fetching posts');
+      return;
+    }
+    
+    try {
+      console.log('Fetching posts for user ID:', userId);
+      const response = await postAPI.getUserPosts(userId);
+      console.log('Posts response:', response.data);
+      
+      if (response.data.success) {
+        setPosts(response.data.posts);
+        console.log('Posts loaded successfully:', response.data.posts.length);
+      } else {
+        console.error('Failed to fetch posts:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
+      console.error('Error response:', error.response?.data);
+    }
+  };
+
   // Function to handle follow/unfollow
   const handleFollowToggle = async () => {
     if (!currentUser || isOwnProfile) return;
@@ -105,13 +130,80 @@ const Profile = () => {
     setShowFollowersModal(false);
   };
 
+  // FIXED: Handle like functionality for posts in profile
+  const handleLike = async (postId) => {
+    if (!isAuthenticated) {
+      alert('Please log in to like posts');
+      return;
+    }
+
+    try {
+      const response = await postAPI.likePost(postId);
+      
+      if (response.data.success) {
+        setPosts(prevPosts => 
+          prevPosts.map(post => {
+            if (post._id === postId) {
+              return {
+                ...post,
+                likes: response.data.likes,
+                isLikedByCurrentUser: response.data.isLiked,
+                likedBy: response.data.isLiked
+                  ? [...(post.likedBy || []), currentUser._id]
+                  : (post.likedBy || []).filter(id => id !== currentUser._id)
+              };
+            }
+            return post;
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error liking post:', error);
+      alert('Failed to like post. Please try again.');
+    }
+  };
+
+  // FIXED: Handle comment functionality for posts in profile
+  const handleComment = async (postId, commentText) => {
+    if (!isAuthenticated) {
+      alert('Please log in to comment on posts');
+      return;
+    }
+
+    if (!commentText || commentText.trim().length === 0) {
+      alert('Please enter a comment');
+      return;
+    }
+
+    try {
+      const response = await postAPI.commentOnPost(postId, commentText.trim());
+      
+      if (response.data.success) {
+        setPosts(prevPosts => 
+          prevPosts.map(post => {
+            if (post._id === postId) {
+              const updatedPost = { ...post };
+              updatedPost.comments = [...(updatedPost.comments || []), response.data.comment];
+              return updatedPost;
+            }
+            return post;
+          })
+        );
+      }
+    } catch (error) {
+      console.error('Error commenting on post:', error);
+      alert('Failed to add comment. Please try again.');
+    }
+  };
+
+  // FIXED: Main useEffect with proper post loading
   useEffect(() => {
     // Function to fetch user profile
     const fetchUserProfile = async () => {
-      setLoading(true);
-      setError('');
-      
       try {
+        setLoading(true);
+        setError('');
+        
         console.log('Fetching profile for username:', username);
         const response = await userAPI.getUserByUsername(username);
         
@@ -119,7 +211,13 @@ const Profile = () => {
           const userData = response.data.user;
           setUser(userData);
           
-          // Set follower/following counts
+          // Initialize follow state
+          if (userData.followers && currentUser) {
+            setIsFollowing(userData.followers.some(follower => 
+              follower._id ? follower._id === currentUser._id : follower === currentUser._id
+            ));
+          }
+          
           setFollowersCount(userData.followers?.length || 0);
           setFollowingCount(userData.following?.length || 0);
           
@@ -137,6 +235,17 @@ const Profile = () => {
           if (currentUser && !isOwnProfile) {
             await checkFollowStatus(userData._id);
           }
+
+          // FIXED: Fetch posts using the user's ID after profile is loaded
+          if (userData._id) {
+            await fetchUserPosts(userData._id);
+          }
+          
+          // Fetch artworks if user is an artist
+          if (userData.isArtist) {
+            fetchUserArtworks();
+          }
+          
         } else {
           setError(response.data.message || 'Failed to load profile');
         }
@@ -149,18 +258,6 @@ const Profile = () => {
         }
       } finally {
         setLoading(false);
-      }
-    };
-
-    // Function to fetch user's posts
-    const fetchUserPosts = async () => {
-      try {
-        const response = await postAPI.getPosts({ creator: username, limit: 50 });
-        if (response.data.success) {
-          setPosts(response.data.posts);
-        }
-      } catch (error) {
-        console.error('Error fetching user posts:', error);
       }
     };
 
@@ -178,8 +275,6 @@ const Profile = () => {
 
     if (username) {
       fetchUserProfile();
-      fetchUserPosts();
-      fetchUserArtworks();
     }
   }, [username, currentUser, isOwnProfile]);
 
@@ -208,8 +303,12 @@ const Profile = () => {
       formData.append('profileImage', file);
 
       const response = await userAPI.uploadProfileImage(formData);
-      
+
       if (response.data.success) {
+        setUser(prev => ({
+          ...prev,
+          profileImage: response.data.profileImage
+        }));
         setEditFormData(prev => ({
           ...prev,
           profileImage: response.data.profileImage
@@ -218,29 +317,19 @@ const Profile = () => {
         setTimeout(() => setUploadSuccess(false), 3000);
       }
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('Error uploading image:', error);
       setUploadError(error.response?.data?.message || 'Failed to upload image');
     } finally {
       setUploadingImage(false);
     }
   };
 
-  // Handle form input changes
-  const handleInputChange = (e) => {
-    setEditFormData({
-      ...editFormData,
-      [e.target.name]: e.target.value
-    });
-  };
-
   // Handle profile update
-  const handleProfileUpdate = async (e) => {
-    e.preventDefault();
+  const handleProfileUpdate = async () => {
     setUpdatingProfile(true);
-    setUploadError(null);
-
+    
     try {
-      const response = await userAPI.updateProfile(editFormData);
+      const response = await userAPI.updateUserProfile(editFormData);
       
       if (response.data.success) {
         setUser(response.data.user);
@@ -249,25 +338,97 @@ const Profile = () => {
         setTimeout(() => setUploadSuccess(false), 3000);
       }
     } catch (error) {
-      console.error('Update error:', error);
+      console.error('Error updating profile:', error);
       setUploadError(error.response?.data?.message || 'Failed to update profile');
     } finally {
       setUpdatingProfile(false);
     }
   };
 
-  // Format date helper
-  const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
+  // Handle edit form changes
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handlePostUpdated = (updatedPost) => {
-    setPosts(prevPosts => 
-      prevPosts.map(post => 
-        post._id === updatedPost._id ? updatedPost : post
-      )
-    );
+  // Helper function to format date
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long'
+    });
+  };
+
+  // Render different content based on active tab
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'Posts':
+        return (
+          <div className="profile-posts">
+            {posts.length === 0 ? (
+              <div className="profile-empty-state">
+                <p>{isOwnProfile ? "You haven't posted anything yet" : `${user?.username} hasn't posted anything yet`}</p>
+                {isOwnProfile && (
+                  <p className="profile-empty-subtitle">Share your first post to get started!</p>
+                )}
+              </div>
+            ) : (
+              <div className="profile-posts-grid">
+                {posts.map(post => (
+                  <PostCard
+                    key={post._id}
+                    post={post}
+                    onLike={handleLike}
+                    onComment={handleComment}
+                    currentUser={currentUser}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+        
+      case 'Artworks':
+        return (
+          <div className="profile-artworks">
+            {artworks.length === 0 ? (
+              <div className="profile-empty-state">
+                <p>{isOwnProfile ? "You haven't added any artworks yet" : `${user?.username} hasn't added any artworks yet`}</p>
+                {isOwnProfile && (
+                  <p className="profile-empty-subtitle">
+                    <Link to="/shop">Add your first artwork</Link> to start showcasing your work!
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="profile-artworks-grid">
+                {artworks.map(artwork => (
+                  <div key={artwork._id} className="profile-artwork-card">
+                    <Link to={`/shop/product/${artwork._id}`}>
+                      <img 
+                        src={artwork.images?.[0] || '/api/placeholder/300/300'} 
+                        alt={artwork.title}
+                        className="profile-artwork-image"
+                      />
+                      <div className="profile-artwork-info">
+                        <h4>{artwork.title}</h4>
+                        <p className="profile-artwork-price">${artwork.price}</p>
+                      </div>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+        
+      default:
+        return null;
+    }
   };
 
   if (loading) {
@@ -312,13 +473,28 @@ const Profile = () => {
         transition={{ duration: 0.5 }}
       >
         <div className="profile-avatar-container">
-          <img 
-            src={user.profileImage || 'https://via.placeholder.com/180x180'} 
-            alt={user.username} 
+          <UserAvatar 
+            user={user}
+            size={180}
             className="profile-avatar"
+            showBorder={true}
           />
           {user.isArtist && (
             <span className="profile-artist-badge">Artist</span>
+          )}
+          {isOwnProfile && (
+            <div className="profile-upload-container">
+              <input
+                type="file"
+                id="profile-image-upload"
+                accept="image/*"
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+              />
+              <label htmlFor="profile-image-upload" className="profile-upload-btn">
+                {uploadingImage ? '⏳' : '📷'}
+              </label>
+            </div>
           )}
         </div>
         
@@ -332,7 +508,6 @@ const Profile = () => {
             {user.username}
           </motion.h1>
           
-          {/* Add follower/following stats */}
           <motion.div 
             className="profile-stats"
             initial={{ opacity: 0 }}
@@ -344,27 +519,19 @@ const Profile = () => {
               <span className="profile-stat-label">Posts</span>
             </div>
             <div 
-              className="profile-stat clickable"
+              className="profile-stat profile-stat-clickable"
               onClick={() => handleFollowersClick('followers')}
-              title="View followers"
             >
               <span className="profile-stat-number">{followersCount}</span>
               <span className="profile-stat-label">Followers</span>
             </div>
             <div 
-              className="profile-stat clickable"
+              className="profile-stat profile-stat-clickable"
               onClick={() => handleFollowersClick('following')}
-              title="View following"
             >
               <span className="profile-stat-number">{followingCount}</span>
               <span className="profile-stat-label">Following</span>
             </div>
-            {user.isArtist && (
-              <div className="profile-stat">
-                <span className="profile-stat-number">{artworks.length}</span>
-                <span className="profile-stat-label">Artworks</span>
-              </div>
-            )}
           </motion.div>
           
           <motion.div 
@@ -437,201 +604,68 @@ const Profile = () => {
                 )}
               </button>
             ) : (
-              <Link to="/login" className="profile-follow-button">
-                Follow
+              <Link to="/login" className="profile-login-prompt">
+                Log in to follow
               </Link>
             )}
           </motion.div>
         </div>
       </motion.div>
-      
-      <div className="profile-content-container">
-        <motion.div 
-          className="profile-tabs"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, duration: 0.5 }}
-        >
-          <button 
-            className={`profile-tab ${activeTab === 'Posts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('Posts')}
-          >
-            <span className="profile-tab-icon posts-icon"></span>
-            Posts
-            <span className="profile-tab-count">{posts.length}</span>
-          </button>
-          
-          {user.isArtist && (
-            <button 
-              className={`profile-tab ${activeTab === 'Artworks' ? 'active' : ''}`}
-              onClick={() => setActiveTab('Artworks')}
-            >
-              <span className="profile-tab-icon artworks-icon"></span>
-              Artworks
-              <span className="profile-tab-count">{artworks.length}</span>
-            </button>
-          )}
-        </motion.div>
-        
-        <motion.div 
-          className="profile-content"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8, duration: 0.5 }}
-        >
-          {activeTab === 'Posts' && (
-            <div className="profile-posts-feed">
-              {posts.length > 0 ? (
-                posts.map(post => (
-                  <PostCard 
-                    key={post._id} 
-                    post={post} 
-                    onUpdate={handlePostUpdated}
-                  />
-                ))
-              ) : (
-                <div className="profile-empty-state">
-                  <p>No posts yet</p>
-                  {isOwnProfile && (
-                    <Link to="/create-post" className="create-post-link">
-                      Create your first post
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {activeTab === 'Artworks' && user.isArtist && (
-            <div className="profile-artworks-grid">
-              {artworks.length > 0 ? (
-                artworks.map(artwork => (
-                  <div key={artwork._id} className="artwork-card">
-                    <img 
-                      src={artwork.images[0]} 
-                      alt={artwork.title}
-                      className="artwork-image"
-                    />
-                    <div className="artwork-info">
-                      <h3>{artwork.title}</h3>
-                      <p className="artwork-price">${artwork.price}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="profile-empty-state">
-                  <p>No artworks available</p>
-                  {isOwnProfile && (
-                    <Link to="/artist/create" className="create-artwork-link">
-                      Create your first artwork
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </motion.div>
-      </div>
-      
-      {/* Edit Profile Modal */}
-      {showEditModal && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Edit Profile</h2>
-            <form onSubmit={handleProfileUpdate}>
-              <div className="form-group">
-                <label>Profile Image</label>
-                <div className="image-upload-container">
-                  <div className="current-image">
-                    <img 
-                      src={editFormData.profileImage || 'https://via.placeholder.com/100x100'} 
-                      alt="Profile" 
-                      className="edit-profile-image"
-                    />
-                  </div>
-                  <input
-                    type="file"
-                    id="profileImageInput"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    style={{ display: 'none' }}
-                  />
-                  <button
-                    type="button"
-                    className="upload-image-btn"
-                    onClick={() => document.getElementById('profileImageInput').click()}
-                    disabled={uploadingImage}
-                  >
-                    Change Image
-                  </button>
-                  {uploadingImage && (
-                    <div className="upload-status uploading">Uploading...</div>
-                  )}
-                </div>
-              </div>
 
-              <div className="form-group">
-                <label>Username</label>
-                <input
-                  type="text"
-                  name="username"
-                  value={editFormData.username}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Bio</label>
-                <textarea
-                  name="bio"
-                  value={editFormData.bio}
-                  onChange={handleInputChange}
-                  rows="4"
-                  placeholder="Tell us about yourself..."
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Website</label>
-                <input
-                  type="url"
-                  name="website"
-                  value={editFormData.website}
-                  onChange={handleInputChange}
-                  placeholder="https://yourwebsite.com"
-                />
-              </div>
-
-              {uploadError && (
-                <div className="upload-status error">{uploadError}</div>
-              )}
-
-              {uploadSuccess && (
-                <div className="upload-status success">Profile updated successfully!</div>
-              )}
-
-              <div className="form-actions">
-                <button 
-                  type="submit" 
-                  className="save-profile-btn"
-                  disabled={updatingProfile}
-                >
-                  {updatingProfile ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button 
-                  type="button" 
-                  className="cancel-btn"
-                  onClick={() => setShowEditModal(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
+      {/* Upload success/error messages */}
+      {uploadSuccess && (
+        <div className="profile-message profile-success">
+          Profile updated successfully!
         </div>
       )}
       
+      {uploadError && (
+        <div className="profile-message profile-error">
+          {uploadError}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <motion.div 
+        className="profile-tabs"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7, duration: 0.5 }}
+      >
+        <button 
+          className={`profile-tab ${activeTab === 'Posts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('Posts')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <rect x="9" y="9" width="6" height="6"/>
+          </svg>
+          Posts
+        </button>
+        
+        {user.isArtist && (
+          <button 
+            className={`profile-tab ${activeTab === 'Artworks' ? 'active' : ''}`}
+            onClick={() => setActiveTab('Artworks')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            Artworks
+          </button>
+        )}
+      </motion.div>
+
+      {/* Tab Content */}
+      <motion.div 
+        className="profile-content"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.8, duration: 0.5 }}
+      >
+        {renderTabContent()}
+      </motion.div>
+
       {/* Followers/Following Modal */}
       <FollowersModal
         isOpen={showFollowersModal}
@@ -639,6 +673,73 @@ const Profile = () => {
         type={followersModalType}
         targetUser={user}
       />
+
+      {/* Edit Profile Modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Profile</h2>
+              <button className="modal-close" onClick={() => setShowEditModal(false)}>
+                &times;
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-group">
+                <label htmlFor="edit-username">Username</label>
+                <input
+                  type="text"
+                  id="edit-username"
+                  name="username"
+                  value={editFormData.username}
+                  onChange={handleEditFormChange}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="edit-bio">Bio</label>
+                <textarea
+                  id="edit-bio"
+                  name="bio"
+                  value={editFormData.bio}
+                  onChange={handleEditFormChange}
+                  rows="3"
+                  placeholder="Tell us about yourself..."
+                />
+              </div>
+              
+              <div className="form-group">
+                <label htmlFor="edit-website">Website</label>
+                <input
+                  type="url"
+                  id="edit-website"
+                  name="website"
+                  value={editFormData.website}
+                  onChange={handleEditFormChange}
+                  placeholder="https://yourwebsite.com"
+                />
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowEditModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleProfileUpdate}
+                disabled={updatingProfile}
+              >
+                {updatingProfile ? 'Updating...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

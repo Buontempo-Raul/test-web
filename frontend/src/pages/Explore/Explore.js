@@ -69,15 +69,17 @@ const Explore = () => {
         setPosts(prevPosts => 
           prevPosts.map(post => {
             if (post._id === postId) {
-              const isCurrentlyLiked = post.likes.includes(currentUser._id);
-              const newLikes = isCurrentlyLiked
-                ? post.likes.filter(id => id !== currentUser._id)
-                : [...post.likes, currentUser._id];
+              // FIXED: Use likedBy array instead of likes for checking
+              const isCurrentlyLiked = post.likedBy && post.likedBy.includes(currentUser._id);
+              const newLikedBy = isCurrentlyLiked
+                ? post.likedBy.filter(id => id !== currentUser._id)
+                : [...(post.likedBy || []), currentUser._id];
               
               return {
                 ...post,
-                likes: newLikes,
-                likesCount: newLikes.length
+                likedBy: newLikedBy,
+                likes: newLikedBy.length, // Update the count
+                isLikedByCurrentUser: !isCurrentlyLiked // Toggle the status
               };
             }
             return post;

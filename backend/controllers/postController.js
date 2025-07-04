@@ -171,13 +171,60 @@ const createPost = async (req, res) => {
       }
     }
 
-    // Use Azure URLs if available, otherwise use local paths
-    const mediaUrls = req.azureUrls || (req.files ? req.files.map(file => file.path) : []);
+    // Extract URLs from uploaded files (Azure sets file.url, fallback to file.location or file.path)
+    const mediaUrls = req.files ? req.files.map(file => {
+      return file.url || file.location || file.path;
+    }).filter(url => url) : []; // Filter out any undefined URLs
 
+    // Validate that we have media files
+    if (!mediaUrls || mediaUrls.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one media file is required'
+      });
+    }
+
+    // Helper function to determine file type with null safety
+    const getFileType = (url, file) => {
+      if (!url || typeof url !== 'string') {
+        // Fallback to checking file mimetype if URL is invalid
+        if (file && file.mimetype) {
+          return file.mimetype.startsWith('video/') ? 'video' : 'image';
+        }
+        return 'image'; // Default fallback
+      }
+      
+      const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+      const lowerUrl = url.toLowerCase();
+      return videoExtensions.some(ext => lowerUrl.includes(ext)) ? 'video' : 'image';
+    };
+
+    // Construct the content object based on media files
+    let content;
+    
+    if (mediaUrls.length === 1) {
+      // Single media file
+      const fileType = getFileType(mediaUrls[0], req.files[0]);
+      content = {
+        type: fileType,
+        url: mediaUrls[0]
+      };
+    } else {
+      // Multiple media files - create carousel
+      content = {
+        type: 'carousel',
+        items: mediaUrls.map((url, index) => ({
+          type: getFileType(url, req.files[index]),
+          url: url
+        }))
+      };
+    }
+
+    // Create the post data with proper content structure
     const postData = {
       creator: req.user._id,
+      content: content,  // ← Fixed: Use content object instead of images
       caption,
-      images: mediaUrls,
       tags: parsedTags,
       linkedShopItems: parsedLinkedItems.length > 0 ? parsedLinkedItems : undefined
     };

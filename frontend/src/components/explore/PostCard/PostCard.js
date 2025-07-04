@@ -1,7 +1,8 @@
-// frontend/src/components/explore/PostCard/PostCard.js - Fixed with comment functionality
+// frontend/src/components/explore/PostCard/PostCard.js - Updated with UserAvatar
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './PostCard.css';
+import UserAvatar from '../../common/UserAvatar/UserAvatar';
 
 const PostCard = ({ post, onLike, onComment, currentUser }) => {
   const navigate = useNavigate();
@@ -87,7 +88,14 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
   };
 
   // Check if current user has liked the post
-  const isLikedByCurrentUser = currentUser && post.likedBy && post.likedBy.includes(currentUser._id);
+  const isLikedByCurrentUser = post.isLikedByCurrentUser !== undefined 
+    ? post.isLikedByCurrentUser 
+    : (currentUser && post.likedBy && post.likedBy.includes(currentUser._id));
+
+  // Get likes count
+  const likesCount = typeof post.likes === 'number' 
+    ? post.likes 
+    : (post.likedBy ? post.likedBy.length : 0);
 
   // Render single artwork button (compact)
   const renderArtworkButton = (artwork, index) => (
@@ -95,13 +103,12 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
       key={artwork._id}
       className="artwork-link-button compact"
       onClick={() => handleArtworkClick(artwork._id)}
-      title={`View ${artwork.title} - $${artwork.price}`}
     >
       <div className="artwork-image">
         {artwork.images && artwork.images[0] && (
           <img 
             src={artwork.images[0]} 
-            alt={artwork.title}
+            alt={artwork.title} 
             onError={(e) => {
               e.target.src = '/api/placeholder/60/60';
             }}
@@ -109,50 +116,54 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
         )}
       </div>
       <div className="artwork-info">
-        <span className="artwork-title">{artwork.title}</span>
-        <span className="artwork-price">${artwork.price}</span>
+        <p className="artwork-title">{artwork.title}</p>
+        <p className="artwork-price">${artwork.price}</p>
       </div>
     </button>
   );
 
-  // Render artwork grid (when showing multiple)
+  // Render artwork grid
   const renderArtworkGrid = () => (
-    <div className="linked-artworks-grid">
-      {displayedArtworks.map((artwork, index) => (
-        <div
-          key={artwork._id}
-          className="artwork-grid-item"
-          onClick={() => handleArtworkClick(artwork._id)}
-        >
-          <div className="artwork-grid-image">
-            {artwork.images && artwork.images[0] && (
-              <img 
-                src={artwork.images[0]} 
-                alt={artwork.title}
-                onError={(e) => {
-                  e.target.src = '/api/placeholder/100/100';
-                }}
-              />
-            )}
+    <div className="linked-artworks-container">
+      <div className="linked-artworks-grid">
+        {displayedArtworks.map((artwork, index) => (
+          <div
+            key={artwork._id}
+            className="artwork-grid-item"
+            onClick={() => handleArtworkClick(artwork._id)}
+          >
+            <div className="artwork-grid-image">
+              {artwork.images && artwork.images[0] && (
+                <img 
+                  src={artwork.images[0]} 
+                  alt={artwork.title}
+                  onError={(e) => {
+                    e.target.src = '/api/placeholder/100/80';
+                  }}
+                />
+              )}
+            </div>
+            <div className="artwork-grid-info">
+              <p className="artwork-title">{artwork.title}</p>
+              <p className="artwork-price">${artwork.price}</p>
+            </div>
           </div>
-          <div className="artwork-grid-info">
-            <div className="artwork-grid-title">{artwork.title}</div>
-            <div className="artwork-grid-price">${artwork.price}</div>
+        ))}
+        
+        {hasMoreArtworks && !showAllArtworks && (
+          <div className="artwork-grid-item show-more-artworks">
+            <button 
+              className="show-more-artworks"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAllArtworks(true);
+              }}
+            >
+              +{linkedArtworks.length - maxArtworksToShow} more
+            </button>
           </div>
-        </div>
-      ))}
-      
-      {hasMoreArtworks && !showAllArtworks && (
-        <button 
-          className="show-more-artworks"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowAllArtworks(true);
-          }}
-        >
-          +{linkedArtworks.length - maxArtworksToShow} more
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 
@@ -161,13 +172,12 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
       {/* Post Header */}
       <div className="post-header">
         <div className="user-info" onClick={handleProfileClick}>
-          <img 
-            src={post.creator?.profileImage || '/api/placeholder/40/40'} 
-            alt={post.creator?.username || 'User'}
+          <UserAvatar 
+            user={post.creator}
+            size={40}
             className="user-avatar"
-            onError={(e) => {
-              e.target.src = '/api/placeholder/40/40';
-            }}
+            onClick={handleProfileClick}
+            showBorder={true}
           />
           <div className="user-details">
             <span className="username">{post.creator?.username || 'Unknown User'}</span>
@@ -263,7 +273,7 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
           disabled={!currentUser}
         >
           <span>❤️</span>
-          <span>{post.likes || 0}</span>
+          <span>{likesCount}</span>
         </button>
         
         <button 
@@ -286,13 +296,11 @@ const PostCard = ({ post, onLike, onComment, currentUser }) => {
         <div className="comment-input-section">
           <form onSubmit={handleCommentSubmit} className="comment-form">
             <div className="comment-input-container">
-              <img 
-                src={currentUser.profileImage || '/api/placeholder/32/32'} 
-                alt={currentUser.username}
+              <UserAvatar 
+                user={currentUser}
+                size={32}
                 className="comment-user-avatar"
-                onError={(e) => {
-                  e.target.src = '/api/placeholder/32/32';
-                }}
+                showBorder={true}
               />
               <input
                 type="text"
