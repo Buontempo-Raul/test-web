@@ -1,4 +1,4 @@
-// backend/controllers/userController.js
+// backend/controllers/userController.js - Updated getUserByUsername with follower counts
 const userService = require('../services/userService');
 const User = require('../models/User');
 const Artwork = require('../models/Artwork');
@@ -11,6 +11,10 @@ const getUserByUsername = async (req, res) => {
   try {
     const user = await userService.getUserByUsername(req.params.username);
 
+    // Get follower and following counts
+    const followersCount = user.followers ? user.followers.length : 0;
+    const followingCount = user.following ? user.following.length : 0;
+
     res.json({
       success: true,
       user: {
@@ -20,7 +24,11 @@ const getUserByUsername = async (req, res) => {
         bio: user.bio,
         website: user.website,
         isArtist: user.isArtist,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        followers: user.followers, // Include full followers array for follow status checking
+        following: user.following, // Include full following array
+        followersCount: followersCount,
+        followingCount: followingCount
       }
     });
   } catch (error) {
@@ -121,7 +129,7 @@ const updateUserProfile = async (req, res) => {
 // @access  Private/Admin
 const updateUser = async (req, res) => {
   try {
-    const user = await userService.updateUserProfile(req.params.userId, req.body);
+    const user = await userService.updateUser(req.params.userId, req.body);
     
     res.json({
       success: true,
@@ -139,7 +147,7 @@ const updateUser = async (req, res) => {
   }
 };
 
-// @desc    Delete user
+// @desc    Delete user (admin only)
 // @route   DELETE /api/users/:userId
 // @access  Private/Admin
 const deleteUser = async (req, res) => {
@@ -151,14 +159,17 @@ const deleteUser = async (req, res) => {
       message: 'User deleted successfully'
     });
   } catch (error) {
-    res.status(error.message === 'User not found' || error.message === 'Invalid user ID format' ? 404 : 500).json({
+    const status = 
+      error.message === 'User not found' || error.message === 'Invalid user ID format' ? 404 : 500;
+    
+    res.status(status).json({
       success: false,
       message: error.message
     });
   }
 };
 
-// @desc    Make user an artist
+// @desc    Make user an artist (admin only)
 // @route   PUT /api/users/:userId/artist
 // @access  Private/Admin
 const makeUserArtist = async (req, res) => {
@@ -167,54 +178,66 @@ const makeUserArtist = async (req, res) => {
     
     res.json({
       success: true,
-      user
+      user,
+      message: 'User is now an artist'
     });
   } catch (error) {
-    res.status(error.message === 'User not found' || error.message === 'Invalid user ID format' ? 404 : 500).json({
+    const status = 
+      error.message === 'User not found' || error.message === 'Invalid user ID format' ? 404 :
+      error.message === 'User is already an artist' ? 400 : 500;
+    
+    res.status(status).json({
       success: false,
       message: error.message
     });
   }
 };
 
-// @desc    Get user artworks
+// @desc    Get user's artworks
 // @route   GET /api/users/:username/artworks
 // @access  Public
 const getUserArtworks = async (req, res) => {
   try {
-    const user = await userService.getUserByUsername(req.params.username);
+    const user = await User.findOne({ username: req.params.username });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
-    const artworks = await Artwork.find({ creator: user._id }).sort({ createdAt: -1 });
+    const artworks = await Artwork.find({ creator: user._id })
+      .populate('creator', 'username profileImage')
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,
       artworks
     });
   } catch (error) {
-    res.status(error.message === 'User not found' ? 404 : 500).json({
+    res.status(500).json({
       success: false,
       message: error.message
     });
   }
 };
 
-// @desc    Add artwork to user favorites
+// @desc    Add artwork to favorites
 // @route   POST /api/users/favorites/:artworkId
 // @access  Private
 const addToFavorites = async (req, res) => {
   try {
-    const { artworkId } = req.params;
-    
-    const user = await userService.addToFavorites(req.user._id, artworkId);
+    const user = await userService.addToFavorites(req.user._id, req.params.artworkId);
     
     res.json({
       success: true,
-      message: 'Added to favorites',
-      favorites: user.favorites
+      message: 'Artwork added to favorites',
+      user
     });
   } catch (error) {
     const status = 
-      error.message === 'User not found' || error.message === 'Invalid ID format' ? 404 :
+      error.message === 'User not found' || error.message === 'Artwork not found' || error.message === 'Invalid ID format' ? 404 :
       error.message === 'Artwork already in favorites' ? 400 : 500;
     
     res.status(status).json({
@@ -224,19 +247,17 @@ const addToFavorites = async (req, res) => {
   }
 };
 
-// @desc    Remove artwork from user favorites
+// @desc    Remove artwork from favorites
 // @route   DELETE /api/users/favorites/:artworkId
 // @access  Private
 const removeFromFavorites = async (req, res) => {
   try {
-    const { artworkId } = req.params;
-    
-    const user = await userService.removeFromFavorites(req.user._id, artworkId);
+    const user = await userService.removeFromFavorites(req.user._id, req.params.artworkId);
     
     res.json({
       success: true,
-      message: 'Removed from favorites',
-      favorites: user.favorites
+      message: 'Artwork removed from favorites',
+      user
     });
   } catch (error) {
     const status = 
@@ -250,7 +271,7 @@ const removeFromFavorites = async (req, res) => {
   }
 };
 
-// @desc    Get user favorites
+// @desc    Get user's favorites
 // @route   GET /api/users/favorites
 // @access  Private
 const getUserFavorites = async (req, res) => {
@@ -263,14 +284,14 @@ const getUserFavorites = async (req, res) => {
           select: 'username profileImage'
         }
       });
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
-    
+
     res.json({
       success: true,
       favorites: user.favorites
@@ -278,7 +299,8 @@ const getUserFavorites = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -288,88 +310,49 @@ const getUserFavorites = async (req, res) => {
 // @access  Private
 const uploadProfileImage = async (req, res) => {
   try {
-    console.log('=== Profile Image Upload Debug ===');
-    console.log('User ID:', req.user?._id);
-    console.log('User role:', req.user?.role);
-    console.log('Is Artist:', req.user?.isArtist);
-    console.log('File received:', req.file ? 'Yes' : 'No');
-    
-    if (req.file) {
-      console.log('File details:', {
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size
-      });
-    }
-    
     if (!req.file) {
-      console.log('ERROR: No file uploaded');
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded'
+        message: 'No image file uploaded'
       });
     }
 
-    // Get the user
-    console.log('Looking up user with ID:', req.user._id);
-    const user = await User.findById(req.user._id);
+    // Upload to Azure Blob Storage
+    const blobName = generateBlobName(req.file.originalname, 'profile-images');
+    const imageUrl = await uploadToAzure(req.file.buffer, blobName);
+
+    // Update user's profile image in database
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { profileImage: imageUrl },
+      { new: true }
+    ).select('-password');
 
     if (!user) {
-      console.log('ERROR: User not found');
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
 
-    console.log('User found:', {
-      username: user.username,
-      isArtist: user.isArtist,
-      currentProfileImage: user.profileImage
-    });
-
-    // Delete old profile image if it exists (and isn't the default)
-    if (user.profileImage && 
-        !user.profileImage.includes('default-profile') && 
-        user.profileImage.includes('blob.core.windows.net')) {
-      console.log('Attempting to delete old profile image:', user.profileImage);
-      try {
-        await deleteFromAzure(user.profileImage);
-        console.log('Successfully deleted old profile image');
-      } catch (deleteError) {
-        console.log('Warning: Could not delete old profile image:', deleteError.message);
-        // Don't fail the upload if we can't delete the old image
-      }
-    }
-
-    // Generate a unique blob name using the helper function
-    const blobName = generateBlobName('profile', user._id, req.file.originalname);
-    console.log('Generated blob name:', blobName);
-    
-    // Upload the new image to Azure (to the images container)
-    console.log('Uploading to Azure...');
-    const imageUrl = await uploadToAzure(req.file, blobName, 'images');
-    console.log('Image uploaded to Azure successfully. URL:', imageUrl);
-    
-    // Update user with new profile image URL
-    user.profileImage = imageUrl;
-    await user.save();
-    console.log('User profile updated successfully');
-
     res.json({
       success: true,
-      message: 'Profile image updated',
-      profileImage: imageUrl
+      profileImage: imageUrl,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        profileImage: user.profileImage,
+        bio: user.bio,
+        website: user.website,
+        isArtist: user.isArtist
+      }
     });
   } catch (error) {
-    console.error('=== Profile Image Upload Error ===');
-    console.error('Error details:', error);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    
+    console.error('Profile image upload error:', error);
     res.status(500).json({
       success: false,
-      message: `Failed to upload profile image: ${error.message}`,
+      message: 'Failed to upload profile image',
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
@@ -419,7 +402,9 @@ const followUser = async (req, res) => {
 
     res.json({
       success: true,
-      message: `You are now following ${userToFollow.username}`
+      message: `You are now following ${userToFollow.username}`,
+      followersCount: userToFollow.followers.length,
+      followingCount: currentUser.following.length
     });
   } catch (error) {
     res.status(500).json({
@@ -477,7 +462,9 @@ const unfollowUser = async (req, res) => {
 
     res.json({
       success: true,
-      message: `You have unfollowed ${userToUnfollow.username}`
+      message: `You have unfollowed ${userToUnfollow.username}`,
+      followersCount: userToUnfollow.followers.length,
+      followingCount: currentUser.following.length
     });
   } catch (error) {
     res.status(500).json({
@@ -559,6 +546,95 @@ const getFollowers = async (req, res) => {
   }
 };
 
+// @desc    Get user's followers list by username (public)
+// @route   GET /api/users/:username/followers
+// @access  Public
+const getUserFollowers = async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username })
+      .populate('followers', 'username profileImage bio');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user has private profile (if this feature exists)
+    if (user.settings?.privateProfile && (!req.user || req.user._id.toString() !== user._id.toString())) {
+      return res.status(403).json({
+        success: false,
+        message: 'This user\'s followers list is private'
+      });
+    }
+
+    // Format profile images
+    const followersList = user.followers.map(follower => {
+      const userObj = follower.toObject();
+      if (userObj.profileImage) {
+        userObj.profileImage = `${req.protocol}://${req.get('host')}/${userObj.profileImage}`;
+      }
+      return userObj;
+    });
+
+    res.json({
+      success: true,
+      followers: followersList
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Get user's following list by username (public)
+// @route   GET /api/users/:username/following
+// @access  Public
+const getUserFollowing = async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username })
+      .populate('following', 'username profileImage bio');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if user has private profile (if this feature exists)
+    if (user.settings?.privateProfile && (!req.user || req.user._id.toString() !== user._id.toString())) {
+      return res.status(403).json({
+        success: false,
+        message: 'This user\'s following list is private'
+      });
+    }
+
+    // Format profile images
+    const followingList = user.following.map(followedUser => {
+      const userObj = followedUser.toObject();
+      if (userObj.profileImage) {
+        userObj.profileImage = `${req.protocol}://${req.get('host')}/${userObj.profileImage}`;
+      }
+      return userObj;
+    });
+
+    res.json({
+      success: true,
+      following: followingList
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
 module.exports = {
   getUserByUsername,
   getAllUsers,
@@ -575,5 +651,7 @@ module.exports = {
   followUser,
   unfollowUser,
   getFollowing,
-  getFollowers
+  getFollowers,
+  getUserFollowers,  // NEW
+  getUserFollowing   // NEW
 };

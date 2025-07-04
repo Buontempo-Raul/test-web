@@ -126,6 +126,27 @@ export const userAPI = {
   
   searchUsers: (query) => {
     return api.get(`/api/users/search?q=${query}`);
+  },
+
+  getFollowing: () => {
+    return api.get('/api/users/following');
+  },
+  
+  getFollowers: () => {
+    return api.get('/api/users/followers');
+  },
+
+  // NEW: Public followers/following methods
+  getUserFollowers: (username) => {
+    return api.get(`/api/users/${username}/followers`);
+  },
+  
+  getUserFollowing: (username) => {
+    return api.get(`/api/users/${username}/following`);
+  },
+  
+  searchUsers: (query) => {
+    return api.get(`/api/users/search?q=${query}`);
   }
 };
 

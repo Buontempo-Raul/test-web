@@ -1,4 +1,4 @@
-// backend/controllers/postController.js - Updated with multiple artwork linking
+// backend/controllers/postController.js - FIXED: Following Only Filter
 const Post = require('../models/Post');
 const Artwork = require('../models/Artwork');
 const User = require('../models/User');
@@ -39,10 +39,24 @@ const getPosts = async (req, res) => {
       ];
     }
 
-    // Following filter (requires authentication)
+    // FIXED: Following filter - only show posts from people the user follows, NOT their own posts
     if (followingOnly === 'true' && req.user) {
       const user = await User.findById(req.user._id);
-      query.creator = { $in: [...user.following, req.user._id] };
+      
+      // If user follows nobody, return empty results
+      if (!user.following || user.following.length === 0) {
+        return res.json({
+          success: true,
+          count: 0,
+          pages: 0,
+          currentPage: 1,
+          hasMore: false,
+          posts: []
+        });
+      }
+      
+      // Only include posts from people the user follows (exclude own posts)
+      query.creator = { $in: user.following };
     }
 
     let posts;
@@ -120,122 +134,80 @@ const getPosts = async (req, res) => {
 // @access  Private
 const createPost = async (req, res) => {
   try {
-    console.log('Creating post with body:', req.body);
-    console.log('Files received:', req.files?.length || 0);
+    console.log('Creating post with data:', req.body);
+    console.log('Files uploaded:', req.files?.length || 0);
+    console.log('Azure URLs:', req.azureUrls);
 
-    const { caption, tags, linkedShopItems } = req.body; // UPDATED: Multiple artworks
-    const files = req.files;
+    const { caption, tags, linkedShopItems } = req.body;
 
-    if (!files || files.length === 0) {
+    // Validate required fields
+    if (!caption) {
       return res.status(400).json({
         success: false,
-        message: 'At least one media file is required'
+        message: 'Caption is required'
       });
     }
 
-    // UPDATED: Validate multiple linked artworks if provided
-    let artworkIds = [];
-    if (linkedShopItems) {
-      // Handle both string and array formats
-      if (typeof linkedShopItems === 'string') {
-        try {
-          artworkIds = JSON.parse(linkedShopItems);
-        } catch {
-          artworkIds = [linkedShopItems]; // Single ID as string
-        }
-      } else if (Array.isArray(linkedShopItems)) {
-        artworkIds = linkedShopItems;
-      }
-
-      // Validate that all artworks exist and belong to the user
-      if (artworkIds.length > 0) {
-        const artworks = await Artwork.find({
-          _id: { $in: artworkIds },
-          creator: req.user._id
-        });
-
-        if (artworks.length !== artworkIds.length) {
-          return res.status(400).json({
-            success: false,
-            message: 'Some selected artworks not found or do not belong to you'
-          });
-        }
-      }
-    }
-
-    // Process content based on number of files
-    let content;
-    if (files.length === 1) {
-      const file = files[0];
-      console.log('Single file:', file.originalname, file.mimetype);
-      content = {
-        type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-        url: file.url || file.location || `/uploads/posts/${file.filename}`,
-        aspectRatio: '1:1'
-      };
-    } else {
-      console.log('Multiple files (carousel)');
-      content = {
-        type: 'carousel',
-        items: files.map(file => {
-          console.log('Processing file:', file.originalname, file.mimetype);
-          return {
-            type: file.mimetype.startsWith('video/') ? 'video' : 'image',
-            url: file.url || file.location || `/uploads/posts/${file.filename}`
-          };
-        })
-      };
-    }
-
-    console.log('Content created:', content);
-
-    // Process tags
-    let processedTags = [];
+    // Parse tags if they're provided as a string
+    let parsedTags = [];
     if (tags) {
-      if (Array.isArray(tags)) {
-        processedTags = tags;
-      } else if (typeof tags === 'string') {
-        processedTags = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+      try {
+        parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+      } catch (e) {
+        parsedTags = Array.isArray(tags) ? tags : [tags];
       }
     }
 
-    console.log('Processed tags:', processedTags);
+    // Parse linked shop items if provided
+    let parsedLinkedItems = [];
+    if (linkedShopItems) {
+      try {
+        parsedLinkedItems = typeof linkedShopItems === 'string' 
+          ? JSON.parse(linkedShopItems) 
+          : linkedShopItems;
+      } catch (e) {
+        console.error('Error parsing linkedShopItems:', e);
+        parsedLinkedItems = [];
+      }
+    }
 
-    // Create the post
-    const post = new Post({
+    // Use Azure URLs if available, otherwise use local paths
+    const mediaUrls = req.azureUrls || (req.files ? req.files.map(file => file.path) : []);
+
+    const postData = {
       creator: req.user._id,
-      content,
-      caption: caption || '',
-      tags: processedTags,
-      linkedShopItems: artworkIds || [] // UPDATED: Multiple artworks
-    });
+      caption,
+      images: mediaUrls,
+      tags: parsedTags,
+      linkedShopItems: parsedLinkedItems.length > 0 ? parsedLinkedItems : undefined
+    };
 
-    const savedPost = await post.save();
-    console.log('Post saved:', savedPost._id);
+    console.log('Final post data:', postData);
 
-    // UPDATED: Add this post to all linked artworks' linkedPosts arrays
-    if (artworkIds.length > 0) {
+    const post = await Post.create(postData);
+
+    // Update linked artworks with this post reference
+    if (parsedLinkedItems.length > 0) {
       await Artwork.updateMany(
-        { _id: { $in: artworkIds } },
-        { $addToSet: { linkedPosts: savedPost._id } }
+        { _id: { $in: parsedLinkedItems } },
+        { $push: { linkedPosts: post._id } }
       );
     }
 
-    // Populate creator info and linked artworks for response
-    await savedPost.populate('creator', 'username profileImage');
-    await savedPost.populate('linkedShopItems', 'title price images'); // UPDATED: Multiple artworks
+    // Populate the post before returning
+    const populatedPost = await Post.findById(post._id)
+      .populate('creator', 'username profileImage')
+      .populate('linkedShopItems', 'title price images description category');
 
     res.status(201).json({
       success: true,
-      message: 'Post created successfully',
-      post: savedPost
+      post: populatedPost
     });
-
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to create post'
+      message: error.message
     });
   }
 };
@@ -245,7 +217,6 @@ const createPost = async (req, res) => {
 // @access  Private
 const updatePost = async (req, res) => {
   try {
-    const { caption, tags, linkedShopItems } = req.body; // UPDATED: Multiple artworks
     const post = await Post.findById(req.params.id);
 
     if (!post) {
@@ -255,6 +226,7 @@ const updatePost = async (req, res) => {
       });
     }
 
+    // Check if user owns the post
     if (post.creator.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -262,64 +234,50 @@ const updatePost = async (req, res) => {
       });
     }
 
-    // UPDATED: Validate multiple linked artworks if provided
-    let artworkIds = [];
+    const { caption, tags, linkedShopItems } = req.body;
+
+    // Parse tags if they're provided as a string
+    let parsedTags = post.tags;
+    if (tags !== undefined) {
+      try {
+        parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+      } catch (e) {
+        parsedTags = Array.isArray(tags) ? tags : [tags];
+      }
+    }
+
+    // Parse linked shop items if provided
+    let parsedLinkedItems = post.linkedShopItems || [];
     if (linkedShopItems !== undefined) {
-      if (Array.isArray(linkedShopItems)) {
-        artworkIds = linkedShopItems;
-      } else if (typeof linkedShopItems === 'string' && linkedShopItems) {
-        artworkIds = [linkedShopItems];
+      try {
+        parsedLinkedItems = typeof linkedShopItems === 'string' 
+          ? JSON.parse(linkedShopItems) 
+          : linkedShopItems;
+      } catch (e) {
+        console.error('Error parsing linkedShopItems:', e);
+        parsedLinkedItems = [];
       }
-
-      // Validate that all artworks exist and belong to the user
-      if (artworkIds.length > 0) {
-        const artworks = await Artwork.find({
-          _id: { $in: artworkIds },
-          creator: req.user._id
-        });
-
-        if (artworks.length !== artworkIds.length) {
-          return res.status(400).json({
-            success: false,
-            message: 'Some selected artworks not found or do not belong to you'
-          });
-        }
-      }
-
-      // UPDATED: Handle linked artworks changes
-      const oldLinkedArtworks = post.linkedShopItems || [];
-      
-      // Remove post from previously linked artworks
-      if (oldLinkedArtworks.length > 0) {
-        await Artwork.updateMany(
-          { _id: { $in: oldLinkedArtworks } },
-          { $pull: { linkedPosts: post._id } }
-        );
-      }
-
-      // Add post to newly linked artworks
-      if (artworkIds.length > 0) {
-        await Artwork.updateMany(
-          { _id: { $in: artworkIds } },
-          { $addToSet: { linkedPosts: post._id } }
-        );
-      }
-
-      post.linkedShopItems = artworkIds;
     }
 
-    // Update other fields
-    post.caption = caption || post.caption;
-    
-    if (tags) {
-      post.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
-    }
-
-    await post.save();
-
-    const updatedPost = await Post.findById(post._id)
+    // Update the post
+    const updatedPost = await Post.findByIdAndUpdate(
+      req.params.id,
+      {
+        caption: caption || post.caption,
+        tags: parsedTags,
+        linkedShopItems: parsedLinkedItems.length > 0 ? parsedLinkedItems : undefined
+      },
+      { new: true }
+    )
       .populate('creator', 'username profileImage')
-      .populate('linkedShopItems', 'title price images'); // UPDATED: Multiple artworks
+      .populate('linkedShopItems', 'title price images description category')
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          select: 'username profileImage'
+        }
+      });
 
     res.json({
       success: true,
@@ -347,6 +305,7 @@ const deletePost = async (req, res) => {
       });
     }
 
+    // Check if user owns the post
     if (post.creator.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
@@ -354,23 +313,7 @@ const deletePost = async (req, res) => {
       });
     }
 
-    // UPDATED: Remove post reference from all linked artworks
-    if (post.linkedShopItems && post.linkedShopItems.length > 0) {
-      await Artwork.updateMany(
-        { _id: { $in: post.linkedShopItems } },
-        { $pull: { linkedPosts: post._id } }
-      );
-    }
-
-    // Handle legacy single linkedShopItem for backward compatibility
-    if (post.linkedShopItem) {
-      await Artwork.findByIdAndUpdate(
-        post.linkedShopItem,
-        { $pull: { linkedPosts: post._id } }
-      );
-    }
-
-    await post.deleteOne();
+    await Post.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,
@@ -441,24 +384,23 @@ const getUserPosts = async (req, res) => {
       .skip(skip)
       .limit(pageSize)
       .populate('creator', 'username profileImage')
-      .populate('linkedShopItems', 'title price images'); // UPDATED: Multiple artworks
+      .populate('linkedShopItems', 'title price images') // UPDATED: Multiple artworks
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          select: 'username profileImage'
+        }
+      });
 
     const pages = Math.ceil(count / pageSize);
-
-    const postsWithLikeStatus = posts.map(post => {
-      const postObj = post.toObject();
-      if (req.user) {
-        postObj.isLikedByCurrentUser = post.likedBy.includes(req.user._id);
-      }
-      return postObj;
-    });
 
     res.json({
       success: true,
       count,
       pages,
       currentPage: parseInt(page),
-      posts: postsWithLikeStatus
+      posts
     });
   } catch (error) {
     res.status(500).json({
@@ -468,7 +410,7 @@ const getUserPosts = async (req, res) => {
   }
 };
 
-// @desc    Like/Unlike a post
+// @desc    Like/unlike a post
 // @route   POST /api/posts/:id/like
 // @access  Private
 const likePost = async (req, res) => {
@@ -482,27 +424,33 @@ const likePost = async (req, res) => {
       });
     }
 
-    const userId = req.user._id;
-    const hasLiked = post.likedBy.includes(userId);
+    const userIndex = post.likedBy.indexOf(req.user._id);
 
-    if (hasLiked) {
-      // Unlike the post
-      post.likedBy = post.likedBy.filter(id => id.toString() !== userId.toString());
-      post.likes = Math.max(0, post.likes - 1);
+    if (userIndex === -1) {
+      // User hasn't liked the post, so add like
+      post.likedBy.push(req.user._id);
+      post.likes = post.likedBy.length;
+      await post.save();
+
+      res.json({
+        success: true,
+        message: 'Post liked',
+        likes: post.likes,
+        isLiked: true
+      });
     } else {
-      // Like the post
-      post.likedBy.push(userId);
-      post.likes = post.likes + 1;
+      // User has already liked the post, so remove like
+      post.likedBy.splice(userIndex, 1);
+      post.likes = post.likedBy.length;
+      await post.save();
+
+      res.json({
+        success: true,
+        message: 'Post unliked',
+        likes: post.likes,
+        isLiked: false
+      });
     }
-
-    await post.save();
-
-    res.json({
-      success: true,
-      liked: !hasLiked,
-      likes: post.likes,
-      message: hasLiked ? 'Post unliked' : 'Post liked'
-    });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -517,6 +465,14 @@ const likePost = async (req, res) => {
 const commentOnPost = async (req, res) => {
   try {
     const { text } = req.body;
+
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Comment text is required'
+      });
+    }
+
     const post = await Post.findById(req.params.id);
 
     if (!post) {
@@ -526,33 +482,26 @@ const commentOnPost = async (req, res) => {
       });
     }
 
-    if (!text || text.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Comment text is required'
-      });
-    }
-
-    const comment = {
+    const newComment = {
       user: req.user._id,
-      text: text.trim()
+      text: text.trim(),
+      createdAt: new Date()
     };
 
-    post.comments.push(comment);
+    post.comments.push(newComment);
     await post.save();
 
-    // Populate the new comment with user info
-    const populatedPost = await Post.findById(post._id)
-      .populate({
-        path: 'comments.user',
-        select: 'username profileImage'
-      });
+    // Populate the new comment
+    await post.populate({
+      path: 'comments.user',
+      select: 'username profileImage'
+    });
 
-    const newComment = populatedPost.comments[populatedPost.comments.length - 1];
+    const addedComment = post.comments[post.comments.length - 1];
 
     res.status(201).json({
       success: true,
-      comment: newComment
+      comment: addedComment
     });
   } catch (error) {
     res.status(500).json({

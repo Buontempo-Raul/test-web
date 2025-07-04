@@ -1,5 +1,4 @@
-/* Updated Explore page styles for bigger posts */
-/* frontend/src/pages/Explore/Explore.css */
+/* frontend/src/pages/Explore/Explore.css - Updated with Following Filter Styles */
 
 .explore-container {
   min-height: 100vh;
@@ -104,31 +103,74 @@
 .filter-btn {
   padding: 0.75rem 1.25rem;
   border: 2px solid #e5e7eb;
-  background-color: white;
-  color: #6b7280;
+  background-color: #f9fafb;
   border-radius: 12px;
+  color: #374151;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
 }
 
 .filter-btn:hover {
   border-color: #9b51e0;
-  color: #9b51e0;
   background-color: rgba(155, 81, 224, 0.05);
+  color: #9b51e0;
 }
 
 .filter-btn.active {
   background-color: #9b51e0;
-  color: white;
   border-color: #9b51e0;
+  color: white;
 }
 
-/* Posts Section - Updated for bigger posts */
-.explore-posts {
+/* NEW: Following Filter Specific Styles */
+.filter-btn.following-filter {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-color: #0ea5e9;
+  color: #0369a1;
+  font-weight: 600;
+}
+
+.filter-btn.following-filter:hover {
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  border-color: #0284c7;
+  color: #0c4a6e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+}
+
+.filter-btn.following-filter.active {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  border-color: #0284c7;
+  color: white;
+  box-shadow: 0 4px 15px rgba(14, 165, 233, 0.4);
+}
+
+.filter-btn.following-filter.active:hover {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(14, 165, 233, 0.5);
+}
+
+.following-icon {
+  width: 18px;
+  height: 18px;
+  transition: all 0.2s;
+}
+
+.filter-btn.following-filter.active .following-icon {
+  filter: brightness(0) invert(1); /* Makes the icon white when active */
+}
+
+/* Posts Container */
+.posts-container {
   max-width: 800px;
   margin: 0 auto;
+  padding: 0 1rem;
 }
 
 .posts-grid {
@@ -149,73 +191,15 @@
 
 .no-posts h3 {
   font-size: 1.5rem;
-  color: #1a1a1a;
+  font-weight: 600;
+  color: #374151;
   margin: 0 0 1rem 0;
 }
 
 .no-posts p {
   color: #6b7280;
-  margin: 0 0 2rem 0;
   font-size: 1.1rem;
-}
-
-.create-first-post-btn {
-  background-color: #9b51e0;
-  color: white;
-  border: none;
-  padding: 1rem 2rem;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 1rem;
-}
-
-.create-first-post-btn:hover {
-  background-color: #8a5ce6;
-  transform: translateY(-1px);
-}
-
-/* Pagination */
-.explore-pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  margin: 3rem auto 0 auto;
-  max-width: 800px;
-}
-
-.pagination-btn {
-  padding: 0.875rem 1.5rem;
-  background-color: white;
-  border: 2px solid #e5e7eb;
-  color: #6b7280;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.95rem;
-}
-
-.pagination-btn:hover:not(:disabled) {
-  border-color: #9b51e0;
-  color: #9b51e0;
-  background-color: rgba(155, 81, 224, 0.05);
-}
-
-.pagination-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pagination-info {
-  padding: 0.875rem 1.25rem;
-  background-color: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  color: #374151;
-  font-weight: 500;
+  margin: 0;
 }
 
 /* Loading and Error States */
@@ -277,90 +261,6 @@
   background-color: #8a5ce6;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .explore-container {
-    padding: 1rem 0.5rem;
-  }
-
-  .explore-header {
-    flex-direction: column;
-    gap: 1rem;
-    text-align: center;
-    padding: 0;
-  }
-
-  .explore-header h1 {
-    font-size: 2rem;
-  }
-
-  .explore-filters {
-    margin: 0 0.5rem 2rem 0.5rem;
-    padding: 1rem;
-  }
-
-  .search-form {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .filter-buttons {
-    justify-content: center;
-  }
-
-  .filter-btn {
-    padding: 0.625rem 1rem;
-    font-size: 0.9rem;
-  }
-
-  .explore-posts {
-    margin: 0 0.5rem;
-  }
-
-  .posts-grid {
-    gap: 1.5rem;
-  }
-
-  .explore-pagination {
-    flex-direction: column;
-    gap: 0.75rem;
-    margin: 2rem 0.5rem 0 0.5rem;
-  }
-
-  .pagination-info {
-    order: -1;
-  }
-
-  .no-posts {
-    padding: 2rem 1rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .explore-header h1 {
-    font-size: 1.75rem;
-  }
-
-  .explore-filters {
-    margin: 0 0.25rem 1.5rem 0.25rem;
-  }
-
-  .explore-posts {
-    margin: 0 0.25rem;
-  }
-
-  .filter-buttons {
-    gap: 0.5rem;
-  }
-
-  .filter-btn {
-    padding: 0.5rem 0.875rem;
-    font-size: 0.85rem;
-  }
-}
-
-/* Add these styles to frontend/src/pages/Explore/Explore.css */
-
 /* Infinite Scroll Loading States */
 .loading-more {
   display: flex;
@@ -406,7 +306,7 @@
 }
 
 /* Smooth animations for new posts */
-.posts-feed > div {
+.posts-grid > div {
   animation: fadeInUp 0.4s ease-out;
 }
 
@@ -421,8 +321,62 @@
   }
 }
 
-/* Improved responsive design for infinite scroll */
+/* Responsive Design */
 @media (max-width: 768px) {
+  .explore-container {
+    padding: 1rem 0.5rem;
+  }
+
+  .explore-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+    padding: 0;
+  }
+
+  .explore-header h1 {
+    font-size: 2rem;
+  }
+
+  .explore-filters {
+    margin: 0 0.5rem 2rem 0.5rem;
+    padding: 1rem;
+  }
+
+  .search-form {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .filter-buttons {
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .filter-btn {
+    padding: 0.625rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .filter-btn.following-filter {
+    flex: 1;
+    min-width: 140px;
+    justify-content: center;
+  }
+
+  .posts-container {
+    margin: 0 0.5rem;
+    padding: 0;
+  }
+
+  .posts-grid {
+    gap: 1.5rem;
+  }
+
+  .no-posts {
+    padding: 2rem 1rem;
+  }
+
   .loading-more {
     padding: 1.5rem;
   }
@@ -439,8 +393,28 @@
   }
 }
 
+@media (max-width: 480px) {
+  .explore-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .filter-buttons {
+    gap: 0.25rem;
+  }
+
+  .filter-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .filter-btn.following-filter {
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+  }
+}
+
 /* Performance optimization - hide offscreen posts */
-.posts-feed > div:not([data-visible="true"]) {
+.posts-grid > div:not([data-visible="true"]) {
   content-visibility: auto;
   contain-intrinsic-size: 600px; /* Estimated post height */
 }

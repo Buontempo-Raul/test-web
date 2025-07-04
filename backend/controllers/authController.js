@@ -1,29 +1,39 @@
-// backend/controllers/authController.js
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+// backend/controllers/authController.js - FIXED: Changed matchPassword to comparePassword
 const userService = require('../services/userService');
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
 
-// Generate JWT
+// Generate JWT token
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d'
+    expiresIn: process.env.JWT_EXPIRE || '30d'
   });
 };
 
-// @desc    Register a new user
+// @desc    Register new user
 // @route   POST /api/auth/register
 // @access  Public
 const registerUser = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // Check if user exists
-    const userExists = await User.findOne({ $or: [{ email }, { username }] });
+    // Validate input
+    if (!username || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide username, email, and password'
+      });
+    }
 
-    if (userExists) {
-      return res.status(400).json({ 
-        success: false, 
-        message: userExists.email === email 
+    // Check if user already exists
+    const existingUser = await User.findOne({
+      $or: [{ email }, { username }]
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: existingUser.email === email 
           ? 'Email already in use' 
           : 'Username already taken' 
       });
@@ -77,7 +87,8 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
 
     // Check if user exists and password matches
-    if (user && (await user.matchPassword(password))) {
+    // FIXED: Changed from matchPassword to comparePassword to match User model
+    if (user && (await user.comparePassword(password))) {
       res.json({
         success: true,
         user: {
@@ -151,7 +162,8 @@ const changePassword = async (req, res) => {
     }
     
     // Check if current password is correct
-    const isMatch = await user.matchPassword(currentPassword);
+    // FIXED: Changed from matchPassword to comparePassword
+    const isMatch = await user.comparePassword(currentPassword);
     
     if (!isMatch) {
       return res.status(400).json({

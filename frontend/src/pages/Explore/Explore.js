@@ -1,49 +1,59 @@
-// frontend/src/pages/Explore/Explore.js - Fixed with working like and comment functionality
+// frontend/src/pages/Explore/Explore.js - Updated with Following Filter
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import './Explore.css';
+import { useAuth } from '../../hooks/useAuth';
 import { postAPI } from '../../services/api';
 import PostCard from '../../components/explore/PostCard/PostCard';
 import CreatePostModal from '../../components/explore/CreatePostModal/CreatePostModal';
-import './Explore.css';
 
 const Explore = () => {
+  const navigate = useNavigate();
+  const { currentUser, isAuthenticated, isAdmin } = useAuth();
+  
+  // Posts state
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [error, setError] = useState('');
   const [hasMore, setHasMore] = useState(true);
   const [lastPostDate, setLastPostDate] = useState(null);
+  
+  // Modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  
+  // Updated filters to include followingOnly
   const [filters, setFilters] = useState({
     tag: '',
-    followingOnly: false,
-    search: ''
+    search: '',
+    followingOnly: false // NEW: Add following filter
   });
 
-  const observer = useRef();
-  const lastPostElementRef = useCallback(node => {
-    if (loadingMore) return;
-    if (observer.current) observer.current.disconnect();
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
-        loadMorePosts();
-      }
-    });
-    if (node) observer.current.observe(node);
-  }, [loadingMore, hasMore]);
+  // Infinite scroll ref
+  const lastPostElementRef = useRef();
 
-  // Get current user from localStorage
-  const getCurrentUser = () => {
-    try {
-      const userStr = localStorage.getItem('user');
-      return userStr ? JSON.parse(userStr) : null;
-    } catch (error) {
-      console.error('Error parsing user from localStorage:', error);
-      return null;
+  // Redirect admins to dashboard
+  useEffect(() => {
+    if (isAdmin) {
+      navigate('/admin/dashboard');
     }
-  };
+  }, [isAdmin, navigate]);
 
-  const currentUser = getCurrentUser();
-  const isAuthenticated = !!(localStorage.getItem('token') && currentUser);
+  // Intersection Observer for infinite scroll
+  const lastPostCallback = useCallback(
+    (node) => {
+      if (loadingMore) return;
+      if (lastPostElementRef.current) lastPostElementRef.current.disconnect();
+      lastPostElementRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          loadMorePosts();
+        }
+      });
+      if (node) lastPostElementRef.current.observe(node);
+    },
+    [loadingMore, hasMore]
+  );
 
   // Handle like functionality
   const handleLike = async (postId) => {
@@ -56,25 +66,19 @@ const Explore = () => {
       const response = await postAPI.likePost(postId);
       
       if (response.data.success) {
-        // Update the post in the posts array
         setPosts(prevPosts => 
           prevPosts.map(post => {
             if (post._id === postId) {
-              const updatedPost = { ...post };
-              updatedPost.likes = response.data.likes;
+              const isCurrentlyLiked = post.likes.includes(currentUser._id);
+              const newLikes = isCurrentlyLiked
+                ? post.likes.filter(id => id !== currentUser._id)
+                : [...post.likes, currentUser._id];
               
-              // Update likedBy array
-              if (response.data.liked) {
-                // Add current user to likedBy if not already there
-                if (!updatedPost.likedBy.includes(currentUser._id)) {
-                  updatedPost.likedBy = [...updatedPost.likedBy, currentUser._id];
-                }
-              } else {
-                // Remove current user from likedBy
-                updatedPost.likedBy = updatedPost.likedBy.filter(id => id !== currentUser._id);
-              }
-              
-              return updatedPost;
+              return {
+                ...post,
+                likes: newLikes,
+                likesCount: newLikes.length
+              };
             }
             return post;
           })
@@ -102,7 +106,6 @@ const Explore = () => {
       const response = await postAPI.commentOnPost(postId, commentText.trim());
       
       if (response.data.success) {
-        // Update the post with the new comment
         setPosts(prevPosts => 
           prevPosts.map(post => {
             if (post._id === postId) {
@@ -127,9 +130,8 @@ const Explore = () => {
       const params = {
         limit: 10,
         ...(filters.tag && { tag: filters.tag }),
-        ...(filters.followingOnly && { followingOnly: 'true' }),
+        ...(filters.followingOnly && { followingOnly: 'true' }), // Include following filter
         ...(filters.search && { search: filters.search }),
-        // Use cursor-based pagination instead of skip/limit
         ...(lastPostDate && !reset && { before: lastPostDate })
       };
 
@@ -144,13 +146,11 @@ const Explore = () => {
           setPosts(prev => [...prev, ...newPosts]);
         }
 
-        // Update cursor for next page
         if (newPosts.length > 0) {
           setLastPostDate(newPosts[newPosts.length - 1].createdAt);
         }
 
-        // Check if there are more posts
-        setHasMore(newPosts.length === 10); // If we got less than limit, no more posts
+        setHasMore(newPosts.length === 10);
       }
     } catch (err) {
       console.error('Error fetching posts:', err);
@@ -180,6 +180,16 @@ const Explore = () => {
     setPosts([]);
     setLastPostDate(null);
     setHasMore(true);
+  };
+
+  // Handle following toggle - NEW
+  const handleFollowingToggle = () => {
+    if (!isAuthenticated) {
+      alert('Please log in to see posts from people you follow');
+      return;
+    }
+    
+    handleFilterChange('followingOnly', !filters.followingOnly);
   };
 
   // Initial load and filter changes
@@ -261,6 +271,31 @@ const Explore = () => {
         </form>
 
         <div className="filter-buttons">
+          {/* Following Filter - NEW */}
+          {isAuthenticated && (
+            <button
+              className={`filter-btn following-filter ${filters.followingOnly ? 'active' : ''}`}
+              onClick={handleFollowingToggle}
+              title="Show posts only from people you follow"
+            >
+              <svg 
+                className="following-icon" 
+                width="18" 
+                height="18" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2"
+              >
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              Following Only
+            </button>
+          )}
+          
           <button
             className={`filter-btn ${filters.tag === '' ? 'active' : ''}`}
             onClick={() => handleFilterChange('tag', '')}
@@ -292,15 +327,25 @@ const Explore = () => {
       <div className="posts-container">
         {posts.length === 0 && !loading ? (
           <div className="no-posts">
-            <h3>No posts found</h3>
-            <p>Be the first to share something!</p>
+            <h3>
+              {filters.followingOnly 
+                ? "No posts from people you follow yet" 
+                : "No posts found"
+              }
+            </h3>
+            <p>
+              {filters.followingOnly 
+                ? "Follow some users to see their posts here!" 
+                : "Be the first to share something!"
+              }
+            </p>
           </div>
         ) : (
           <div className="posts-grid">
             {posts.map((post, index) => (
               <div
                 key={post._id}
-                ref={index === posts.length - 1 ? lastPostElementRef : null}
+                ref={index === posts.length - 1 ? lastPostCallback : null}
               >
                 <PostCard 
                   post={post} 
@@ -328,7 +373,12 @@ const Explore = () => {
 
         {!hasMore && posts.length > 0 && (
           <div className="end-of-posts">
-            <p>You've seen all posts!</p>
+            <p>
+              {filters.followingOnly 
+                ? "You've seen all posts from people you follow!" 
+                : "You've seen all posts!"
+              }
+            </p>
           </div>
         )}
       </div>
