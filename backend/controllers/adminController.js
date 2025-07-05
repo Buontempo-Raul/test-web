@@ -511,7 +511,6 @@ const fullyRestoreUser = async (req, res) => {
 
 // Get all posts (unchanged)
 // Complete fixed getAllPosts function for backend/controllers/adminController.js
-
 const getAllPosts = async (req, res) => {
   try {
     console.log('🔍 Admin Get Posts - User:', req.user?.username);
@@ -538,9 +537,17 @@ const getAllPosts = async (req, res) => {
     }
 
     // Get posts with pagination
+    // 🔧 FIXED: Added 'email' to the populate fields and comments population
     const posts = await Post.find(query)
-      .populate('creator', 'username profileImage')
+      .populate('creator', 'username profileImage email')  // ✅ Now includes email
       .populate('linkedShopItems', 'title price images')
+      .populate({
+        path: 'comments',
+        populate: {
+          path: 'user',
+          select: 'username profileImage email'
+        }
+      })  // ✅ Now populates comments with user details
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
