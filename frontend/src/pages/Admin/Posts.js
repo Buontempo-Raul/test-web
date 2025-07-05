@@ -601,201 +601,125 @@ const AdminPosts = () => {
       )}
 
       {/* Enhanced Post Detail Modal */}
-      {/* Enhanced Post Detail Modal */}
       {showPostModal && selectedPost && (
         <div className="modal-overlay" onClick={() => setShowPostModal(false)}>
-          <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Post Details</h3>
               <button onClick={() => setShowPostModal(false)} className="close-button">×</button>
             </div>
             <div className="modal-body">
-              <div className="post-detail-enhanced">
-                {/* Left Column - Large Image Display */}
-                <div className="post-images-section-large">
+              <div className="post-detail-layout">
+                {/* Left side - Images */}
+                <div className="post-images-section">
                   <h4>Images ({getAllPostImages(selectedPost).length})</h4>
-                  <div className="large-image-container">
+                  <div className="post-images-grid">
                     {getAllPostImages(selectedPost).length > 0 ? (
-                      <div className="main-image-display">
+                      getAllPostImages(selectedPost).map((image, index) => (
                         <img 
-                          src={getAllPostImages(selectedPost)[0]} 
-                          alt="Post main image"
-                          className="large-post-image"
+                          key={index}
+                          src={image} 
+                          alt={`Post image ${index + 1}`}
+                          className="post-detail-image"
                           onError={(e) => {
                             e.target.src = getPlaceholderImage();
                           }}
                         />
-                        {getAllPostImages(selectedPost).length > 1 && (
-                          <div className="additional-images-strip">
-                            {getAllPostImages(selectedPost).slice(1, 4).map((image, index) => (
-                              <img 
-                                key={index}
-                                src={image} 
-                                alt={`Additional image ${index + 1}`}
-                                className="thumbnail-image"
-                                onError={(e) => {
-                                  e.target.src = getPlaceholderImage();
-                                }}
-                              />
-                            ))}
-                            {getAllPostImages(selectedPost).length > 4 && (
-                              <div className="more-images-indicator">
-                                +{getAllPostImages(selectedPost).length - 4} more
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      ))
                     ) : (
-                      <div className="no-image-placeholder">
-                        <img 
-                          src={getPlaceholderImage()} 
-                          alt="No image available"
-                          className="large-post-image"
-                        />
-                        <p>No images available</p>
-                      </div>
+                      <div className="no-images">No images available</div>
                     )}
                   </div>
                 </div>
 
-                {/* Right Column - Post Information and Comments */}
+                {/* Right side - Information */}
                 <div className="post-info-section">
-                  {/* Post Information */}
-                  <div className="info-section">
+                  <div className="info-card">
                     <h4>Post Information</h4>
                     <div className="info-grid">
                       <div className="info-item">
-                        <span className="info-label">Caption:</span>
-                        <span className="info-value">{selectedPost.caption || 'No caption'}</span>
+                        <label>Caption:</label>
+                        <p>{selectedPost.caption || 'No caption provided'}</p>
                       </div>
                       <div className="info-item">
-                        <span className="info-label">Post ID:</span>
-                        <span className="info-value mono">{selectedPost._id}</span>
+                        <label>Post ID:</label>
+                        <p className="monospace">{selectedPost._id}</p>
                       </div>
                       <div className="info-item">
-                        <span className="info-label">Created:</span>
-                        <span className="info-value">{formatDate(selectedPost.createdAt)}</span>
+                        <label>Created:</label>
+                        <p>{formatDate(selectedPost.createdAt)}</p>
                       </div>
                       <div className="info-item">
-                        <span className="info-label">Status:</span>
-                        <span className={`status-badge ${getPostStatus(selectedPost).status}`}>
-                          {getPostStatus(selectedPost).text}
-                        </span>
-                      </div>
-                      {selectedPost.tags && selectedPost.tags.length > 0 && (
-                        <div className="info-item full-width">
-                          <span className="info-label">Tags:</span>
-                          <div className="tags-container">
-                            {selectedPost.tags.map(tag => (
-                              <span key={tag} className="tag-badge">#{tag}</span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Creator Information */}
-                  <div className="info-section">
-                    <h4>Creator Information</h4>
-                    <div className="creator-profile">
-                      <div className="creator-avatar-large">
-                        {selectedPost.creator?.profileImage ? (
-                          <img 
-                            src={selectedPost.creator.profileImage} 
-                            alt="Creator profile"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
+                        <label>Status:</label>
+                        <p>
+                          <span 
+                            className="status-badge modern"
+                            style={{ 
+                              backgroundColor: `${getPostStatus(selectedPost).color}15`,
+                              color: getPostStatus(selectedPost).color,
+                              border: `1px solid ${getPostStatus(selectedPost).color}30`
                             }}
-                          />
-                        ) : null}
-                        <div className="avatar-fallback" style={{display: selectedPost.creator?.profileImage ? 'none' : 'flex'}}>
-                          {selectedPost.creator?.username?.charAt(0).toUpperCase() || 'U'}
-                        </div>
-                      </div>
-                      <div className="creator-details-extended">
-                        <div className="creator-name">{selectedPost.creator?.username || 'Unknown User'}</div>
-                        <div className="creator-email">{selectedPost.creator?.email || 'No email available'}</div>
-                        <div className="creator-joined">Joined: {selectedPost.creator?.createdAt ? formatDate(selectedPost.creator.createdAt) : 'Unknown'}</div>
-                        <button className="view-profile-btn">View Profile</button>
+                          >
+                            {getPostStatus(selectedPost).text}
+                          </span>
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Engagement Stats */}
-                  <div className="info-section">
+                  <div className="info-card">
+                    <h4>Creator Information</h4>
+                    <div className="creator-detail">
+                      <UserAvatar user={selectedPost.creator} size={60} />
+                      <div className="creator-details">
+                        <h5>{selectedPost.creator?.username || 'Unknown User'}</h5>
+                        <p>{selectedPost.creator?.email || 'No email'}</p>
+                        <p className="join-date">
+                          Joined: {selectedPost.creator?.createdAt ? formatDate(selectedPost.creator.createdAt) : 'Unknown'}
+                        </p>
+                        {selectedPost.creator && (
+                          <button 
+                            onClick={() => handleUserClick(selectedPost.creator)}
+                            className="view-profile-btn"
+                          >
+                            View Profile
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="info-card">
                     <h4>Engagement Stats</h4>
-                    <div className="engagement-grid">
-                      <div className="engagement-stat">
-                        <div className="stat-number">{selectedPost.likes || 0}</div>
-                        <div className="stat-label">LIKES</div>
+                    <div className="engagement-stats">
+                      <div className="stat-item">
+                        <span className="stat-number">{selectedPost.likes?.length || 0}</span>
+                        <span className="stat-label">Likes</span>
                       </div>
-                      <div className="engagement-stat">
-                        <div className="stat-number">{selectedPost.comments ? selectedPost.comments.length : 0}</div>
-                        <div className="stat-label">COMMENTS</div>
+                      <div className="stat-item">
+                        <span className="stat-number">{selectedPost.comments?.length || 0}</span>
+                        <span className="stat-label">Comments</span>
                       </div>
-                      <div className="engagement-stat">
-                        <div className="stat-number">{getAllPostImages(selectedPost).length}</div>
-                        <div className="stat-label">IMAGES</div>
+                      <div className="stat-item">
+                        <span className="stat-number">{getAllPostImages(selectedPost).length}</span>
+                        <span className="stat-label">Images</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Comments Section */}
-                  <div className="info-section comments-section">
-                    <h4>Comments ({selectedPost.comments ? selectedPost.comments.length : 0})</h4>
-                    <div className="comments-container">
-                      {selectedPost.comments && selectedPost.comments.length > 0 ? (
-                        selectedPost.comments.map((comment, index) => (
-                          <div key={comment._id || index} className="comment-item">
-                            <div className="comment-header">
-                              <div className="comment-avatar">
-                                {comment.user?.profileImage ? (
-                                  <img 
-                                    src={comment.user.profileImage} 
-                                    alt="Commenter profile"
-                                    onError={(e) => {
-                                      e.target.style.display = 'none';
-                                      e.target.nextSibling.style.display = 'flex';
-                                    }}
-                                  />
-                                ) : null}
-                                <div className="avatar-fallback" style={{display: comment.user?.profileImage ? 'none' : 'flex'}}>
-                                  {comment.user?.username?.charAt(0).toUpperCase() || 'U'}
-                                </div>
-                              </div>
-                              <div className="comment-meta">
-                                <span className="comment-username">{comment.user?.username || 'Unknown User'}</span>
-                                <span className="comment-date">{comment.createdAt ? formatDate(comment.createdAt) : 'Unknown date'}</span>
-                              </div>
-                            </div>
-                            <div className="comment-content">
-                              {comment.text || comment.content}
-                            </div>
-                            {comment.likes && comment.likes > 0 && (
-                              <div className="comment-likes">
-                                ❤️ {comment.likes}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="no-comments">
-                          <p>No comments yet</p>
-                          <span>Be the first to start a conversation!</span>
-                        </div>
-                      )}
+                  {selectedPost.linkedShopItems && selectedPost.linkedShopItems.length > 0 && (
+                    <div className="info-card">
+                      <h4>Linked Products</h4>
+                      <p>{selectedPost.linkedShopItems.length} product(s) linked to this post</p>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
-      
+
       {/* User Profile Modal */}
       {showUserModal && selectedUser && (
         <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
