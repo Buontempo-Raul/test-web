@@ -27,6 +27,8 @@ try {
 // Get dashboard statistics with enhanced ban/pause tracking
 const getDashboardStats = async (req, res) => {
   try {
+    console.log('🔍 Getting dashboard stats...');
+    
     // Get total users
     const totalUsers = await User.countDocuments();
     
@@ -67,6 +69,9 @@ const getDashboardStats = async (req, res) => {
     // Get artists
     const totalArtists = await User.countDocuments({ isArtist: true });
 
+    // *** MISSING: Get total posts *** 
+    const totalPosts = await Post.countDocuments();
+
     // Get artworks
     const totalArtworks = await Artwork.countDocuments();
 
@@ -75,34 +80,39 @@ const getDashboardStats = async (req, res) => {
       'auction.isActive': true
     });
 
+    console.log('📊 Dashboard stats calculated:', {
+      totalUsers,
+      activeUsers,
+      currentlyBannedUsers,
+      permanentlyBannedUsers,
+      currentlyPausedUsers,
+      totalArtists,
+      totalPosts, // This was missing!
+      totalArtworks,
+      activeAuctions
+    });
+
+    // *** FIXED: Complete response object ***
     res.json({
       success: true,
       stats: {
         totalUsers,
         activeUsers,
-        currentlyBannedUsers,
-        permanentlyBannedUsers,
-        currentlyPausedUsers,
+        bannedUsers: currentlyBannedUsers + permanentlyBannedUsers, // Combined for frontend
+        pausedUsers: currentlyPausedUsers,
         totalArtists,
+        totalPosts, // *** THIS WAS MISSING ***
         totalArtworks,
         activeAuctions
       }
     });
+
   } catch (error) {
-    console.error('Dashboard stats error:', error);
-    res.json({
+    console.error('❌ Dashboard stats error:', error);
+    res.status(500).json({
       success: false,
-      message: error.message,
-      stats: {
-        totalUsers: 0,
-        activeUsers: 0,
-        currentlyBannedUsers: 0,
-        permanentlyBannedUsers: 0,
-        currentlyPausedUsers: 0,
-        totalArtists: 0,
-        totalArtworks: 0,
-        activeAuctions: 0
-      }
+      message: 'Error fetching dashboard statistics',
+      error: error.message
     });
   }
 };

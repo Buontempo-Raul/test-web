@@ -206,24 +206,7 @@ const AdminDashboard = () => {
           <div className="stat-content">
             <h3>Total Users</h3>
             <div className="stat-number">{safeToLocaleString(stats.totalUsers)}</div>
-            <div className="stat-sublabel">
-              <span className="stat-detail active">🟢 {safeToLocaleString(stats.activeUsers)} Active</span>
-              {(stats.bannedUsers > 0 || stats.pausedUsers > 0) && (
-                <span className="stat-detail warning">
-                  🔴 {safeToLocaleString(stats.bannedUsers)} Banned
-                  {stats.pausedUsers > 0 && ` • ⏸️ ${safeToLocaleString(stats.pausedUsers)} Paused`}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card artists">
-          <div className="stat-icon">🎨</div>
-          <div className="stat-content">
-            <h3>Artists</h3>
-            <div className="stat-number">{safeToLocaleString(stats.totalArtists)}</div>
-            <div className="stat-label">Verified creators</div>
+            <div className="stat-label">Registered users</div>
           </div>
         </div>
 

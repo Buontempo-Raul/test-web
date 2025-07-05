@@ -1,58 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-// Enhanced Admin API service
-const adminAPI = {
-  getAllUsers: (params = {}) => {
-    const { page = 1, limit = 10, search = '', role = '', status = '' } = params;
-    const queryParams = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-      search,
-      role,
-      status
-    });
-    
-    return fetch(`/api/admin/users?${queryParams}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
-    }).then(res => res.json());
-  },
-
-  banUser: (userId, data) => {
-    return fetch(`/api/admin/users/${userId}/ban`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    }).then(res => res.json());
-  },
-
-  pauseUser: (userId, data) => {
-    return fetch(`/api/admin/users/${userId}/pause`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    }).then(res => res.json());
-  },
-
-  fullyRestoreUser: (userId, data) => {
-    return fetch(`/api/admin/users/${userId}/restore`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    }).then(res => res.json());
-  }
-};
+import { adminAPI } from '../../services/adminAPI';
 
 const AdminUsers = () => {
   const [users, setUsers] = useState([]);
@@ -77,14 +24,33 @@ const AdminUsers = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
 
+  // Debounced search effect - separate from fetchUsers to prevent input focus loss
   useEffect(() => {
     fetchUsers();
-  }, [searchTerm, filterRole, filterStatus, pagination.current]);
+  }, [filterRole, filterStatus, pagination.current]);
+
+  // Separate effect for search with proper debouncing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (pagination.current !== 1) {
+        setPagination(p => ({ ...p, current: 1 })); // Reset to page 1 for new search
+      } else {
+        fetchUsers(); // Only fetch if already on page 1
+      }
+    }, 500); // Increased debounce time for better UX
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchUsers = async () => {
     try {
-      setIsLoading(true);
+      if (searchTerm) {
+        setSearchLoading(true);
+      } else {
+        setIsLoading(true);
+      }
       setActionError(null);
       
       const response = await adminAPI.getAllUsers({
@@ -102,24 +68,37 @@ const AdminUsers = () => {
         throw new Error(response.message || 'Failed to fetch users');
       }
       
-      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching users:', error);
       setActionError('Failed to fetch users. Please try again.');
+    } finally {
       setIsLoading(false);
+      setSearchLoading(false);
     }
   };
 
+  // Enhanced status calculation
   const getUserStatus = (user) => {
     const now = new Date();
     
-    // Check current ban status
+    // Check if permanently banned
+    if (user.permanentlyBanned) {
+      return { 
+        status: 'permanently_banned', 
+        color: '#8B0000', 
+        text: 'Banned (Permanent Email Ban)',
+        isPermanent: true
+      };
+    }
+    
+    // Check current temporary ban status
     if (user.banUntil && new Date(user.banUntil) > now) {
       return { 
         status: 'banned', 
         color: '#e74c3c', 
-        text: user.permanentlyBanned ? 'Banned (Permanent Email Ban)' : 'Banned',
-        isPermanent: user.permanentlyBanned
+        text: 'Temporarily Banned',
+        isPermanent: false,
+        until: new Date(user.banUntil).toLocaleDateString()
       };
     }
     
@@ -128,18 +107,9 @@ const AdminUsers = () => {
       return { 
         status: 'paused', 
         color: '#f39c12', 
-        text: 'Paused (Temporary)',
-        isPermanent: false
-      };
-    }
-    
-    // Check if permanently banned but not currently restricted
-    if (user.permanentlyBanned) {
-      return { 
-        status: 'permanently_banned', 
-        color: '#8e44ad', 
-        text: 'Email Permanently Banned',
-        isPermanent: true
+        text: 'Paused',
+        isPermanent: false,
+        until: new Date(user.pauseUntil).toLocaleDateString()
       };
     }
     
@@ -153,6 +123,7 @@ const AdminUsers = () => {
       };
     }
     
+    // Default to active
     return { 
       status: 'active', 
       color: '#27ae60', 
@@ -167,17 +138,6 @@ const AdminUsers = () => {
     return 'User';
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
   const handleUserClick = (user) => {
     setSelectedUser(user);
     setShowUserModal(true);
@@ -185,26 +145,25 @@ const AdminUsers = () => {
 
   const handleActionClick = (user, actionType) => {
     setSelectedUser(user);
-    const userStatus = getUserStatus(user);
+    const status = getUserStatus(user);
     
-    let action = '';
-    let defaultReason = '';
+    let action, defaultReason;
     
     if (actionType === 'ban') {
-      action = userStatus.status === 'banned' ? 'unban' : 'ban';
+      action = status.status === 'banned' || status.status === 'permanently_banned' ? 'unban' : 'ban';
       defaultReason = action === 'ban' ? 'Violation of community guidelines' : '';
     } else if (actionType === 'pause') {
-      action = userStatus.status === 'paused' ? 'unpause' : 'pause';
-      defaultReason = action === 'pause' ? 'Account under review' : '';
+      action = status.status === 'paused' ? 'unpause' : 'pause';
+      defaultReason = action === 'pause' ? 'Account temporarily restricted' : '';
     } else if (actionType === 'restore') {
       action = 'restore';
-      defaultReason = 'Admin decision to fully restore account';
+      defaultReason = 'Full account restoration';
     }
-    
+
     setActionForm({
-      action: action,
+      action,
       type: actionType,
-      duration: actionType === 'pause' ? 7 : 30,
+      duration: actionType === 'ban' ? 7 : 30,
       reason: defaultReason
     });
     setShowActionModal(true);
@@ -288,7 +247,32 @@ const AdminUsers = () => {
     );
   };
 
-  if (isLoading) {
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Clear search function with focus retention
+  const clearSearch = () => {
+    setSearchTerm('');
+    // Keep focus on the input after clearing
+    setTimeout(() => {
+      const searchInput = document.querySelector('.search-input');
+      if (searchInput) searchInput.focus();
+    }, 0);
+  };
+
+  // Handle search input change with immediate UI update
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
+  if (isLoading && users.length === 0) {
     return (
       <div className="admin-loading">
         <div className="loading-spinner"></div>
@@ -299,329 +283,11 @@ const AdminUsers = () => {
 
   return (
     <div className="admin-page">
-      <div className="admin-header">
-        <h1>User Management</h1>
-        <p>Manage platform users with ban and pause controls</p>
-        <div className="legend">
-          <div className="legend-item">
-            <span className="legend-color banned"></span>
-            <span>Ban = Permanent email restriction</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-color paused"></span>
-            <span>Pause = Temporary restriction</span>
-          </div>
-        </div>
-      </div>
-
-      {(actionError || actionSuccess) && (
-        <div className={`message-banner ${actionSuccess ? 'success' : 'error'}`}>
-          <span>{actionSuccess || actionError}</span>
-          <button onClick={() => {setActionError(null); setActionSuccess(null)}}>×</button>
-        </div>
-      )}
-
-      <div className="admin-filters">
-        <div className="filter-group">
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-        </div>
-
-        <div className="filter-group">
-          <select
-            value={filterRole}
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Roles</option>
-            <option value="admin">Admins</option>
-            <option value="artist">Artists</option>
-            <option value="user">Regular Users</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="banned">Currently Banned</option>
-            <option value="permanently_banned">Permanently Banned</option>
-            <option value="paused">Currently Paused</option>
-            <option value="inactive">Inactive</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="admin-table-container">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Followers</th>
-              <th>Joined</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => {
-              const status = getUserStatus(user);
-              return (
-                <tr key={user._id}>
-                  <td>
-                    <div className="user-info">
-                      <UserAvatar user={user} />
-                      <div>
-                        <div className="user-name">{user.username}</div>
-                        <div className="user-email">{user.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`role-badge ${user.role === 'admin' ? 'admin' : user.isArtist ? 'artist' : 'user'}`}>
-                      {getUserRole(user)}
-                    </span>
-                  </td>
-                  <td>
-                    <span 
-                      className="status-badge" 
-                      style={{ backgroundColor: status.color }}
-                      title={status.isPermanent ? 'Email permanently banned from registration' : ''}
-                    >
-                      {status.text}
-                    </span>
-                  </td>
-                  <td>{user.followers?.length || 0}</td>
-                  <td>{formatDate(user.createdAt)}</td>
-                  <td>
-                    <div className="action-buttons">
-                      <button 
-                        className="view-button"
-                        onClick={() => handleUserClick(user)}
-                      >
-                        View
-                      </button>
-                      {user.role !== 'admin' && (
-                        <>
-                          <button 
-                            className={`ban-button ${status.status === 'banned' ? 'unban' : ''}`}
-                            onClick={() => handleActionClick(user, 'ban')}
-                          >
-                            {status.status === 'banned' ? 'Unban' : 'Ban'}
-                          </button>
-                          <button 
-                            className={`pause-button ${status.status === 'paused' ? 'unpause' : ''}`}
-                            onClick={() => handleActionClick(user, 'pause')}
-                          >
-                            {status.status === 'paused' ? 'Unpause' : 'Pause'}
-                          </button>
-                          {user.permanentlyBanned && (
-                            <button 
-                              className="restore-button"
-                              onClick={() => handleActionClick(user, 'restore')}
-                              title="Fully restore account and allow email re-registration"
-                            >
-                              Restore
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="pagination">
-          <button 
-            onClick={() => setPagination({...pagination, current: pagination.current - 1})}
-            disabled={pagination.current === 1}
-          >
-            Previous
-          </button>
-          <span>Page {pagination.current} of {pagination.pages}</span>
-          <button 
-            onClick={() => setPagination({...pagination, current: pagination.current + 1})}
-            disabled={pagination.current === pagination.pages}
-          >
-            Next
-          </button>
-        </div>
-      )}
-
-      {/* User Details Modal */}
-      {showUserModal && selectedUser && (
-        <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>User Details</h3>
-              <button onClick={() => setShowUserModal(false)} className="close-button">×</button>
-            </div>
-            <div className="modal-body">
-              <div className="user-details">
-                <div className="user-detail-avatar">
-                  <UserAvatar user={selectedUser} size="80px" />
-                </div>
-                <div className="user-detail-info">
-                  <h4>{selectedUser.username}</h4>
-                  <p><strong>Email:</strong> {selectedUser.email}</p>
-                  <p><strong>Role:</strong> {getUserRole(selectedUser)}</p>
-                  <p><strong>Status:</strong> {getUserStatus(selectedUser).text}</p>
-                  <p><strong>Followers:</strong> {selectedUser.followers?.length || 0}</p>
-                  <p><strong>Joined:</strong> {formatDate(selectedUser.createdAt)}</p>
-                  <p><strong>Last Login:</strong> {formatDate(selectedUser.lastLogin)}</p>
-                  
-                  {selectedUser.permanentlyBanned && (
-                    <div className="permanent-ban-warning">
-                      <p><strong>⚠️ Email Permanently Banned:</strong> This email cannot be used for new registrations</p>
-                    </div>
-                  )}
-                  
-                  {selectedUser.banUntil && new Date(selectedUser.banUntil) > new Date() && (
-                    <div className="ban-info">
-                      <p><strong>Banned until:</strong> {formatDate(selectedUser.banUntil)}</p>
-                      <p><strong>Ban reason:</strong> {selectedUser.banReason}</p>
-                    </div>
-                  )}
-                  
-                  {selectedUser.pauseUntil && new Date(selectedUser.pauseUntil) > new Date() && (
-                    <div className="pause-info">
-                      <p><strong>Paused until:</strong> {formatDate(selectedUser.pauseUntil)}</p>
-                      <p><strong>Pause reason:</strong> {selectedUser.pauseReason}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Action Modal */}
-      {showActionModal && (
-        <div className="modal-overlay" onClick={() => setShowActionModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>
-                {actionForm.action === 'ban' && 'Ban User (Permanent Email Restriction)'}
-                {actionForm.action === 'unban' && 'Unban User'}
-                {actionForm.action === 'pause' && 'Pause User (Temporary Restriction)'}
-                {actionForm.action === 'unpause' && 'Unpause User'}
-                {actionForm.action === 'restore' && 'Fully Restore User'}
-              </h3>
-              <button onClick={() => setShowActionModal(false)} className="close-button">×</button>
-            </div>
-            <div className="modal-body">
-              {actionForm.action === 'ban' && (
-                <div className="warning-box">
-                  <p><strong>⚠️ Warning:</strong> Banning a user will permanently prevent this email from registering new accounts, even after the ban period expires.</p>
-                </div>
-              )}
-              
-              {actionForm.action === 'pause' && (
-                <div className="info-box">
-                  <p><strong>ℹ️ Info:</strong> Pausing is temporary. The user can return normally after the pause period without permanent restrictions.</p>
-                </div>
-              )}
-              
-              {actionForm.action === 'restore' && (
-                <div className="info-box">
-                  <p><strong>ℹ️ Info:</strong> This will fully restore the user account and allow the email to be used for new registrations if the account is deleted.</p>
-                </div>
-              )}
-
-              {(actionForm.action === 'ban' || actionForm.action === 'pause') && (
-                <>
-                  <div className="form-group">
-                    <label>Duration (days):</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={actionForm.action === 'ban' ? 365 : 90}
-                      value={actionForm.duration}
-                      onChange={(e) => setActionForm({...actionForm, duration: e.target.value})}
-                      className="form-input"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Reason:</label>
-                    <textarea
-                      value={actionForm.reason}
-                      onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
-                      className="form-textarea"
-                      placeholder={`Enter reason for ${actionForm.action}...`}
-                      required
-                    />
-                  </div>
-                </>
-              )}
-              
-              {actionForm.action === 'restore' && (
-                <div className="form-group">
-                  <label>Reason for restoration:</label>
-                  <textarea
-                    value={actionForm.reason}
-                    onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
-                    className="form-textarea"
-                    placeholder="Enter reason for full restoration..."
-                  />
-                </div>
-              )}
-
-              {actionError && (
-                <div className="error-message">{actionError}</div>
-              )}
-              
-              {actionSuccess && (
-                <div className="success-message">{actionSuccess}</div>
-              )}
-
-              <div className="form-actions">
-                <button 
-                  type="button" 
-                  onClick={handleActionSubmit} 
-                  className="submit-button"
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? 'Processing...' : 
-                   actionForm.action === 'ban' ? 'Ban User' :
-                   actionForm.action === 'unban' ? 'Unban User' :
-                   actionForm.action === 'pause' ? 'Pause User' :
-                   actionForm.action === 'unpause' ? 'Unpause User' :
-                   'Restore User'}
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => setShowActionModal(false)} 
-                  className="cancel-button"
-                  disabled={actionLoading}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style jsx>{`
+      <style>{`
         .admin-page {
-          padding: 0;
+          padding: 2rem;
+          max-width: 1400px;
+          margin: 0 auto;
         }
 
         .admin-header {
@@ -629,19 +295,25 @@ const AdminUsers = () => {
         }
 
         .admin-header h1 {
-          margin: 0 0 0.5rem 0;
+          font-size: 2rem;
           color: #2c3e50;
+          margin: 0 0 0.5rem 0;
         }
 
         .admin-header p {
-          margin: 0 0 1rem 0;
           color: #7f8c8d;
+          margin: 0 0 1rem 0;
+        }
+
+        .results-count {
+          color: #667eea;
+          font-weight: 500;
         }
 
         .legend {
           display: flex;
           gap: 2rem;
-          margin-top: 0.5rem;
+          margin-top: 1rem;
         }
 
         .legend-item {
@@ -653,18 +325,13 @@ const AdminUsers = () => {
         }
 
         .legend-color {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
+          width: 16px;
+          height: 16px;
+          border-radius: 4px;
         }
 
-        .legend-color.banned {
-          background: #e74c3c;
-        }
-
-        .legend-color.paused {
-          background: #f39c12;
-        }
+        .legend-color.banned { background-color: #e74c3c; }
+        .legend-color.paused { background-color: #f39c12; }
 
         .message-banner {
           padding: 1rem;
@@ -676,26 +343,15 @@ const AdminUsers = () => {
         }
 
         .message-banner.success {
-          background: #d4edda;
-          border: 1px solid #c3e6cb;
+          background-color: #d4edda;
           color: #155724;
+          border: 1px solid #c3e6cb;
         }
 
         .message-banner.error {
-          background: #f8d7da;
-          border: 1px solid #f5c6cb;
+          background-color: #f8d7da;
           color: #721c24;
-        }
-
-        .message-banner button {
-          background: none;
-          border: none;
-          color: inherit;
-          font-size: 1.2rem;
-          cursor: pointer;
-          padding: 0;
-          width: 24px;
-          height: 24px;
+          border: 1px solid #f5c6cb;
         }
 
         .admin-filters {
@@ -703,27 +359,84 @@ const AdminUsers = () => {
           gap: 1rem;
           margin-bottom: 2rem;
           flex-wrap: wrap;
+          padding: 1.5rem;
+          border: 2px solid #8b5cf6;
+          border-radius: 12px;
+          background-color: #faf5ff;
         }
 
         .filter-group {
           flex: 1;
           min-width: 200px;
+          position: relative;
+          background-color: #7c3aed;
+          border-radius: 15px;
         }
 
         .search-input,
         .filter-select {
           width: 100%;
           padding: 0.75rem;
-          border: 2px solid #e9ecef;
+          border: 2px hiborder-color: #6b7280;
           border-radius: 8px;
           font-size: 1rem;
-          transition: border-color 0.3s ease;
+          transition: border-color 0.3s ease, background-color 0.3s ease;
+          background-color: #f3f4f6; /* Changed to light gray for visibility */
+          color: #1f2937; /* Darker text color for contrast */
+        }
+
+        .filter-group.search-container {
+          position: relative;
+        }
+
+        .search-clear,
+        .search-loading {
+          position: absolute;
+          right: 0.75rem;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: #e0e7ff;
+          cursor: pointer Vitamins, Minerals & Supplements;
+          font-size: 1.2rem;
+          padding: 0.25rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 20px;
+          min-height: 20px;
+        }
+
+        .search-clear:hover {
+          color: white;
+        }
+
+        .search-loading {
+          cursor: default;
+          animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
         }
 
         .search-input:focus,
         .filter-select:focus {
           outline: none;
-          border-color: #667eea;
+          border-color: #7c3aed;
+          background-color: #e0e7ff; /* Lighter purple on focus for contrast */
+          box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.3);
+          color: #1f2937; /* Maintain dark text on focus */
+        }
+
+        .search-input::placeholder {
+          color: #6b7280; /* Darker placeholder for visibility */
+        }
+
+        .search-input:focus::placeholder {
+          color: #4b5563; /* Slightly darker placeholder on focus */
         }
 
         .admin-table-container {
@@ -792,33 +505,33 @@ const AdminUsers = () => {
 
         .role-badge {
           padding: 0.25rem 0.75rem;
-          border-radius: 20px;
+          border-radius: 15px;
           font-size: 0.8rem;
           font-weight: 600;
+          color: white !important;
           text-transform: uppercase;
         }
 
-        .role-badge.admin {
-          background: #e74c3c;
-          color: white;
+        .role-badge.admin { 
+          background-color: #e74c3c; 
+          color: white !important;
         }
-
-        .role-badge.artist {
-          background: #9b59b6;
-          color: white;
+        .role-badge.artist { 
+          background-color: #9b59b6; 
+          color: white !important;
         }
-
-        .role-badge.user {
-          background: #3498db;
-          color: white;
+        .role-badge.user { 
+          background-color: #3498db; 
+          color: white !important;
         }
 
         .status-badge {
-          padding: 0.25rem 0.75rem;
-          border-radius: 20px;
+          padding: 0.35rem 0.8rem;
+          border-radius: 15px;
           font-size: 0.8rem;
           font-weight: 600;
           color: white;
+          cursor: help;
         }
 
         .action-buttons {
@@ -827,202 +540,146 @@ const AdminUsers = () => {
           flex-wrap: wrap;
         }
 
-        .view-button,
-        .ban-button,
-        .pause-button,
-        .restore-button {
-          padding: 0.5rem 1rem;
+        .action-buttons button {
+          padding: 0.4rem 0.8rem;
           border: none;
-          border-radius: 6px;
-          font-size: 0.9rem;
+          border-radius: 4px;
+          font-size: 0.85rem;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.2s ease;
         }
 
         .view-button {
-          background: #3498db;
+          background-color: #667eea;
           color: white;
         }
 
         .view-button:hover {
-          background: #2980b9;
+          background-color: #5a6fd8;
         }
 
         .ban-button {
-          background: #e74c3c;
+          background-color: #e74c3c;
           color: white;
         }
 
         .ban-button:hover {
-          background: #c0392b;
+          background-color: #c0392b;
         }
 
         .ban-button.unban {
-          background: #27ae60;
+          background-color: #27ae60;
         }
 
         .ban-button.unban:hover {
-          background: #229954;
+          background-color: #219a52;
         }
 
         .pause-button {
-          background: #f39c12;
+          background-color: #8b5cf6;
           color: white;
         }
 
         .pause-button:hover {
-          background: #e67e22;
+          background-color: #7c3aed;
         }
 
         .pause-button.unpause {
-          background: #27ae60;
+          background-color: #16a085;
         }
 
         .pause-button.unpause:hover {
-          background: #229954;
+          background-color: #138d75;
         }
 
         .restore-button {
-          background: #8e44ad;
+          background-color: #9b59b6;
           color: white;
         }
 
         .restore-button:hover {
-          background: #7d3c98;
+          background-color: #8e44ad;
         }
 
         .pagination {
           display: flex;
           justify-content: center;
-          align-items: center;
-          gap: 1rem;
+          gap: 0.5rem;
           margin-top: 2rem;
         }
 
         .pagination button {
           padding: 0.5rem 1rem;
           border: 1px solid #ddd;
-          background: white;
+          background-color: white;
           cursor: pointer;
           border-radius: 4px;
         }
 
+        .pagination button:hover:not(:disabled) {
+          background-color: #f8f9fa;
+        }
+
         .pagination button:disabled {
-          background: #f5f5f5;
+          opacity: 0.5;
           cursor: not-allowed;
         }
 
-        .modal-overlay {
+        .pagination button.active {
+          background-color: #667eea;
+          color: white;
+          border-color: #667eea;
+        }
+
+        .admin-loading {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 50vh;
+          gap: 1rem;
+        }
+
+        .loading-spinner {
+          width: 40px;
+          height: 40px;
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .modal {
           position: fixed;
           top: 0;
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.5);
+          background-color: rgba(0, 0, 0, 0.5);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 1000;
-          padding: 1rem;
         }
 
         .modal-content {
           background: white;
           border-radius: 12px;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
-          max-width: 600px;
-          width: 100%;
-          max-height: 90vh;
+          padding: 2rem;
+          max-width: 500px;
+          width: 90%;
+          max-height: 80vh;
           overflow-y: auto;
         }
 
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1.5rem 1.5rem 1rem 1.5rem;
-          border-bottom: 1px solid #e9ecef;
-        }
-
-        .modal-header h3 {
-          margin: 0;
-          color: #2c3e50;
-        }
-
-        .close-button {
-          background: none;
-          border: none;
-          font-size: 1.5rem;
-          cursor: pointer;
-          color: #6c757d;
-          padding: 0;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 50%;
-        }
-
-        .close-button:hover {
-          background-color: #f8f9fa;
-        }
-
-        .modal-body {
-          padding: 1.5rem;
-        }
-
-        .user-details {
-          display: flex;
-          gap: 1rem;
-          align-items: flex-start;
-        }
-
-        .user-detail-info h4 {
-          margin: 0 0 1rem 0;
-          color: #2c3e50;
-        }
-
-        .user-detail-info p {
-          margin: 0.5rem 0;
-          color: #666;
-        }
-
-        .permanent-ban-warning {
-          background: #fff3cd;
-          border: 1px solid #faebcc;
-          border-radius: 8px;
-          padding: 1rem;
-          margin: 1rem 0;
-        }
-
-        .ban-info,
-        .pause-info {
-          margin-top: 1rem;
-          padding: 1rem;
-          background: #f8f9fa;
-          border-radius: 8px;
-        }
-
-        .warning-box {
-          background: #fff3cd;
-          border: 1px solid #faebcc;
-          border-radius: 8px;
-          padding: 1rem;
-          margin-bottom: 1rem;
-        }
-
-        .info-box {
-          background: #d1ecf1;
-          border: 1px solid #bee5eb;
-          border-radius: 8px;
-          padding: 1rem;
-          margin-bottom: 1rem;
-        }
-
         .form-group {
-          margin-bottom: 1.5rem;
+          margin-bottom: 1rem;
         }
 
         .form-group label {
@@ -1032,148 +689,409 @@ const AdminUsers = () => {
           color: #2c3e50;
         }
 
-        .form-input,
-        .form-textarea {
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
           width: 100%;
           padding: 0.75rem;
           border: 2px solid #e9ecef;
           border-radius: 8px;
           font-size: 1rem;
-          transition: border-color 0.3s ease;
-          box-sizing: border-box;
         }
 
-        .form-input:focus,
-        .form-textarea:focus {
-          outline: none;
-          border-color: #667eea;
-        }
-
-        .form-textarea {
-          min-height: 100px;
+        .form-group textarea {
           resize: vertical;
+          min-height: 80px;
         }
 
-        .error-message {
-          background: #f8d7da;
-          border: 1px solid #f5c6cb;
-          color: #721c24;
-          padding: 0.75rem;
-          border-radius: 6px;
-          margin-bottom: 1rem;
-          font-size: 0.9rem;
-        }
-
-        .success-message {
-          background: #d4edda;
-          border: 1px solid #c3e6cb;
-          color: #155724;
-          padding: 0.75rem;
-          border-radius: 6px;
-          margin-bottom: 1rem;
-          font-size: 0.9rem;
-        }
-
-        .form-actions {
+        .modal-actions {
           display: flex;
           gap: 1rem;
           justify-content: flex-end;
           margin-top: 2rem;
         }
 
-        .submit-button,
-        .cancel-button {
+        .modal-actions button {
           padding: 0.75rem 1.5rem;
           border: none;
           border-radius: 8px;
           font-weight: 600;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.2s ease;
         }
 
-        .submit-button:disabled,
-        .cancel-button:disabled {
+        .btn-primary {
+          background-color: #667eea;
+          color: white;
+        }
+
+        .btn-primary:hover {
+          background-color: #5a6fd8;
+        }
+
+        .btn-secondary {
+          background-color: #6c757d;
+          color: white;
+        }
+
+        .btn-secondary:hover {
+          background-color: #5a6268;
+        }
+
+        .btn-primary:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
 
-        .submit-button {
-          background: #667eea;
-          color: white;
-        }
-
-        .submit-button:hover:not(:disabled) {
-          background: #5a6fd8;
-        }
-
-        .cancel-button {
-          background: #e9ecef;
-          color: #6c757d;
-        }
-
-        .cancel-button:hover:not(:disabled) {
-          background: #dee2e6;
-        }
-
-        .admin-loading {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 4rem 2rem;
+        .no-results {
           text-align: center;
-        }
-
-        .loading-spinner {
-          width: 50px;
-          height: 50px;
-          border: 4px solid #f3f3f3;
-          border-top: 4px solid #667eea;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin-bottom: 1rem;
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          padding: 3rem;
+          color: #7f8c8d;
         }
 
         @media (max-width: 768px) {
           .admin-filters {
             flex-direction: column;
           }
-
-          .admin-table-container {
-            overflow-x: auto;
+          
+          .filter-group {
+            min-width: auto;
           }
-
-          .admin-table {
-            min-width: 900px;
-          }
-
+          
           .action-buttons {
             flex-direction: column;
-            gap: 0.25rem;
           }
-
-          .modal-content {
-            width: 95%;
-            margin: 1rem;
+          
+          .admin-table {
+            font-size: 0.9rem;
           }
-
-          .user-details {
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-          }
-
-          .legend {
-            flex-direction: column;
-            gap: 0.5rem;
+          
+          .admin-table th,
+          .admin-table td {
+            padding: 0.5rem;
           }
         }
       `}</style>
+
+      <div className="admin-header">
+        <h1>User Management</h1>
+        <p>
+          Manage platform users with ban and pause controls
+          {pagination.total > 0 && (
+            <span className="results-count">
+              {searchTerm ? ` • Found ${pagination.total} user${pagination.total !== 1 ? 's' : ''} matching "${searchTerm}"` 
+                         : ` • ${pagination.total} total user${pagination.total !== 1 ? 's' : ''}`}
+            </span>
+          )}
+        </p>
+      </div>
+
+      {(actionError || actionSuccess) && (
+        <div className={`message-banner ${actionSuccess ? 'success' : 'error'}`}>
+          <span>{actionSuccess || actionError}</span>
+          <button onClick={() => {setActionError(null); setActionSuccess(null)}}>×</button>
+        </div>
+      )}
+
+      <div className="admin-filters">
+        <div className="filter-group search-container">
+          <input
+            type="text"
+            placeholder="Search by username or email..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="search-input"
+            autoComplete="off"
+            spellCheck="false"
+          />
+          {searchLoading && (
+            <div className="search-loading" title="Searching...">
+              ⏳
+            </div>
+          )}
+          {searchTerm && !searchLoading && (
+            <button onClick={clearSearch} className="search-clear" title="Clear search" type="button">
+              ×
+            </button>
+          )}
+        </div>
+
+        <div className="filter-group">
+          <select
+            value={filterRole}
+            onChange={(e) => setFilterRole(e.target.value)}
+            className="filter-select"
+          >
+            <option value="">All Roles</option>
+            <option value="admin">Admins</option>
+            <option value="artist">Artists</option>
+            <option value="user">Regular Users</option>
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="filter-select"
+          >
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="banned">Currently Banned</option>
+            <option value="permanently_banned">Permanently Banned</option>
+            <option value="paused">Currently Paused</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="admin-table-container">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Followers</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="no-results">
+                  {searchTerm || filterRole || filterStatus ? 'No users found matching your criteria' : 'No users found'}
+                </td>
+              </tr>
+            ) : (
+              users.map(user => {
+                const status = getUserStatus(user);
+                return (
+                  <tr key={user._id}>
+                    <td>
+                      <div className="user-info">
+                        <UserAvatar user={user} />
+                        <div>
+                          <div className="user-name">{user.username}</div>
+                          <div className="user-email">{user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`role-badge ${user.role === 'admin' ? 'admin' : user.isArtist ? 'artist' : 'user'}`}>
+                        {getUserRole(user)}
+                      </span>
+                    </td>
+                    <td>
+                      <span 
+                        className="status-badge" 
+                        style={{ backgroundColor: status.color }}
+                        title={status.isPermanent ? 'Email permanently banned from registration' : status.until ? `Until: ${status.until}` : ''}
+                      >
+                        {status.text}
+                      </span>
+                    </td>
+                    <td>{user.followers?.length || 0}</td>
+                    <td>{formatDate(user.createdAt)}</td>
+                    <td>
+                      <div className="action-buttons">
+                        <button 
+                          className="view-button"
+                          onClick={() => handleUserClick(user)}
+                        >
+                          View
+                        </button>
+                        {user.role !== 'admin' && (
+                          <>
+                            <button 
+                              className={`ban-button ${(status.status === 'banned' || status.status === 'permanently_banned') ? 'unban' : ''}`}
+                              onClick={() => handleActionClick(user, 'ban')}
+                            >
+                              {(status.status === 'banned' || status.status === 'permanently_banned') ? 'Unban' : 'Ban'}
+                            </button>
+                            <button 
+                              className={`pause-button ${status.status === 'paused' ? 'unpause' : ''}`}
+                              onClick={() => handleActionClick(user, 'pause')}
+                            >
+                              {status.status === 'paused' ? 'Unpause' : 'Pause'}
+                            </button>
+                            {status.status === 'permanently_badded' && (
+                              <button 
+                                className="restore-button"
+                                onClick={() => handleActionClick(user, 'restore')}
+                              >
+                                Restore
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="pagination">
+          <button
+            onClick={() => setPagination(p => ({ ...p, current: p.current - 1 }))}
+            disabled={pagination.current === 1}
+          >
+            ← Previous
+          </button>
+          
+          {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(page => (
+            <button
+              key={page}
+              onClick={() => setPagination(p => ({ ...p, current: page }))}
+              className={pagination.current === page ? 'active' : ''}
+            >
+              {page}
+            </button>
+          ))}
+          
+          <button
+            onClick={() => setPagination(p => ({ ...p, current: p.current + 1 }))}
+            disabled={pagination.current === pagination.pages}
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
+      {/* Action Modal */}
+      {showActionModal && (
+        <div className="modal">
+          <div className="modal-content">
+            <h3>
+              {actionForm.action === 'ban' ? 'Ban User' : 
+               actionForm.action === 'unban' ? 'Unban User' :
+               actionForm.action === 'pause' ? 'Pause User' :
+               actionForm.action === 'unpause' ? 'Unpause User' :
+               'Restore User'}
+            </h3>
+            
+            {actionError && (
+              <div className="message-banner error">
+                <span>{actionError}</span>
+              </div>
+            )}
+            
+            {actionSuccess && (
+              <div className="message-banner success">
+                <span>{actionSuccess}</span>
+              </div>
+            )}
+
+            {(actionForm.action === 'ban' || actionForm.action === 'pause') && (
+              <>
+                <div className="form-group">
+                  <label>Duration (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={actionForm.action === 'ban' ? 365 : 90}
+                    value={actionForm.duration}
+                    onChange={(e) => setActionForm({...actionForm, duration: parseInt(e.target.value)})}
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>Reason *</label>
+                  <textarea
+                    value={actionForm.reason}
+                    onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
+                    placeholder={`Reason for ${actionForm.action}...`}
+                    required
+                  />
+                </div>
+              </>
+            )}
+
+            {actionForm.action === 'restore' && (
+              <div className="form-group">
+                <label>Restoration Reason</label>
+                <textarea
+                  value={actionForm.reason}
+                  onChange={(e) => setActionForm({...actionForm, reason: e.target.value})}
+                  placeholder="Reason for full account restoration..."
+                />
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowActionModal(false)}
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleActionSubmit}
+                disabled={actionLoading}
+              >
+                {actionLoading ? 'Processing...' : `Confirm ${actionForm.action}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Details Modal */}
+      {showUserModal && selectedUser && (
+        <div className="modal">
+          <div className="modal-content">
+            <h3>User Details: {selectedUser.username}</h3>
+            
+            <div className="form-group">
+              <label>Username:</label>
+              <p>{selectedUser.username}</p>
+            </div>
+            
+            <div className="form-group">
+              <label>Email:</label>
+              <p>{selectedUser.email}</p>
+            </div>
+            
+            <div className="form-group">
+              <label>Role:</label>
+              <p>{getUserRole(selectedUser)}</p>
+            </div>
+            
+            <div className="form-group">
+              <label>Status:</label>
+              <p>{getUserStatus(selectedUser).text}</p>
+            </div>
+            
+            <div className="form-group">
+              <label>Followers:</label>
+              <p>{selectedUser.followers?.length || 0}</p>
+            </div>
+            
+            <div className="form-group">
+              <label>Joined:</label>
+              <p>{formatDate(selectedUser.createdAt)}</p>
+            </div>
+
+            <div className="modal-actions">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowUserModal(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
