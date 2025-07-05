@@ -1296,8 +1296,8 @@ const AdminPosts = () => {
         }
 
         .post-detail-image {
-          width: 100%;
-          height: 150px;
+          width: 300%;
+          height:600px;
           object-fit: cover;
           border-radius: 12px;
           border: 2px solid #f1f5f9;
