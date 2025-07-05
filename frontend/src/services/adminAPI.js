@@ -104,14 +104,20 @@ export const adminAPI = {
     try {
       const { page = 1, limit = 10, search = '', category = '', status = '' } = params;
       const response = await api.get(`/api/admin/artworks?page=${page}&limit=${limit}&search=${search}&category=${category}&status=${status}`);
-      return response.data;
+      
+      // FIX: Return response in the expected format for frontend
+      return {
+        data: response.data  // Wrap the response to match expected structure
+      };
     } catch (error) {
       console.error('getAllArtworks error:', error);
       return {
-        success: false,
-        message: error.response?.data?.message || 'Failed to fetch artworks',
-        artworks: [],
-        pagination: { current: 1, pages: 1, total: 0 }
+        data: {
+          success: false,
+          message: error.response?.data?.message || 'Failed to fetch artworks',
+          artworks: [],
+          pagination: { current: 1, pages: 1, total: 0 }
+        }
       };
     }
   },
@@ -119,12 +125,16 @@ export const adminAPI = {
   deleteArtwork: async (artworkId) => {
     try {
       const response = await api.delete(`/api/admin/artworks/${artworkId}`);
-      return response.data;
+      return {
+        data: response.data  // FIX: Consistent response structure
+      };
     } catch (error) {
       console.error('deleteArtwork error:', error);
       return {
-        success: false,
-        message: error.response?.data?.message || 'Failed to delete artwork'
+        data: {
+          success: false,
+          message: error.response?.data?.message || 'Failed to delete artwork'
+        }
       };
     }
   },
