@@ -38,13 +38,6 @@ const AdminLayout = () => {
           >
             Manage Users
           </NavLink>
-          
-          <NavLink 
-            to="/admin/settings" 
-            className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}
-          >
-            Site Settings
-          </NavLink>
 
           <NavLink to="/admin/posts" className={({isActive}) => isActive ? 'admin-menu-item active' : 'admin-menu-item'}>
             Manage Posts
