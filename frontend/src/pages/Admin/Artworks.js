@@ -632,7 +632,7 @@ const AdminArtworks = () => {
         }
 
         .filters-section {
-          background: white;
+          background: #7c3aed;
           border-radius: 16px;
           padding: 1.5rem;
           margin-bottom: 2rem;
@@ -655,7 +655,7 @@ const AdminArtworks = () => {
 
         .filter-group label {
           font-weight: 600;
-          color: #4a5568;
+          color:rgb(255, 255, 255);
           font-size: 0.9rem;
         }
 
