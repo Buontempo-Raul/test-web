@@ -5,6 +5,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { artworkAPI } from '../../services/api';
 import './Shop.css';
 import { Link } from 'react-router-dom';
+import ArtistRequestForm from '../../components/ArtistRequestForm/ArtistRequestForm';
+
 
 const Shop = () => {
   const navigate = useNavigate();
@@ -49,6 +51,7 @@ const Shop = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [artworkToDelete, setArtworkToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showArtistRequestForm, setShowArtistRequestForm] = useState(false);
 
   // Add item form state
   const [newItem, setNewItem] = useState({
@@ -198,32 +201,22 @@ const Shop = () => {
     }
 
     if (!isArtist) {
-      alert('Only artists can add artworks. Please update your profile to become an artist.');
+      // Show artist request form instead of alert
+      setShowArtistRequestForm(true);
       return;
     }
 
     setShowAddItemModal(true);
+  };
+
+  const handleArtistRequestSuccess = (requestData) => {
+    setShowArtistRequestForm(false);
+    alert('Your artist application has been submitted successfully! We will review it and get back to you soon.');
     
-    // Reset form
-    setNewItem({
-      title: '',
-      description: '',
-      price: '',
-      category: '',
-      tags: '',
-      dimensions: {
-        width: '',
-        height: '',
-        depth: '',
-        unit: 'cm'
-      },
-      medium: '',
-      yearCreated: '',
-      linkedPostIds: []
-    });
-    setImages([]);
-    setImagePreviews([]);
-    setSubmitError('');
+    // Optionally refresh user data to check if they were immediately approved
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
   };
 
   // ORIGINAL IMAGE UPLOAD - RESTORED
@@ -407,7 +400,7 @@ const Shop = () => {
         {/* ONLY CHANGE: Show button for all authenticated users instead of just artists */}
         {isAuthenticated && (
           <button className="add-item-btn" onClick={handleAddItemClick}>
-            Add New Artwork
+            {isArtist ? 'ADD NEW ARTWORK' : 'BECOME AN ARTIST'}
           </button>
         )}
       </div>
@@ -821,6 +814,13 @@ const Shop = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {showArtistRequestForm && (
+        <ArtistRequestForm
+          onClose={() => setShowArtistRequestForm(false)}
+          onSuccess={handleArtistRequestSuccess}
+        />
       )}
     </div>
   );
