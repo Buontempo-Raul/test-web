@@ -1,5 +1,4 @@
-
-// frontend/src/pages/Admin/Auctions.js - Fixed Version with Working Sort Buttons
+// frontend/src/pages/Admin/Auctions.js - Complete Version with View Details Button
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../services/adminAPI';
 
@@ -67,30 +66,36 @@ const AdminAuctions = () => {
 
   // Utility functions
   const formatCurrency = (amount) => {
+    if (amount == null || isNaN(amount)) return '$0.00';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
-    }).format(amount || 0);
+    }).format(amount);
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString) return 'No date';
+    try {
+      return new Date(dateString).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Invalid date';
+    }
   };
 
   const getTimeRemaining = (endTime) => {
+    if (!endTime) return 'No end time';
+    
     const now = new Date().getTime();
     const end = new Date(endTime).getTime();
     const timeLeft = end - now;
 
-    if (timeLeft <= 0) {
-      return 'Ended';
-    }
+    if (timeLeft <= 0) return 'Ended';
 
     const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
     const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -106,38 +111,44 @@ const AdminAuctions = () => {
       return { text: 'No Auction', class: 'status-inactive' };
     }
 
-    const now = new Date();
+    const isActive = auction.auction.isActive;
     const endTime = new Date(auction.auction.endTime);
-    
-    if (auction.auction.isActive && now < endTime) {
+    const now = new Date();
+    const hasEnded = endTime <= now;
+
+    if (isActive && !hasEnded) {
       return { text: 'Active', class: 'status-active' };
-    } else if (now >= endTime || !auction.auction.isActive) {
+    } else if (hasEnded) {
       return { text: 'Ended', class: 'status-ended' };
     } else {
-      return { text: 'Paused', class: 'status-paused' };
+      return { text: 'Inactive', class: 'status-inactive' };
     }
   };
 
-  // FIXED: Add proper sorting logic to filteredAuctions
+  // Filter and sort auctions
   const filteredAuctions = (() => {
-    // First, apply filters
     let filtered = auctions.filter(auction => {
       // Status filter
-      if (filterStatus === 'active' && !auction.auction?.isActive) return false;
-      if (filterStatus === 'ended' && auction.auction?.isActive) return false;
-      
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'active' && !auction.auction?.isActive) return false;
+        if (filterStatus === 'ended' && auction.auction?.isActive) return false;
+      }
+
       // Search filter
-      if (!searchTerm) return true;
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        auction.title?.toLowerCase().includes(searchLower) ||
-        auction.creator?.username?.toLowerCase().includes(searchLower) ||
-        auction.category?.toLowerCase().includes(searchLower)
-      );
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          auction.title?.toLowerCase().includes(searchLower) ||
+          auction.creator?.username?.toLowerCase().includes(searchLower) ||
+          auction.category?.toLowerCase().includes(searchLower)
+        );
+      }
+
+      return true;
     });
 
-    // Then, apply sorting
-    if (sortBy && filtered.length > 0) {
+    // Apply sorting
+    if (sortBy) {
       filtered.sort((a, b) => {
         let aVal, bVal;
 
@@ -151,7 +162,7 @@ const AdminAuctions = () => {
             aVal = a.auction?.bids?.length || 0;
             bVal = b.auction?.bids?.length || 0;
             break;
-          
+    
           case 'endTime':
             aVal = new Date(a.auction?.endTime || 0).getTime();
             bVal = new Date(b.auction?.endTime || 0).getTime();
@@ -198,7 +209,6 @@ const AdminAuctions = () => {
     setPagination(prev => ({ ...prev, current: newPage }));
   };
 
-  // FIXED: Improved handleSort function with better logic
   const handleSort = (field) => {
     if (sortBy === field) {
       // If clicking the same field, toggle sort order
@@ -315,12 +325,12 @@ const AdminAuctions = () => {
           <div className="search-container">
             <input
               type="text"
-              placeholder="Search auctions, artists, or categories..."
+              placeholder="Search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="search-input"
             />
-            <span className="search-icon">🔍</span>
+            <span className="search-icon"></span>
           </div>
           
           <select
@@ -379,6 +389,7 @@ const AdminAuctions = () => {
                 >
                   End Time {sortBy === 'endTime' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -389,65 +400,49 @@ const AdminAuctions = () => {
                     <td>
                       <div className="artwork-info">
                         <img
-                          src={auction.images?.[0] || '/api/placeholder/80/60'}
+                          src={auction.images?.[0] || 'https://via.placeholder.com/80x60/e5e7eb/6b7280?text=No+Image'}
                           alt={auction.title}
                           className="artwork-thumbnail"
                           onError={(e) => {
-                            e.target.src = '/api/placeholder/80/60';
+                            e.target.src = 'https://via.placeholder.com/80x60/e5e7eb/6b7280?text=No+Image';
                           }}
                         />
                         <div className="artwork-details">
-                          <h4>{auction.title}</h4>
-                          <div className="starting-bid">
-                            Starting: {formatCurrency(auction.auction?.startingBid || 0)}
-                          </div>
+                          <div className="artwork-title">{auction.title}</div>
+                          <div className="artwork-id">ID: {auction._id?.slice(-8)}</div>
                         </div>
                       </div>
                     </td>
-                    
                     <td>
                       <div className="creator-info">
                         <div className="creator-avatar">
                           {auction.creator?.username?.charAt(0)?.toUpperCase() || 'U'}
                         </div>
-                        <div>
-                          <div className="creator-name">{auction.creator?.username || 'Unknown'}</div>
-                          <div className="creator-email">{auction.creator?.email || 'No email'}</div>
-                        </div>
+                        <div className="creator-name">{auction.creator?.username || 'Unknown'}</div>
                       </div>
                     </td>
-                    
                     <td>
-                      <div className="category-info">
-                        <span className="category-icon">🎨</span>
-                        <span className="category-name">{auction.category || 'Uncategorized'}</span>
-                      </div>
+                      <span className="category-tag">
+                        {auction.category || 'Uncategorized'}
+                      </span>
                     </td>
-                    
                     <td>
                       <div className="bid-info">
-                        <div className="current-bid">
-                          {formatCurrency(auction.auction?.currentBid || 0)}
-                        </div>
-                        <div className="bid-increase">
-                          +{formatCurrency((auction.auction?.currentBid || 0) - (auction.auction?.startingBid || 0))} from start
-                        </div>
+                        <div className="bid-amount">{formatCurrency(auction.auction?.currentBid || 0)}</div>
+                        <div className="bid-starting">Starting: {formatCurrency(auction.auction?.startingBid || 0)}</div>
                       </div>
                     </td>
-                    
                     <td>
                       <div className="bids-count">
-                        <span className="count-number">{auction.auction?.bids?.length || 0}</span>
-                        <span> bids</span>
+                        <span className="bids-number">{auction.auction?.bids?.length || 0}</span>
+                        <span className="bids-label">bids</span>
                       </div>
                     </td>
-                    
                     <td>
                       <span className={`status-badge ${status.class}`}>
                         {status.text}
                       </span>
                     </td>
-                    
                     <td>
                       <div className="time-info">
                         {auction.auction?.isActive ? (
@@ -456,6 +451,15 @@ const AdminAuctions = () => {
                           <span className="ended-time">Ended: {formatDate(auction.auction?.endTime)}</span>
                         )}
                       </div>
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => handleViewAuction(auction)}
+                        className="btn-view-details"
+                        title="View image and bid history"
+                      >
+                        👁️ View Details
+                      </button>
                     </td>
                   </tr>
                 );
@@ -479,10 +483,10 @@ const AdminAuctions = () => {
               <div key={auction._id} className="auction-card">
                 <div className="card-image">
                   <img
-                    src={auction.images?.[0] || '/api/placeholder/350/200'}
+                    src={auction.images?.[0] || 'https://via.placeholder.com/350x200/e5e7eb/6b7280?text=No+Image'}
                     alt={auction.title}
                     onError={(e) => {
-                      e.target.src = '/api/placeholder/350/200';
+                      e.target.src = 'https://via.placeholder.com/350x200/e5e7eb/6b7280?text=No+Image';
                     }}
                   />
                   <div className={`card-status ${status.class}`}>
@@ -516,6 +520,16 @@ const AdminAuctions = () => {
                     ) : (
                       <span className="ended-time">Ended: {formatDate(auction.auction?.endTime)}</span>
                     )}
+                  </div>
+                  
+                  <div className="card-actions">
+                    <button
+                      onClick={() => handleViewAuction(auction)}
+                      className="btn-view-details-card"
+                      title="View image and bid history"
+                    >
+                      👁️ View Details
+                    </button>
                   </div>
                 </div>
               </div>
@@ -556,7 +570,7 @@ const AdminAuctions = () => {
         </div>
       )}
 
-      {/* Auction Detail Modal */}
+      {/* Auction Detail Modal - Shows Image and Bid History */}
       {showAuctionModal && selectedAuction && (
         <div className="modal-overlay" onClick={handleCloseModal}>
           <div className="auction-modal" onClick={(e) => e.stopPropagation()}>
@@ -566,17 +580,19 @@ const AdminAuctions = () => {
             </div>
             
             <div className="modal-content">
+              {/* Full-width auction image */}
+              <div className="auction-image-full">
+                <img
+                  src={selectedAuction.images?.[0] || 'https://via.placeholder.com/800x400/e5e7eb/6b7280?text=No+Image'}
+                  alt={selectedAuction.title}
+                  onError={(e) => {
+                    e.target.src = 'https://via.placeholder.com/800x400/e5e7eb/6b7280?text=No+Image';
+                  }}
+                />
+              </div>
+
+              {/* Auction details and bid history below */}
               <div className="auction-details-grid">
-                <div className="auction-image">
-                  <img
-                    src={selectedAuction.images?.[0] || '/api/placeholder/400/300'}
-                    alt={selectedAuction.title}
-                    onError={(e) => {
-                      e.target.src = '/api/placeholder/400/300';
-                    }}
-                  />
-                </div>
-                
                 <div className="auction-info">
                   <div className="info-section">
                     <h3>Auction Details</h3>
@@ -605,37 +621,36 @@ const AdminAuctions = () => {
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="bid-history">
-                    <h3>Recent Bids</h3>
-                    {selectedAuction.auction?.bids?.length > 0 ? (
-                      selectedAuction.auction.bids
-                        .sort((a, b) => new Date(b.bidTime) - new Date(a.bidTime))
-                        .slice(0, 5)
-                        .map((bid, index) => (
-                          <div key={bid._id || index} className="bid-item">
-                            <div className="bid-rank">#{index + 1}</div>
-                            <div className="bid-info">
-                              <div className="bid-user">{bid.bidder?.username || 'Anonymous'}</div>
-                              <div className="bid-email">{bid.bidder?.email || 'No email'}</div>
-                            </div>
-                            <div className="bid-amount">{formatCurrency(bid.amount)}</div>
-                            <div className="bid-time">{formatDate(bid.bidTime)}</div>
-                          </div>
-                        ))
-                    ) : (
-                      <p className="no-bids">No bids placed yet</p>
-                    )}
-                  </div>
                 </div>
                 
-                <div className="modal-actions">
-                  <button className="btn-primary">View Full Analytics</button>
-                  <button className="btn-secondary">Export Auction Data</button>
-                  {selectedAuction.auction?.isActive && (
-                    <button className="btn-warning">Pause Auction</button>
+                <div className="bid-history-section">
+                  <h3>Bid History</h3>
+                  {selectedAuction.auction?.bids?.length > 0 ? (
+                    selectedAuction.auction.bids
+                      .sort((a, b) => new Date(b.bidTime) - new Date(a.bidTime))
+                      .slice(0, 5)
+                      .map((bid, index) => (
+                        <div key={bid._id || index} className="bid-item">
+                          <div className="bid-rank">#{index + 1}</div>
+                          <div className="bid-info">
+                            <div className="bid-user">{bid.bidder?.username || 'Anonymous'}</div>
+                            <div className="bid-email">{bid.bidder?.email || 'No email'}</div>
+                          </div>
+                          <div className="bid-amount">{formatCurrency(bid.amount)}</div>
+                          {/* <div className="bid-time">{formatDate(bid.bidTime)}</div> */}
+                        </div>
+                      ))
+                  ) : (
+                    <p className="no-bids">No bids placed yet</p>
                   )}
                 </div>
+              </div>
+              
+              <div className="modal-actions">
+                <button className="btn-secondary">Export Auction Data</button>
+                {selectedAuction.auction?.isActive && (
+                  <button className="btn-warning">Pause Auction</button>
+                )}
               </div>
             </div>
           </div>
@@ -644,7 +659,6 @@ const AdminAuctions = () => {
 
       {/* Enhanced CSS Styles */}
       <style jsx>{`
-        /* Import the enhanced CSS from the previous artifact */
         .admin-page {
           padding: 0;
           background: #f8fafc;
@@ -684,13 +698,12 @@ const AdminAuctions = () => {
           display: flex;
           gap: 1rem;
           align-items: center;
-          flex-wrap: wrap;
         }
 
         .btn-primary, .btn-secondary, .btn-warning {
-          padding: 0.75rem 1.5rem;
-          border-radius: 10px;
+          padding: 0.875rem 1.5rem;
           border: none;
+          border-radius: 12px;
           font-weight: 600;
           font-size: 0.95rem;
           cursor: pointer;
@@ -701,19 +714,19 @@ const AdminAuctions = () => {
         }
 
         .btn-primary {
-          background: #4ade80;
+          background: #667eea;
           color: white;
         }
 
         .btn-primary:hover {
-          background: #22c55e;
+          background: #5a67d8;
           transform: translateY(-2px);
         }
 
         .btn-secondary {
           background: rgba(255, 255, 255, 0.2);
           color: white;
-          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         .btn-secondary:hover {
@@ -743,11 +756,13 @@ const AdminAuctions = () => {
           padding: 2rem;
           border-radius: 16px;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          transition: all 0.3s ease;
+          position: relative;
+          overflow: hidden;
           display: flex;
           align-items: center;
-          gap: 1.5rem;
-          border-left: 4px solid transparent;
-          transition: all 0.3s ease;
+          gap: 1rem;
         }
 
         .stat-item:hover {
@@ -755,17 +770,19 @@ const AdminAuctions = () => {
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
         }
 
-        .stat-item:nth-child(1) { border-left-color: #3b82f6; }
-        .stat-item:nth-child(2) { border-left-color: #10b981; }
-        .stat-item:nth-child(3) { border-left-color: #8b5cf6; }
-        .stat-item:nth-child(4) { border-left-color: #f59e0b; }
+        .stat-item::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 4px;
+          background: linear-gradient(90deg, #667eea, #764ba2);
+        }
 
         .stat-icon {
-          font-size: 2.5rem;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          font-size: 2rem;
+          opacity: 0.8;
         }
 
         .stat-content {
@@ -774,14 +791,16 @@ const AdminAuctions = () => {
 
         .stat-label {
           font-size: 0.9rem;
+          font-weight: 600;
           color: #6b7280;
-          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
           margin-bottom: 0.5rem;
         }
 
         .stat-value {
-          font-size: 2rem;
-          font-weight: 700;
+          font-size: 2.5rem;
+          font-weight: 800;
           color: #1f2937;
           margin: 0;
         }
@@ -789,7 +808,7 @@ const AdminAuctions = () => {
         .stat-change {
           font-size: 0.85rem;
           color: #10b981;
-          margin-top: 0.25rem;
+          margin-top: 0.5rem;
         }
 
         .admin-filters {
@@ -807,15 +826,13 @@ const AdminAuctions = () => {
 
         .filter-group {
           display: flex;
-          align-items: left;
+          align-items: center;
           gap: 1rem;
           flex-wrap: wrap;
-          flex: 1;
         }
 
         .search-container {
           position: relative;
-          flex: 1;
           max-width: 400px;
         }
 
@@ -826,6 +843,7 @@ const AdminAuctions = () => {
           border-radius: 12px;
           font-size: 1rem;
           transition: all 0.3s ease;
+          background: white;
         }
 
         .search-input:focus {
@@ -839,8 +857,7 @@ const AdminAuctions = () => {
           left: 1rem;
           top: 50%;
           transform: translateY(-50%);
-          color: #9ca3af;
-          font-size: 1.2rem;
+          color: #6b7280;
         }
 
         .filter-select {
@@ -852,7 +869,6 @@ const AdminAuctions = () => {
           background: white;
           color: #374151;
           font-weight: 500;
-          min-width: 160px;
         }
 
         .filter-select:focus {
@@ -862,11 +878,8 @@ const AdminAuctions = () => {
         }
 
         .results-info {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          color: rgb(255, 255, 255);
-          font-weight: 500;
+          color:rgb(255, 255, 255);
+          font-size: 1rem;
         }
 
         .error-message {
@@ -877,8 +890,8 @@ const AdminAuctions = () => {
         .admin-table-container {
           background: white;
           border-radius: 16px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
           overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
           margin-bottom: 2rem;
         }
 
@@ -888,37 +901,30 @@ const AdminAuctions = () => {
         }
 
         .admin-table th {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 1.25rem 1rem;
+          background: #f8fafc;
+          padding: 1.5rem 1rem;
           text-align: left;
-          font-weight: 600;
-          font-size: 0.95rem;
+          font-weight: 700;
+          color: #374151;
+          border-bottom: 2px solid #e5e7eb;
+          font-size: 0.9rem;
+          text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
-        .sortable-header {
-          cursor: pointer;
-          user-select: none;
-          transition: all 0.2s ease;
-        }
-
         .sortable-header:hover {
-          background: rgba(255, 255, 255, 0.1);
+          background: #e5e7eb;
+          color: #667eea;
         }
 
         .admin-table td {
-          padding: 1.5rem 1rem;
-          border-bottom: 1px solid #f1f5f9;
+          padding: 1.25rem 1rem;
+          border-bottom: 1px solid #f3f4f6;
           vertical-align: middle;
         }
 
         .auction-row:hover {
           background: #f8fafc;
-        }
-
-        .auction-row:last-child td {
-          border-bottom: none;
         }
 
         .artwork-info {
@@ -928,23 +934,27 @@ const AdminAuctions = () => {
         }
 
         .artwork-thumbnail {
-          width: 80px;
-          height: 60px;
+          width: 60px;
+          height: 45px;
           object-fit: cover;
           border-radius: 8px;
           border: 2px solid #e5e7eb;
         }
 
-        .artwork-details h4 {
-          margin: 0 0 0.5rem 0;
-          font-size: 1.1rem;
-          font-weight: 600;
-          color: #1f2937;
+        .artwork-details {
+          flex: 1;
         }
 
-        .starting-bid {
-          font-size: 0.85rem;
+        .artwork-title {
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 0.25rem;
+        }
+
+        .artwork-id {
+          font-size: 0.8rem;
           color: #6b7280;
+          font-family: monospace;
         }
 
         .creator-info {
@@ -954,57 +964,45 @@ const AdminAuctions = () => {
         }
 
         .creator-avatar {
-          width: 40px;
-          height: 40px;
+          width: 35px;
+          height: 35px;
           border-radius: 50%;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: #667eea;
           color: white;
           display: flex;
           align-items: center;
           justify-content: center;
           font-weight: 600;
-          font-size: 1.1rem;
+          font-size: 0.9rem;
         }
 
         .creator-name {
-          font-weight: 600;
-          color: #1f2937;
-          margin-bottom: 0.25rem;
-        }
-
-        .creator-email {
-          font-size: 0.85rem;
-          color: #6b7280;
-        }
-
-        .category-info {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .category-icon {
-          font-size: 1.5rem;
-        }
-
-        .category-name {
           font-weight: 500;
           color: #374151;
         }
 
-        .bid-info {
-          text-align: center;
+        .category-tag {
+          background: #e0e7ff;
+          color: #3730a3;
+          padding: 0.5rem 0.75rem;
+          border-radius: 8px;
+          font-size: 0.85rem;
+          font-weight: 500;
         }
 
-        .current-bid {
-          font-size: 1.25rem;
+        .bid-info {
+          text-align: right;
+        }
+
+        .bid-amount {
           font-weight: 700;
           color: #059669;
+          font-size: 1.1rem;
           margin-bottom: 0.25rem;
         }
 
-        .bid-increase {
-          font-size: 0.85rem;
+        .bid-starting {
+          font-size: 0.8rem;
           color: #6b7280;
         }
 
@@ -1012,42 +1010,42 @@ const AdminAuctions = () => {
           text-align: center;
         }
 
-        .count {
-          font-size: 1.5rem;
+        .bids-number {
           font-weight: 700;
-          color: #3b82f6;
+          color: #1f2937;
+          font-size: 1.25rem;
           display: block;
         }
 
-        .count-label {
-          font-size: 0.85rem;
+        .bids-label {
+          font-size: 0.8rem;
           color: #6b7280;
-        }
-
-        .status-container {
-          text-align: center;
-        }
-
-        .status-badge {
-          padding: 0.5rem 1rem;
-          border-radius: 25px;
-          color: white;
-          font-weight: 600;
-          font-size: 0.85rem;
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
-        .status-badge.status-active{
-          color: green
-        }
-        
-        .status-badge.status-ended{
-          color: red
+        .status-badge {
+          padding: 0.5rem 0.75rem;
+          border-radius: 8px;
+          font-size: 0.85rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
-        .status-badge.status-paused{
-          color: yellow
+        .status-active {
+          background: #d1fae5;
+          color: #065f46;
+        }
+
+        .status-ended {
+          background: #f3f4f6;
+          color: #374151;
+        }
+
+        .status-inactive {
+          background: #fef3c7;
+          color: #92400e;
         }
 
         .time-info {
@@ -1055,14 +1053,159 @@ const AdminAuctions = () => {
         }
 
         .time-remaining {
+          color: #059669;
           font-weight: 600;
-          color: #dc2626;
-          font-size: 1rem;
+          font-size: 0.9rem;
         }
 
         .ended-time {
           color: #6b7280;
+          font-size: 0.85rem;
+        }
+
+        .btn-view-details {
+          background: #667eea;
+          color: white;
+          border: none;
+          padding: 0.625rem 1rem;
+          border-radius: 8px;
+          font-size: 0.85rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .btn-view-details:hover {
+          background: #5a67d8;
+          transform: translateY(-2px);
+        }
+
+        .auction-cards-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+          gap: 2rem;
+          margin-bottom: 2rem;
+        }
+
+        .auction-card {
+          background: white;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+          transition: all 0.3s ease;
+        }
+
+        .auction-card:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-image {
+          position: relative;
+          height: 200px;
+          overflow: hidden;
+        }
+
+        .card-image img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .card-status {
+          position: absolute;
+          top: 1rem;
+          right: 1rem;
+          padding: 0.5rem 0.75rem;
+          border-radius: 8px;
+          font-size: 0.8rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .card-content {
+          padding: 1.5rem;
+        }
+
+        .card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 1rem 0;
+        }
+
+        .card-creator {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 1rem;
+        }
+
+        .card-category {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: #6b7280;
           font-size: 0.9rem;
+          margin-bottom: 1rem;
+        }
+
+        .category-icon {
+          opacity: 0.7;
+        }
+
+        .card-bid-info {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1rem;
+          padding: 1rem;
+          background: #f8fafc;
+          border-radius: 8px;
+        }
+
+        .current-bid {
+          font-weight: 700;
+          color: #059669;
+          font-size: 1.25rem;
+        }
+
+        .card-time {
+          text-align: center;
+          margin-bottom: 1rem;
+          padding: 0.75rem;
+          background: #f1f5f9;
+          border-radius: 8px;
+        }
+
+        .card-actions {
+          margin-top: 1rem;
+        }
+
+        .btn-view-details-card {
+          width: 100%;
+          background: #667eea;
+          color: white;
+          border: none;
+          padding: 0.875rem 1rem;
+          border-radius: 8px;
+          font-size: 0.95rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+        }
+
+        .btn-view-details-card:hover {
+          background: #5a67d8;
+          transform: translateY(-2px);
         }
 
         .no-results {
@@ -1081,23 +1224,23 @@ const AdminAuctions = () => {
           justify-content: center;
           align-items: center;
           gap: 1rem;
-          margin-top: 2rem;
+          padding: 2rem;
         }
 
         .pagination-btn {
           padding: 0.75rem 1.5rem;
-          background: white;
           border: 2px solid #e5e7eb;
-          border-radius: 10px;
-          cursor: pointer;
+          background: white;
+          color: #374151;
+          border-radius: 8px;
           font-weight: 600;
+          cursor: pointer;
           transition: all 0.3s ease;
         }
 
         .pagination-btn:hover:not(:disabled) {
-          background: #667eea;
-          color: white;
           border-color: #667eea;
+          color: #667eea;
         }
 
         .pagination-btn:disabled {
@@ -1106,127 +1249,17 @@ const AdminAuctions = () => {
         }
 
         .pagination-info {
-          font-weight: 600;
-          color: #374151;
-        }
-
-        /* Card View Styles */
-        .auction-cards-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-          gap: 2rem;
-          margin-bottom: 2rem;
-        }
-
-        .auction-card {
-          background: white;
-          border-radius: 16px;
-          overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-          transition: all 0.3s ease;
-        }
-
-        .auction-card:hover {
-          transform: translateY(-8px);
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-        }
-
-        .card-image {
-          position: relative;
-          width: 100%;
-          height: 200px;
-          overflow: hidden;
-        }
-
-        .card-image img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .card-status {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          padding: 0.5rem 1rem;
-          border-radius: 25px;
-          color: white;
-          font-weight: 600;
-          font-size: 0.85rem;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .card-content {
-          padding: 1.5rem;
-        }
-
-        .card-content h3 {
-          margin: 0 0 0.5rem 0;
-          font-size: 1.25rem;
-          font-weight: 700;
-          color: #1f2937;
-        }
-
-        .card-artist {
           color: #6b7280;
-          margin-bottom: 0.75rem;
-          font-style: italic;
-        }
-
-        .card-category {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 1rem;
           font-weight: 500;
-          color: #374151;
         }
 
-        .card-stats {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
-          margin-bottom: 1rem;
-          padding: 1rem;
-          background: #f8fafc;
-          border-radius: 8px;
-        }
-
-        .stat {
-          text-align: center;
-        }
-
-        .stat-label {
-          display: block;
-          font-size: 0.85rem;
-          color: #6b7280;
-          margin-bottom: 0.25rem;
-        }
-
-        .stat-value {
-          font-size: 1.1rem;
-          font-weight: 700;
-          color: #1f2937;
-        }
-
-        .card-time {
-          text-align: center;
-          padding: 0.75rem;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border-radius: 8px;
-          font-weight: 600;
-        }
-
-        /* Modal Styles */
         .modal-overlay {
           position: fixed;
           top: 0;
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.7);
+          background: rgba(0, 0, 0, 0.8);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1237,11 +1270,11 @@ const AdminAuctions = () => {
         .auction-modal {
           background: white;
           border-radius: 20px;
-          max-width: 900px;
-          width: 100%;
-          max-height: 80vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+          max-width: 1400px;
+          width: 95%;
+          max-height: 90vh;
+          overflow: auto;
+          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
         }
 
         .modal-header {
@@ -1283,6 +1316,19 @@ const AdminAuctions = () => {
 
         .modal-content {
           padding: 2rem;
+          width: 100%;
+          max-width: none;
+        }
+
+        .auction-image-full {
+          margin-bottom: 2rem;
+        }
+
+        .auction-image-full img {
+          width: 100%;
+          height: 400px;
+          object-fit: cover;
+          border-radius: 12px;
         }
 
         .auction-details-grid {
@@ -1292,11 +1338,11 @@ const AdminAuctions = () => {
           margin-bottom: 2rem;
         }
 
-        .auction-image img {
-          width: 100%;
-          height: 300px;
-          object-fit: cover;
-          border-radius: 12px;
+        .bid-history-section h3 {
+          margin: 0 0 1.5rem 0;
+          color: #1f2937;
+          font-size: 1.25rem;
+          font-weight: 700;
         }
 
         .info-section h3 {
@@ -1330,8 +1376,8 @@ const AdminAuctions = () => {
           color: #1f2937;
         }
 
-        .bid-history {
-          margin-top: 2rem;
+        .bid-history-section {
+          margin-top: 0;
         }
 
         .bid-item {
@@ -1470,6 +1516,11 @@ const AdminAuctions = () => {
 
           .auction-details-grid {
             grid-template-columns: 1fr;
+            gap: 1.5rem;
+          }
+
+          .auction-image-full img {
+            height: 250px;
           }
 
           .modal-actions {
