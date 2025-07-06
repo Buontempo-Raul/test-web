@@ -335,7 +335,7 @@ const AdminArtworks = () => {
                       </div>
                       <div className="artist-info">
                         <div className="artist-name">{artwork.creator?.username || 'Unknown'}</div>
-                        <div className="artist-email">{artwork.creator?.email || 'No email'}</div>
+                        {/* <div className="artist-email">{artwork.creator?.email || 'No email'}</div> */}
                       </div>
                     </div>
                     
@@ -414,7 +414,7 @@ const AdminArtworks = () => {
                   <div className="detail-group">
                     <h4>👤 Artist Information</h4>
                     <p><strong>Name:</strong> {selectedArtwork.creator?.username || 'Unknown'}</p>
-                    <p><strong>Email:</strong> {selectedArtwork.creator?.email || 'No email'}</p>
+                    {/* <p><strong>Email:</strong> {selectedArtwork.creator?.email || 'No email'}</p> */}
                   </div>
                   
                   <div className="detail-group">
@@ -999,7 +999,7 @@ const AdminArtworks = () => {
         }
 
         .artwork-modal {
-          max-width: 900px;
+          // max-width: 900px;
         }
 
         .delete-modal {
