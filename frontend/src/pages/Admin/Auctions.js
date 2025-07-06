@@ -1,4 +1,5 @@
-// frontend/src/pages/Admin/Auctions.js - Enhanced Version (Quick Actions Removed)
+
+// frontend/src/pages/Admin/Auctions.js - Fixed Version with Working Sort Buttons
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../services/adminAPI';
 
@@ -25,7 +26,7 @@ const AdminAuctions = () => {
   // Fetch auctions when filters change
   useEffect(() => {
     fetchAuctions();
-  }, [filterStatus, pagination.current, sortBy, sortOrder]);
+  }, [filterStatus, pagination.current]);
 
   // Auto-refresh every 30 seconds for live updates
   useEffect(() => {
@@ -36,7 +37,7 @@ const AdminAuctions = () => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [filterStatus, pagination.current, sortBy, sortOrder, isLoading]);
+  }, [filterStatus, pagination.current, isLoading]);
 
   const fetchAuctions = async () => {
     try {
@@ -46,9 +47,7 @@ const AdminAuctions = () => {
       const response = await adminAPI.getAllAuctions({
         page: pagination.current,
         limit: 10,
-        status: filterStatus,
-        sortBy,
-        sortOrder
+        status: filterStatus
       });
 
       if (response.success) {
@@ -61,90 +60,118 @@ const AdminAuctions = () => {
     } catch (error) {
       console.error('Error fetching auctions:', error);
       setError('Failed to load auctions. Please try again.');
-      setAuctions([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   // Utility functions
-  const formatDate = (dateString) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return 'Invalid Date';
-    }
-  };
-
   const formatCurrency = (amount) => {
-    if (typeof amount !== 'number') return '$0.00';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
-    }).format(amount);
+    }).format(amount || 0);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const getTimeRemaining = (endTime) => {
-    try {
-      const now = new Date();
-      const end = new Date(endTime);
-      const diff = end - now;
+    const now = new Date().getTime();
+    const end = new Date(endTime).getTime();
+    const timeLeft = end - now;
 
-      if (diff <= 0) return 'Auction ended';
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-      if (days > 0) return `${days}d ${hours}h`;
-      if (hours > 0) return `${hours}h ${minutes}m`;
-      return `${minutes}m`;
-    } catch {
-      return 'Invalid time';
+    if (timeLeft <= 0) {
+      return 'Ended';
     }
+
+    const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
   };
 
   const getAuctionStatus = (auction) => {
-    if (!auction?.auction) return { status: 'unknown', color: '#95a5a6', text: 'Unknown' };
-    
-    if (auction.auction.isActive) {
-      const timeRemaining = getTimeRemaining(auction.auction.endTime);
-      if (timeRemaining === 'Auction ended') {
-        return { status: 'ended', color: '#95a5a6', text: 'Ended' };
-      }
-      return { status: 'active', color: '#27ae60', text: 'Live' };
+    if (!auction.auction) {
+      return { text: 'No Auction', class: 'status-inactive' };
     }
-    return { status: 'ended', color: '#95a5a6', text: 'Ended' };
+
+    const now = new Date();
+    const endTime = new Date(auction.auction.endTime);
+    
+    if (auction.auction.isActive && now < endTime) {
+      return { text: 'Active', class: 'status-active' };
+    } else if (now >= endTime || !auction.auction.isActive) {
+      return { text: 'Ended', class: 'status-ended' };
+    } else {
+      return { text: 'Paused', class: 'status-paused' };
+    }
   };
 
-  const getCategoryIcon = (category) => {
-    const icons = {
-      painting: '🎨',
-      digital: '💻',
-      photography: '📸',
-      sculpture: '🗿',
-      drawing: '✏️',
-      mixed: '🎭'
-    };
-    return icons[category?.toLowerCase()] || '🎨';
-  };
+  // FIXED: Add proper sorting logic to filteredAuctions
+  const filteredAuctions = (() => {
+    // First, apply filters
+    let filtered = auctions.filter(auction => {
+      // Status filter
+      if (filterStatus === 'active' && !auction.auction?.isActive) return false;
+      if (filterStatus === 'ended' && auction.auction?.isActive) return false;
+      
+      // Search filter
+      if (!searchTerm) return true;
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        auction.title?.toLowerCase().includes(searchLower) ||
+        auction.creator?.username?.toLowerCase().includes(searchLower) ||
+        auction.category?.toLowerCase().includes(searchLower)
+      );
+    });
 
-  // Filter auctions based on search term
-  const filteredAuctions = auctions.filter(auction => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      auction.title?.toLowerCase().includes(searchLower) ||
-      auction.creator?.username?.toLowerCase().includes(searchLower) ||
-      auction.category?.toLowerCase().includes(searchLower)
-    );
-  });
+    // Then, apply sorting
+    if (sortBy && filtered.length > 0) {
+      filtered.sort((a, b) => {
+        let aVal, bVal;
+
+        switch (sortBy) {
+          case 'currentBid':
+            aVal = a.auction?.currentBid || 0;
+            bVal = b.auction?.currentBid || 0;
+            break;
+          
+          case 'bidsCount':
+            aVal = a.auction?.bids?.length || 0;
+            bVal = b.auction?.bids?.length || 0;
+            break;
+          
+          case 'endTime':
+            aVal = new Date(a.auction?.endTime || 0).getTime();
+            bVal = new Date(b.auction?.endTime || 0).getTime();
+            break;
+          
+          default:
+            return 0;
+        }
+
+        // Apply sort order
+        if (sortOrder === 'desc') {
+          return bVal - aVal;
+        } else {
+          return aVal - bVal;
+        }
+      });
+    }
+
+    return filtered;
+  })();
 
   // Calculate statistics
   const stats = {
@@ -171,10 +198,13 @@ const AdminAuctions = () => {
     setPagination(prev => ({ ...prev, current: newPage }));
   };
 
+  // FIXED: Improved handleSort function with better logic
   const handleSort = (field) => {
     if (sortBy === field) {
+      // If clicking the same field, toggle sort order
       setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
     } else {
+      // If clicking a different field, set it as sortBy and default to desc
       setSortBy(field);
       setSortOrder('desc');
     }
@@ -311,6 +341,7 @@ const AdminAuctions = () => {
             <span>
               Showing {filteredAuctions.length} of {auctions.length} auctions
               {searchTerm && ` matching "${searchTerm}"`}
+              {sortBy && ` (sorted by ${sortBy} ${sortOrder})`}
             </span>
           )}
         </div>
@@ -318,7 +349,7 @@ const AdminAuctions = () => {
 
       {/* Table/Card View */}
       {viewMode === 'table' ? (
-        /* Table View - Quick Actions Removed */
+        /* Table View - With Working Sort Buttons */
         <div className="admin-table-container">
           <table className="admin-table">
             <thead>
@@ -329,12 +360,14 @@ const AdminAuctions = () => {
                 <th 
                   onClick={() => handleSort('currentBid')}
                   className="sortable-header"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
                 >
                   Current Bid {sortBy === 'currentBid' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
                 <th 
                   onClick={() => handleSort('bidsCount')}
                   className="sortable-header"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
                 >
                   Bids {sortBy === 'bidsCount' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
@@ -342,6 +375,7 @@ const AdminAuctions = () => {
                 <th 
                   onClick={() => handleSort('endTime')}
                   className="sortable-header"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
                 >
                   End Time {sortBy === 'endTime' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
@@ -385,7 +419,7 @@ const AdminAuctions = () => {
                     
                     <td>
                       <div className="category-info">
-                        <span className="category-icon">{getCategoryIcon(auction.category)}</span>
+                        <span className="category-icon">🎨</span>
                         <span className="category-name">{auction.category || 'Uncategorized'}</span>
                       </div>
                     </td>
@@ -393,42 +427,33 @@ const AdminAuctions = () => {
                     <td>
                       <div className="bid-info">
                         <div className="current-bid">
-                          {formatCurrency(auction.auction?.currentBid || auction.auction?.startingBid || 0)}
+                          {formatCurrency(auction.auction?.currentBid || 0)}
                         </div>
                         <div className="bid-increase">
-                          +{formatCurrency((auction.auction?.currentBid || 0) - (auction.auction?.startingBid || 0))}
+                          +{formatCurrency((auction.auction?.currentBid || 0) - (auction.auction?.startingBid || 0))} from start
                         </div>
                       </div>
                     </td>
                     
                     <td>
                       <div className="bids-count">
-                        <span className="count">{auction.auction?.bids?.length || 0}</span>
-                        <span className="count-label">bids</span>
+                        <span className="count-number">{auction.auction?.bids?.length || 0}</span>
+                        <span> bids</span>
                       </div>
                     </td>
                     
                     <td>
-                      <div className="status-container">
-                        <span 
-                          className="status-badge" 
-                          style={{ backgroundColor: status.color }}
-                        >
-                          {status.text}
-                        </span>
-                      </div>
+                      <span className={`status-badge ${status.class}`}>
+                        {status.text}
+                      </span>
                     </td>
                     
                     <td>
                       <div className="time-info">
                         {auction.auction?.isActive ? (
-                          <div className="time-remaining">
-                            {getTimeRemaining(auction.auction.endTime)}
-                          </div>
+                          <span className="time-remaining">⏰ {getTimeRemaining(auction.auction.endTime)}</span>
                         ) : (
-                          <div className="ended-time">
-                            Ended: {formatDate(auction.auction?.endTime)}
-                          </div>
+                          <span className="ended-time">Ended: {formatDate(auction.auction?.endTime)}</span>
                         )}
                       </div>
                     </td>
@@ -454,36 +479,35 @@ const AdminAuctions = () => {
               <div key={auction._id} className="auction-card">
                 <div className="card-image">
                   <img
-                    src={auction.images?.[0] || '/api/placeholder/300/200'}
+                    src={auction.images?.[0] || '/api/placeholder/350/200'}
                     alt={auction.title}
                     onError={(e) => {
-                      e.target.src = '/api/placeholder/300/200';
+                      e.target.src = '/api/placeholder/350/200';
                     }}
                   />
-                  <div className="card-status" style={{ backgroundColor: status.color }}>
+                  <div className={`card-status ${status.class}`}>
                     {status.text}
                   </div>
                 </div>
                 
                 <div className="card-content">
-                  <h3>{auction.title}</h3>
-                  <div className="card-artist">by {auction.creator?.username || 'Unknown'}</div>
+                  <h3 className="card-title">{auction.title}</h3>
+                  
+                  <div className="card-creator">
+                    <div className="creator-avatar">
+                      {auction.creator?.username?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                    <div className="creator-name">{auction.creator?.username || 'Unknown'}</div>
+                  </div>
+                  
                   <div className="card-category">
-                    <span className="category-icon">{getCategoryIcon(auction.category)}</span>
+                    <span className="category-icon">🎨</span>
                     {auction.category || 'Uncategorized'}
                   </div>
                   
-                  <div className="card-stats">
-                    <div className="stat">
-                      <span className="stat-label">Current Bid</span>
-                      <span className="stat-value">
-                        {formatCurrency(auction.auction?.currentBid || auction.auction?.startingBid || 0)}
-                      </span>
-                    </div>
-                    <div className="stat">
-                      <span className="stat-label">Bids</span>
-                      <span className="stat-value">{auction.auction?.bids?.length || 0}</span>
-                    </div>
+                  <div className="card-bid-info">
+                    <div className="current-bid">{formatCurrency(auction.auction?.currentBid || 0)}</div>
+                    <div className="bids-count">{auction.auction?.bids?.length || 0} bids</div>
                   </div>
                   
                   <div className="card-time">
@@ -555,7 +579,7 @@ const AdminAuctions = () => {
                 
                 <div className="auction-info">
                   <div className="info-section">
-                    <h3>📊 Auction Details</h3>
+                    <h3>Auction Details</h3>
                     <div className="info-grid">
                       <div className="info-item">
                         <span className="label">Starting Bid:</span>
@@ -570,25 +594,24 @@ const AdminAuctions = () => {
                         <span className="value">{selectedAuction.auction?.bids?.length || 0}</span>
                       </div>
                       <div className="info-item">
-                        <span className="label">Category:</span>
-                        <span className="value">{selectedAuction.category || 'Uncategorized'}</span>
-                      </div>
-                      <div className="info-item">
-                        <span className="label">Artist:</span>
-                        <span className="value">{selectedAuction.creator?.username || 'Unknown'}</span>
-                      </div>
-                      <div className="info-item">
                         <span className="label">Status:</span>
-                        <span className="value">{getAuctionStatus(selectedAuction).text}</span>
+                        <span className={`value ${getAuctionStatus(selectedAuction).class}`}>
+                          {getAuctionStatus(selectedAuction).text}
+                        </span>
+                      </div>
+                      <div className="info-item">
+                        <span className="label">End Time:</span>
+                        <span className="value">{formatDate(selectedAuction.auction?.endTime)}</span>
                       </div>
                     </div>
                   </div>
                   
                   <div className="bid-history">
-                    <h3>💰 Recent Bids</h3>
+                    <h3>Recent Bids</h3>
                     {selectedAuction.auction?.bids?.length > 0 ? (
                       selectedAuction.auction.bids
                         .sort((a, b) => new Date(b.bidTime) - new Date(a.bidTime))
+                        .slice(0, 5)
                         .map((bid, index) => (
                           <div key={bid._id || index} className="bid-item">
                             <div className="bid-rank">#{index + 1}</div>
@@ -1013,6 +1036,18 @@ const AdminAuctions = () => {
           font-size: 0.85rem;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+        }
+
+        .status-badge.status-active{
+          color: green
+        }
+        
+        .status-badge.status-ended{
+          color: red
+        }
+
+        .status-badge.status-paused{
+          color: yellow
         }
 
         .time-info {
