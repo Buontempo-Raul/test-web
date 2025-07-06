@@ -1,4 +1,4 @@
-// frontend/src/pages/Admin/Auctions.js - Enhanced Version
+// frontend/src/pages/Admin/Auctions.js - Enhanced Version (Quick Actions Removed)
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../services/adminAPI';
 
@@ -228,7 +228,7 @@ const AdminAuctions = () => {
               onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}
               className="btn-secondary"
             >
-              {viewMode === 'table' ? '📋 Table View' : '🃏 Card View'}
+              {viewMode === 'table' ? '🃏 Card View' : '📋 Table View'}
             </button>
             <button onClick={exportToCSV} className="btn-primary">
               📊 Export Report
@@ -298,52 +298,53 @@ const AdminAuctions = () => {
             onChange={(e) => setFilterStatus(e.target.value)}
             className="filter-select"
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="ended">Ended</option>
-          </select>
-          
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="filter-select"
-          >
-            <option value="endTime">Sort by End Time</option>
-            <option value="currentBid">Sort by Current Bid</option>
-            <option value="bidsCount">Sort by Bid Count</option>
-            <option value="createdAt">Sort by Created Date</option>
+            <option value="all">All Auctions</option>
+            <option value="active">Active Only</option>
+            <option value="ended">Ended Only</option>
           </select>
         </div>
-        
+
         <div className="results-info">
-          <span>Showing {filteredAuctions.length} of {stats.total} auctions</span>
-          {error && <span className="error-message">⚠️ {error}</span>}
+          {error ? (
+            <span className="error-message">⚠️ {error}</span>
+          ) : (
+            <span>
+              Showing {filteredAuctions.length} of {auctions.length} auctions
+              {searchTerm && ` matching "${searchTerm}"`}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Content Display */}
+      {/* Table/Card View */}
       {viewMode === 'table' ? (
-        /* Table View */
+        /* Table View - Quick Actions Removed */
         <div className="admin-table-container">
           <table className="admin-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('title')} className="sortable">
-                  Artwork {sortBy === 'title' && (sortOrder === 'desc' ? '↓' : '↑')}
-                </th>
+                <th>Artwork</th>
                 <th>Artist</th>
                 <th>Category</th>
-                <th onClick={() => handleSort('currentBid')} className="sortable">
+                <th 
+                  onClick={() => handleSort('currentBid')}
+                  className="sortable-header"
+                >
                   Current Bid {sortBy === 'currentBid' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
-                <th onClick={() => handleSort('bidsCount')} className="sortable">
+                <th 
+                  onClick={() => handleSort('bidsCount')}
+                  className="sortable-header"
+                >
                   Bids {sortBy === 'bidsCount' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
                 <th>Status</th>
-                <th onClick={() => handleSort('endTime')} className="sortable">
-                  Time Left {sortBy === 'endTime' && (sortOrder === 'desc' ? '↓' : '↑')}
+                <th 
+                  onClick={() => handleSort('endTime')}
+                  className="sortable-header"
+                >
+                  End Time {sortBy === 'endTime' && (sortOrder === 'desc' ? '↓' : '↑')}
                 </th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -402,19 +403,20 @@ const AdminAuctions = () => {
                     
                     <td>
                       <div className="bids-count">
-                        <span className="count-number">{auction.auction?.bids?.length || 0}</span>
+                        <span className="count">{auction.auction?.bids?.length || 0}</span>
                         <span className="count-label">bids</span>
                       </div>
                     </td>
                     
                     <td>
-                      <span 
-                        className={`status-badge status-${status.status}`}
-                        style={{ backgroundColor: status.color }}
-                      >
-                        {status.status === 'active' && <div className="status-dot"></div>}
-                        {status.text}
-                      </span>
+                      <div className="status-container">
+                        <span 
+                          className="status-badge" 
+                          style={{ backgroundColor: status.color }}
+                        >
+                          {status.text}
+                        </span>
+                      </div>
                     </td>
                     
                     <td>
@@ -427,32 +429,6 @@ const AdminAuctions = () => {
                           <div className="ended-time">
                             Ended: {formatDate(auction.auction?.endTime)}
                           </div>
-                        )}
-                      </div>
-                    </td>
-                    
-                    <td>
-                      <div className="action-buttons">
-                        <button
-                          onClick={() => handleViewAuction(auction)}
-                          className="action-btn btn-view"
-                          title="View Details"
-                        >
-                          👁️
-                        </button>
-                        <button
-                          className="action-btn btn-analytics"
-                          title="View Analytics"
-                        >
-                          📊
-                        </button>
-                        {auction.auction?.isActive && (
-                          <button
-                            className="action-btn btn-pause"
-                            title="Pause Auction"
-                          >
-                            ⏸️
-                          </button>
                         )}
                       </div>
                     </td>
@@ -484,50 +460,50 @@ const AdminAuctions = () => {
                       e.target.src = '/api/placeholder/300/200';
                     }}
                   />
-                  <div className="card-status">
-                    <span className={`status-badge status-${status.status}`}>
-                      {status.status === 'active' && <div className="status-dot"></div>}
-                      {status.text}
-                    </span>
-                  </div>
-                  <div className="card-category">
-                    {getCategoryIcon(auction.category)} {auction.category}
+                  <div className="card-status" style={{ backgroundColor: status.color }}>
+                    {status.text}
                   </div>
                 </div>
                 
                 <div className="card-content">
-                  <div className="card-header">
-                    <h3>{auction.title}</h3>
-                    <div className="card-bid">
-                      <div className="current-bid">{formatCurrency(auction.auction?.currentBid || 0)}</div>
-                      <div className="bid-count">{auction.auction?.bids?.length || 0} bids</div>
+                  <h3>{auction.title}</h3>
+                  <div className="card-artist">by {auction.creator?.username || 'Unknown'}</div>
+                  <div className="card-category">
+                    <span className="category-icon">{getCategoryIcon(auction.category)}</span>
+                    {auction.category || 'Uncategorized'}
+                  </div>
+                  
+                  <div className="card-stats">
+                    <div className="stat">
+                      <span className="stat-label">Current Bid</span>
+                      <span className="stat-value">
+                        {formatCurrency(auction.auction?.currentBid || auction.auction?.startingBid || 0)}
+                      </span>
+                    </div>
+                    <div className="stat">
+                      <span className="stat-label">Bids</span>
+                      <span className="stat-value">{auction.auction?.bids?.length || 0}</span>
                     </div>
                   </div>
                   
-                  <div className="card-artist">
-                    <div className="creator-avatar">
-                      {auction.creator?.username?.charAt(0)?.toUpperCase() || 'U'}
-                    </div>
-                    <span>{auction.creator?.username || 'Unknown Artist'}</span>
-                  </div>
-                  
-                  <div className="card-footer">
-                    <div className="time-remaining">
-                      ⏱️ {auction.auction?.isActive ? 
-                        getTimeRemaining(auction.auction.endTime) : 
-                        'Ended'}
-                    </div>
-                    <button
-                      onClick={() => handleViewAuction(auction)}
-                      className="btn-view-details"
-                    >
-                      View Details
-                    </button>
+                  <div className="card-time">
+                    {auction.auction?.isActive ? (
+                      <span className="time-remaining">⏰ {getTimeRemaining(auction.auction.endTime)}</span>
+                    ) : (
+                      <span className="ended-time">Ended: {formatDate(auction.auction?.endTime)}</span>
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
+          
+          {filteredAuctions.length === 0 && !isLoading && (
+            <div className="no-results">
+              <h3>No auctions found</h3>
+              <p>Try adjusting your search or filter criteria.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -542,9 +518,9 @@ const AdminAuctions = () => {
             ← Previous
           </button>
           
-          <div className="pagination-info">
-            Page {pagination.current} of {pagination.pages} ({pagination.total} total auctions)
-          </div>
+          <span className="pagination-info">
+            Page {pagination.current} of {pagination.pages}
+          </span>
           
           <button
             onClick={() => handlePageChange(pagination.current + 1)}
@@ -559,73 +535,58 @@ const AdminAuctions = () => {
       {/* Auction Detail Modal */}
       {showAuctionModal && selectedAuction && (
         <div className="modal-overlay" onClick={handleCloseModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="auction-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{selectedAuction.title}</h2>
-              <button onClick={handleCloseModal} className="modal-close">
-                ✕
-              </button>
+              <button className="close-btn" onClick={handleCloseModal}>✕</button>
             </div>
             
-            <div className="auction-detail">
-              <div className="artwork-display">
-                <img
-                  src={selectedAuction.images?.[0] || '/api/placeholder/400/300'}
-                  alt={selectedAuction.title}
-                  onError={(e) => {
-                    e.target.src = '/api/placeholder/400/300';
-                  }}
-                />
-              </div>
-              
-              <div className="auction-info">
-                <div className="info-grid">
-                  <div className="info-item">
-                    <div className="info-label">Current Bid</div>
-                    <div className="info-value">
-                      {formatCurrency(selectedAuction.auction?.currentBid || 0)}
-                    </div>
-                  </div>
-                  
-                  <div className="info-item">
-                    <div className="info-label">Total Bids</div>
-                    <div className="info-value">{selectedAuction.auction?.bids?.length || 0}</div>
-                  </div>
-                  
-                  <div className="info-item">
-                    <div className="info-label">Time Remaining</div>
-                    <div className="info-value">
-                      {selectedAuction.auction?.isActive ? 
-                        getTimeRemaining(selectedAuction.auction.endTime) : 
-                        'Auction Ended'}
-                    </div>
-                  </div>
-                  
-                  <div className="info-item">
-                    <div className="info-label">Starting Bid</div>
-                    <div className="info-value">
-                      {formatCurrency(selectedAuction.auction?.startingBid || 0)}
-                    </div>
-                  </div>
+            <div className="modal-content">
+              <div className="auction-details-grid">
+                <div className="auction-image">
+                  <img
+                    src={selectedAuction.images?.[0] || '/api/placeholder/400/300'}
+                    alt={selectedAuction.title}
+                    onError={(e) => {
+                      e.target.src = '/api/placeholder/400/300';
+                    }}
+                  />
                 </div>
                 
-                <div className="artist-info">
-                  <h4>Artist Information</h4>
-                  <div className="creator-info">
-                    <div className="creator-avatar">
-                      {selectedAuction.creator?.username?.charAt(0)?.toUpperCase() || 'U'}
-                    </div>
-                    <div>
-                      <div className="creator-name">{selectedAuction.creator?.username || 'Unknown'}</div>
-                      <div className="creator-email">{selectedAuction.creator?.email || 'No email'}</div>
+                <div className="auction-info">
+                  <div className="info-section">
+                    <h3>📊 Auction Details</h3>
+                    <div className="info-grid">
+                      <div className="info-item">
+                        <span className="label">Starting Bid:</span>
+                        <span className="value">{formatCurrency(selectedAuction.auction?.startingBid || 0)}</span>
+                      </div>
+                      <div className="info-item">
+                        <span className="label">Current Bid:</span>
+                        <span className="value">{formatCurrency(selectedAuction.auction?.currentBid || 0)}</span>
+                      </div>
+                      <div className="info-item">
+                        <span className="label">Total Bids:</span>
+                        <span className="value">{selectedAuction.auction?.bids?.length || 0}</span>
+                      </div>
+                      <div className="info-item">
+                        <span className="label">Category:</span>
+                        <span className="value">{selectedAuction.category || 'Uncategorized'}</span>
+                      </div>
+                      <div className="info-item">
+                        <span className="label">Artist:</span>
+                        <span className="value">{selectedAuction.creator?.username || 'Unknown'}</span>
+                      </div>
+                      <div className="info-item">
+                        <span className="label">Status:</span>
+                        <span className="value">{getAuctionStatus(selectedAuction).text}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                <div className="bid-history">
-                  <h4>Bid History ({selectedAuction.auction?.bids?.length || 0} bids)</h4>
-                  <div className="bid-list">
-                    {selectedAuction.auction?.bids && selectedAuction.auction.bids.length > 0 ? (
+                  
+                  <div className="bid-history">
+                    <h3>💰 Recent Bids</h3>
+                    {selectedAuction.auction?.bids?.length > 0 ? (
                       selectedAuction.auction.bids
                         .sort((a, b) => new Date(b.bidTime) - new Date(a.bidTime))
                         .map((bid, index) => (
@@ -699,41 +660,52 @@ const AdminAuctions = () => {
         .header-actions {
           display: flex;
           gap: 1rem;
+          align-items: center;
           flex-wrap: wrap;
         }
 
         .btn-primary, .btn-secondary, .btn-warning {
           padding: 0.75rem 1.5rem;
+          border-radius: 10px;
           border: none;
-          border-radius: 12px;
-          cursor: pointer;
           font-weight: 600;
+          font-size: 0.95rem;
+          cursor: pointer;
           transition: all 0.3s ease;
-          text-decoration: none;
-          display: inline-flex;
+          display: flex;
           align-items: center;
           gap: 0.5rem;
         }
 
         .btn-primary {
-          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+          background: #4ade80;
           color: white;
+        }
+
+        .btn-primary:hover {
+          background: #22c55e;
+          transform: translateY(-2px);
         }
 
         .btn-secondary {
-          background: white;
-          color: #374151;
-          border: 2px solid #e5e7eb;
+          background: rgba(255, 255, 255, 0.2);
+          color: white;
+          backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.3);
+          transform: translateY(-2px);
         }
 
         .btn-warning {
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          background: #f59e0b;
           color: white;
         }
 
-        .btn-primary:hover, .btn-secondary:hover, .btn-warning:hover {
+        .btn-warning:hover {
+          background: #d97706;
           transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         .auction-stats {
@@ -748,13 +720,11 @@ const AdminAuctions = () => {
           padding: 2rem;
           border-radius: 16px;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.8);
-          transition: all 0.3s ease;
-          position: relative;
-          overflow: hidden;
           display: flex;
           align-items: center;
-          gap: 1rem;
+          gap: 1.5rem;
+          border-left: 4px solid transparent;
+          transition: all 0.3s ease;
         }
 
         .stat-item:hover {
@@ -762,19 +732,17 @@ const AdminAuctions = () => {
           box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
         }
 
-        .stat-item::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 4px;
-          background: linear-gradient(90deg, #667eea, #764ba2);
-        }
+        .stat-item:nth-child(1) { border-left-color: #3b82f6; }
+        .stat-item:nth-child(2) { border-left-color: #10b981; }
+        .stat-item:nth-child(3) { border-left-color: #8b5cf6; }
+        .stat-item:nth-child(4) { border-left-color: #f59e0b; }
 
         .stat-icon {
-          font-size: 2rem;
-          opacity: 0.8;
+          font-size: 2.5rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
         }
 
         .stat-content {
@@ -783,16 +751,14 @@ const AdminAuctions = () => {
 
         .stat-label {
           font-size: 0.9rem;
-          font-weight: 600;
           color: #6b7280;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
+          font-weight: 500;
           margin-bottom: 0.5rem;
         }
 
         .stat-value {
-          font-size: 2.5rem;
-          font-weight: 800;
+          font-size: 2rem;
+          font-weight: 700;
           color: #1f2937;
           margin: 0;
         }
@@ -876,7 +842,7 @@ const AdminAuctions = () => {
           display: flex;
           align-items: center;
           gap: 1rem;
-          color:rgb(255, 255, 255);
+          color: rgb(255, 255, 255);
           font-weight: 500;
         }
 
@@ -899,35 +865,37 @@ const AdminAuctions = () => {
         }
 
         .admin-table th {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          padding: 1.5rem 1.25rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 1.25rem 1rem;
           text-align: left;
-          font-weight: 700;
-          color: #374151;
-          font-size: 0.875rem;
-          text-transform: uppercase;
+          font-weight: 600;
+          font-size: 0.95rem;
           letter-spacing: 0.5px;
-          border-bottom: 2px solid #e5e7eb;
         }
 
-        .admin-table th.sortable {
+        .sortable-header {
           cursor: pointer;
           user-select: none;
+          transition: all 0.2s ease;
         }
 
-        .admin-table th.sortable:hover {
-          background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+        .sortable-header:hover {
+          background: rgba(255, 255, 255, 0.1);
         }
 
         .admin-table td {
-          padding: 1.25rem;
-          border-bottom: 1px solid #f3f4f6;
+          padding: 1.5rem 1rem;
+          border-bottom: 1px solid #f1f5f9;
           vertical-align: middle;
         }
 
-        .auction-row:hover td {
+        .auction-row:hover {
           background: #f8fafc;
-          transition: background-color 0.2s ease;
+        }
+
+        .auction-row:last-child td {
+          border-bottom: none;
         }
 
         .artwork-info {
@@ -939,21 +907,21 @@ const AdminAuctions = () => {
         .artwork-thumbnail {
           width: 80px;
           height: 60px;
-          border-radius: 12px;
           object-fit: cover;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          border-radius: 8px;
+          border: 2px solid #e5e7eb;
         }
 
         .artwork-details h4 {
-          margin: 0 0 0.25rem 0;
-          font-weight: 700;
-          color: #1f2937;
+          margin: 0 0 0.5rem 0;
           font-size: 1.1rem;
+          font-weight: 600;
+          color: #1f2937;
         }
 
         .starting-bid {
-          font-size: 0.8rem;
-          color: #9ca3af;
+          font-size: 0.85rem;
+          color: #6b7280;
         }
 
         .creator-info {
@@ -963,17 +931,16 @@ const AdminAuctions = () => {
         }
 
         .creator-avatar {
-          width: 48px;
-          height: 48px;
+          width: 40px;
+          height: 40px;
           border-radius: 50%;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: white;
-          font-weight: 700;
-          font-size: 1.2rem;
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+          font-weight: 600;
+          font-size: 1.1rem;
         }
 
         .creator-name {
@@ -983,7 +950,7 @@ const AdminAuctions = () => {
         }
 
         .creator-email {
-          font-size: 0.875rem;
+          font-size: 0.85rem;
           color: #6b7280;
         }
 
@@ -991,136 +958,121 @@ const AdminAuctions = () => {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: #f3f4f6;
-          border-radius: 20px;
-          font-weight: 600;
-          color: #374151;
         }
 
         .category-icon {
-          font-size: 1.2rem;
+          font-size: 1.5rem;
+        }
+
+        .category-name {
+          font-weight: 500;
+          color: #374151;
         }
 
         .bid-info {
-          text-align: left;
+          text-align: center;
         }
 
         .current-bid {
-          font-size: 1.5rem;
-          font-weight: 800;
+          font-size: 1.25rem;
+          font-weight: 700;
           color: #059669;
           margin-bottom: 0.25rem;
         }
 
         .bid-increase {
-          font-size: 0.875rem;
-          color: #10b981;
-          font-weight: 600;
+          font-size: 0.85rem;
+          color: #6b7280;
         }
 
         .bids-count {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: #eff6ff;
-          border-radius: 20px;
-          color: #1d4ed8;
-          font-weight: 600;
+          text-align: center;
         }
 
-        .count-number {
-          font-size: 1.2rem;
-          font-weight: 800;
+        .count {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #3b82f6;
+          display: block;
+        }
+
+        .count-label {
+          font-size: 0.85rem;
+          color: #6b7280;
+        }
+
+        .status-container {
+          text-align: center;
         }
 
         .status-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.625rem 1rem;
-          border-radius: 20px;
-          font-weight: 700;
-          font-size: 0.875rem;
+          padding: 0.5rem 1rem;
+          border-radius: 25px;
+          color: white;
+          font-weight: 600;
+          font-size: 0.85rem;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          color: white;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .status-active {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-
-        .status-ended {
-          background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-        }
-
-        .status-dot {
-          width: 8px;
-          height: 8px;
-          background: currentColor;
-          border-radius: 50%;
-          animation: pulse 2s infinite;
         }
 
         .time-info {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
+          text-align: center;
         }
 
         .time-remaining {
-          font-weight: 700;
-          color: #ea580c;
+          font-weight: 600;
+          color: #dc2626;
           font-size: 1rem;
         }
 
         .ended-time {
-          font-weight: 600;
           color: #6b7280;
           font-size: 0.9rem;
         }
 
-        .action-buttons {
-          display: flex;
-          gap: 0.5rem;
+        .no-results {
+          text-align: center;
+          padding: 4rem 2rem;
+          color: #6b7280;
         }
 
-        .action-btn {
-          padding: 0.75rem;
-          border: none;
-          border-radius: 12px;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          font-weight: 600;
+        .no-results h3 {
+          margin: 0 0 1rem 0;
+          color: #374151;
+        }
+
+        .pagination {
           display: flex;
-          align-items: center;
           justify-content: center;
-          min-width: 44px;
-          height: 44px;
-          text-decoration: none;
+          align-items: center;
+          gap: 1rem;
+          margin-top: 2rem;
         }
 
-        .action-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        .pagination-btn {
+          padding: 0.75rem 1.5rem;
+          background: white;
+          border: 2px solid #e5e7eb;
+          border-radius: 10px;
+          cursor: pointer;
+          font-weight: 600;
+          transition: all 0.3s ease;
         }
 
-        .btn-view {
-          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        .pagination-btn:hover:not(:disabled) {
+          background: #667eea;
           color: white;
+          border-color: #667eea;
         }
 
-        .btn-analytics {
-          background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-          color: white;
+        .pagination-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
 
-        .btn-pause {
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          color: white;
+        .pagination-info {
+          font-weight: 600;
+          color: #374151;
         }
 
         /* Card View Styles */
@@ -1134,18 +1086,19 @@ const AdminAuctions = () => {
         .auction-card {
           background: white;
           border-radius: 16px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
           overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
           transition: all 0.3s ease;
         }
 
         .auction-card:hover {
-          transform: translateY(-5px);
-          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+          transform: translateY(-8px);
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
         }
 
         .card-image {
           position: relative;
+          width: 100%;
           height: 200px;
           overflow: hidden;
         }
@@ -1160,131 +1113,75 @@ const AdminAuctions = () => {
           position: absolute;
           top: 1rem;
           right: 1rem;
-        }
-
-        .card-category {
-          position: absolute;
-          top: 1rem;
-          left: 1rem;
-          background: rgba(0, 0, 0, 0.7);
-          color: white;
           padding: 0.5rem 1rem;
-          border-radius: 20px;
-          font-size: 0.875rem;
+          border-radius: 25px;
+          color: white;
           font-weight: 600;
+          font-size: 0.85rem;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
         .card-content {
           padding: 1.5rem;
         }
 
-        .card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: start;
-          margin-bottom: 1rem;
-        }
-
-        .card-header h3 {
-          margin: 0;
+        .card-content h3 {
+          margin: 0 0 0.5rem 0;
           font-size: 1.25rem;
           font-weight: 700;
           color: #1f2937;
-          flex: 1;
-          margin-right: 1rem;
-        }
-
-        .card-bid {
-          text-align: right;
-        }
-
-        .card-bid .current-bid {
-          font-size: 1.5rem;
-          font-weight: 800;
-          color: #059669;
-          margin-bottom: 0.25rem;
-        }
-
-        .card-bid .bid-count {
-          font-size: 0.875rem;
-          color: #6b7280;
         }
 
         .card-artist {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          margin-bottom: 1rem;
-        }
-
-        .card-artist .creator-avatar {
-          width: 32px;
-          height: 32px;
-          font-size: 0.875rem;
-        }
-
-        .card-footer {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-top: 1rem;
-          border-top: 1px solid #f3f4f6;
-        }
-
-        .time-remaining {
-          color: #ea580c;
-          font-weight: 600;
-          font-size: 0.875rem;
-        }
-
-        .btn-view-details {
-          padding: 0.5rem 1rem;
-          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-          color: white;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 600;
-          transition: all 0.3s ease;
-        }
-
-        .btn-view-details:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-        }
-
-        /* Pagination */
-        .pagination {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 2rem;
-          margin: 2rem 0;
-        }
-
-        .pagination-btn {
-          padding: 0.75rem 1.5rem;
-          background: white;
-          border: 2px solid #e5e7eb;
-          border-radius: 12px;
-          cursor: pointer;
-          font-weight: 600;
-          transition: all 0.3s ease;
-        }
-
-        .pagination-btn:hover:not(:disabled) {
-          background: #f8fafc;
-          border-color: #667eea;
-        }
-
-        .pagination-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .pagination-info {
           color: #6b7280;
+          margin-bottom: 0.75rem;
+          font-style: italic;
+        }
+
+        .card-category {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
           font-weight: 500;
+          color: #374151;
+        }
+
+        .card-stats {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+          margin-bottom: 1rem;
+          padding: 1rem;
+          background: #f8fafc;
+          border-radius: 8px;
+        }
+
+        .stat {
+          text-align: center;
+        }
+
+        .stat-label {
+          display: block;
+          font-size: 0.85rem;
+          color: #6b7280;
+          margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+          font-size: 1.1rem;
+          font-weight: 700;
+          color: #1f2937;
+        }
+
+        .card-time {
+          text-align: center;
+          padding: 0.75rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border-radius: 8px;
+          font-weight: 600;
         }
 
         /* Modal Styles */
@@ -1295,284 +1192,197 @@ const AdminAuctions = () => {
           right: 0;
           bottom: 0;
           background: rgba(0, 0, 0, 0.7);
-          backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 2rem;
           z-index: 1000;
-          animation: fadeIn 0.3s ease;
+          padding: 2rem;
         }
 
-        .modal-content {
+        .auction-modal {
           background: white;
-          border-radius: 24px;
-          max-width: 1200px;
+          border-radius: 20px;
+          max-width: 900px;
           width: 100%;
-          max-height: 90vh;
+          max-height: 80vh;
           overflow-y: auto;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-          animation: slideIn 0.3s ease;
         }
 
         .modal-header {
-          padding: 2rem;
-          border-bottom: 2px solid #f3f4f6;
           display: flex;
           justify-content: space-between;
           align-items: center;
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          border-radius: 24px 24px 0 0;
+          padding: 2rem;
+          border-bottom: 1px solid #e5e7eb;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border-radius: 20px 20px 0 0;
         }
 
         .modal-header h2 {
           margin: 0;
-          font-size: 2rem;
-          font-weight: 800;
-          color: #1f2937;
+          font-size: 1.75rem;
+          font-weight: 700;
         }
 
-        .modal-close {
-          background: none;
+        .close-btn {
+          background: rgba(255, 255, 255, 0.2);
           border: none;
+          color: white;
           font-size: 1.5rem;
-          cursor: pointer;
           padding: 0.5rem;
-          border-radius: 12px;
+          border-radius: 50%;
+          cursor: pointer;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           transition: all 0.3s ease;
-          color: #6b7280;
         }
 
-        .modal-close:hover {
-          background: #f3f4f6;
-          color: #374151;
+        .close-btn:hover {
+          background: rgba(255, 255, 255, 0.3);
         }
 
-        .auction-detail {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 3rem;
+        .modal-content {
           padding: 2rem;
         }
 
-        .artwork-display img {
-          width: 100%;
-          height: 400px;
-          object-fit: cover;
-          border-radius: 16px;
-          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        .auction-details-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+          margin-bottom: 2rem;
         }
 
-        .auction-info {
-          display: flex;
-          flex-direction: column;
-          gap: 2rem;
+        .auction-image img {
+          width: 100%;
+          height: 300px;
+          object-fit: cover;
+          border-radius: 12px;
+        }
+
+        .info-section h3 {
+          margin: 0 0 1.5rem 0;
+          color: #1f2937;
+          font-size: 1.25rem;
+          font-weight: 700;
         }
 
         .info-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1.5rem;
+          gap: 1rem;
         }
 
         .info-item {
-          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-          padding: 1.5rem;
-          border-radius: 16px;
-          border: 1px solid #e5e7eb;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.75rem;
+          background: #f8fafc;
+          border-radius: 8px;
         }
 
-        .info-label {
-          font-size: 0.875rem;
+        .info-item .label {
           font-weight: 600;
-          color: #6b7280;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 0.5rem;
+          color: #374151;
         }
 
-        .info-value {
-          font-size: 1.5rem;
-          font-weight: 800;
-          color: #1f2937;
-        }
-
-        .artist-info {
-          background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-          padding: 1.5rem;
-          border-radius: 16px;
-          border: 1px solid #bfdbfe;
-        }
-
-        .artist-info h4 {
-          margin: 0 0 1rem 0;
-          font-size: 1.2rem;
+        .info-item .value {
           font-weight: 700;
           color: #1f2937;
         }
 
         .bid-history {
-          background: white;
-          border: 2px solid #f3f4f6;
-          border-radius: 16px;
-        }
-
-        .bid-history h4 {
-          padding: 1.5rem 1.5rem 0 1.5rem;
-          margin: 0 0 1rem 0;
-          font-size: 1.2rem;
-          font-weight: 700;
-          color: #1f2937;
-        }
-
-        .bid-list {
-          max-height: 300px;
-          overflow-y: auto;
+          margin-top: 2rem;
         }
 
         .bid-item {
           display: grid;
-          grid-template-columns: auto 1fr auto auto;
+          grid-template-columns: 50px 1fr auto auto;
           gap: 1rem;
           align-items: center;
-          padding: 1rem 1.5rem;
-          border-bottom: 1px solid #f3f4f6;
-          transition: background-color 0.2s ease;
-        }
-
-        .bid-item:hover {
+          padding: 1rem;
           background: #f8fafc;
-        }
-
-        .bid-item:last-child {
-          border-bottom: none;
+          border-radius: 8px;
+          margin-bottom: 0.75rem;
         }
 
         .bid-rank {
-          width: 32px;
-          height: 32px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: #667eea;
           color: white;
           border-radius: 50%;
+          width: 30px;
+          height: 30px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 700;
-          font-size: 0.875rem;
+          font-weight: 600;
+          font-size: 0.85rem;
         }
 
         .bid-user {
-          font-weight: 700;
+          font-weight: 600;
           color: #1f2937;
-          font-size: 1rem;
         }
 
         .bid-email {
-          font-size: 0.875rem;
+          font-size: 0.85rem;
           color: #6b7280;
         }
 
         .bid-amount {
-          font-weight: 800;
+          font-weight: 700;
           color: #059669;
           font-size: 1.1rem;
         }
 
         .bid-time {
-          font-size: 0.875rem;
+          font-size: 0.85rem;
           color: #6b7280;
-          font-weight: 500;
         }
 
         .no-bids {
           text-align: center;
-          padding: 3rem;
-          color: #9ca3af;
+          color: #6b7280;
           font-style: italic;
-          font-size: 1.1rem;
+          padding: 2rem;
         }
 
         .modal-actions {
           display: flex;
           gap: 1rem;
+          justify-content: center;
           flex-wrap: wrap;
+          margin-top: 2rem;
+          padding-top: 2rem;
+          border-top: 1px solid #e5e7eb;
         }
 
-        .no-results {
-          text-align: center;
-          padding: 4rem 2rem;
-          background: white;
-          border-radius: 16px;
-          margin: 2rem 0;
-        }
-
-        .no-results h3 {
-          margin: 0 0 1rem 0;
-          color: #374151;
-          font-size: 1.5rem;
-        }
-
-        .no-results p {
-          margin: 0;
-          color: #6b7280;
-        }
-
-        /* Loading States */
         .admin-loading {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 4rem 2rem;
-          text-align: center;
+          height: 50vh;
+          color: #6b7280;
         }
 
         .loading-spinner {
-          width: 60px;
-          height: 60px;
-          border: 4px solid #f3f4f6;
+          width: 40px;
+          height: 40px;
+          border: 4px solid #e5e7eb;
           border-top: 4px solid #667eea;
           border-radius: 50%;
           animation: spin 1s linear infinite;
-          margin-bottom: 1.5rem;
-        }
-
-        /* Animations */
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        @keyframes slideIn {
-          from { 
-            opacity: 0;
-            transform: translateY(-20px);
-          }
-          to { 
-            opacity: 1;
-            transform: translateY(0);
-          }
+          margin-bottom: 1rem;
         }
 
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
-        }
-
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-
-        /* Responsive Design */
-        @media (max-width: 1200px) {
-          .auction-detail {
-            grid-template-columns: 1fr;
-          }
-          
-          .info-grid {
-            grid-template-columns: 1fr 1fr;
-          }
         }
 
         @media (max-width: 768px) {
@@ -1582,11 +1392,20 @@ const AdminAuctions = () => {
 
           .header-content {
             flex-direction: column;
-            align-items: stretch;
+            align-items: flex-start;
           }
 
-          .admin-header h1 {
-            font-size: 2rem;
+          .header-actions {
+            width: 100%;
+            justify-content: stretch;
+          }
+
+          .header-actions button {
+            flex: 1;
+          }
+
+          .auction-stats {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           }
 
           .admin-filters {
@@ -1595,11 +1414,11 @@ const AdminAuctions = () => {
           }
 
           .filter-group {
-            justify-content: space-between;
+            flex-direction: column;
           }
 
-          .auction-stats {
-            grid-template-columns: 1fr;
+          .search-container {
+            max-width: none;
           }
 
           .admin-table-container {
@@ -1607,35 +1426,19 @@ const AdminAuctions = () => {
           }
 
           .admin-table {
-            min-width: 1000px;
+            min-width: 800px;
           }
 
           .auction-cards-grid {
             grid-template-columns: 1fr;
           }
 
-          .modal-content {
-            width: 95%;
-            margin: 1rem;
-            max-height: 95vh;
-          }
-
-          .auction-detail {
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            padding: 1rem;
-          }
-
-          .info-grid {
+          .auction-details-grid {
             grid-template-columns: 1fr;
           }
 
-          .stat-value {
-            font-size: 2rem;
-          }
-
-          .header-actions {
-            justify-content: space-between;
+          .modal-actions {
+            flex-direction: column;
           }
         }
       `}</style>
