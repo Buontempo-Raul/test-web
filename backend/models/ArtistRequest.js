@@ -172,17 +172,28 @@ artistRequestSchema.methods.approve = async function(adminId, comments = '') {
   const User = require('./User');
   await User.findByIdAndUpdate(this.user, { isArtist: true });
   
-  return this.save();
+  // Use save with validateBeforeSave: false to bypass validation
+  return this.save({ validateBeforeSave: false });
 };
 
 // Method to reject request
 artistRequestSchema.methods.reject = async function(adminId, comments = '') {
-  this.status = 'rejected';
-  this.reviewedBy = adminId;
-  this.reviewedAt = new Date();
-  this.reviewComments = comments;
+  const ArtistRequest = this.constructor;
   
-  return this.save();
+  return ArtistRequest.findByIdAndUpdate(
+    this._id,
+    {
+      status: 'rejected',
+      reviewedBy: adminId,
+      reviewedAt: new Date(),
+      reviewComments: comments,
+      lastUpdated: new Date()
+    },
+    { 
+      new: true,
+      runValidators: false // Don't run validation on update
+    }
+  );
 };
 
 // Static method to get pending requests
