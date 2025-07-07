@@ -76,11 +76,11 @@ const artistRequestSchema = new mongoose.Schema({
     priceRange: {
       min: {
         type: Number,
-        required: true
+        required: false
       },
       max: {
         type: Number,
-        required: true
+        required: false
       }
     },
     customOrders: {

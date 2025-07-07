@@ -217,7 +217,6 @@ const AdminArtistRequests = () => {
               <th>Applicant</th>
               <th>Artist Name</th>
               <th>Style & Experience</th>
-              <th>Price Range</th>
               <th>Status</th>
               <th>Submitted</th>
               <th>Actions</th>
@@ -261,16 +260,19 @@ const AdminArtistRequests = () => {
                       </div>
                     </div>
                   </td>
-                  <td>
+                  {/* <td>
                     <div className="price-range">
                       <div className="price-min-max">
-                        ${request.applicationData.priceRange.min} - ${request.applicationData.priceRange.max}
+                        {request.applicationData.priceRange?.min != null && request.applicationData.priceRange?.max != null 
+                          ? `$${request.applicationData.priceRange.min} - $${request.applicationData.priceRange.max}`
+                          : 'Not specified'
+                        }
                       </div>
                       {request.applicationData.customOrders && (
                         <div className="custom-orders">Custom orders available</div>
                       )}
                     </div>
-                  </td>
+                  </td> */}
                   <td>
                     <span 
                       className="status-badge"
@@ -341,10 +343,10 @@ const AdminArtistRequests = () => {
                         <span className="detail-label">Phone:</span>
                         <span className="detail-value">{selectedRequest.applicationData.phone || 'Not provided'}</span>
                       </div>
-                      <div className="detail-item">
+                      {/* <div className="detail-item">
                         <span className="detail-label">Website:</span>
                         <span className="detail-value">{selectedRequest.applicationData.website || 'Not provided'}</span>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
 
@@ -363,24 +365,27 @@ const AdminArtistRequests = () => {
                         <span className="detail-label">Experience:</span>
                         <span className="detail-value">{getExperienceLevel(selectedRequest.applicationData.experience)}</span>
                       </div>
-                      <div className="detail-item full-width">
+                      {/* <div className="detail-item full-width">
                         <span className="detail-label">Specialties:</span>
                         <div className="specialties-list">
                           {selectedRequest.applicationData.specialties?.map(specialty => (
                             <span key={specialty} className="specialty-tag">{specialty}</span>
                           ))}
                         </div>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
 
-                  <div className="business-info-section">
+                  {/* <div className="business-info-section">
                     <h4>Business Information</h4>
                     <div className="detail-grid">
                       <div className="detail-item">
                         <span className="detail-label">Price Range:</span>
                         <span className="detail-value">
-                          ${selectedRequest.applicationData.priceRange.min} - ${selectedRequest.applicationData.priceRange.max}
+                          {selectedRequest.applicationData.priceRange?.min != null && selectedRequest.applicationData.priceRange?.max != null
+                            ? `$${selectedRequest.applicationData.priceRange.min} - $${selectedRequest.applicationData.priceRange.max}`
+                            : 'Not specified'
+                          }
                         </span>
                       </div>
                       <div className="detail-item">
@@ -394,7 +399,7 @@ const AdminArtistRequests = () => {
                         <span className="detail-value">{selectedRequest.applicationData.shippingInfo || 'Not specified'}</span>
                       </div>
                     </div>
-                  </div>
+                  </div> */}
                 </div>
 
                 <div className="request-detail-right">
@@ -424,7 +429,7 @@ const AdminArtistRequests = () => {
                     <p>{selectedRequest.applicationData.portfolioDescription}</p>
                   </div>
 
-                  <div className="background-section">
+                  {/* <div className="background-section">
                     <h4>Professional Background</h4>
                     <div className="background-item">
                       <strong>Education:</strong>
@@ -438,7 +443,7 @@ const AdminArtistRequests = () => {
                       <strong>Awards:</strong>
                       <p>{selectedRequest.applicationData.awards || 'Not provided'}</p>
                     </div>
-                  </div>
+                  </div> */}
 
                   <div className="motivation-section">
                     <h4>Application Statement</h4>
