@@ -86,7 +86,7 @@ const AdminUsers = () => {
       return { 
         status: 'permanently_banned', 
         color: '#8B0000', 
-        text: 'Banned (Permanent Email Ban)',
+        text: 'Banned',
         isPermanent: true
       };
     }
@@ -527,11 +527,12 @@ const AdminUsers = () => {
 
         .status-badge {
           padding: 0.35rem 0.8rem;
+          margin: 0 0 0;
           border-radius: 15px;
           font-size: 0.8rem;
           font-weight: 600;
           color: white;
-          cursor: help;
+          cursor: default;
         }
 
         .action-buttons {
@@ -870,7 +871,8 @@ const AdminUsers = () => {
                 return (
                   <tr key={user._id}>
                     <td>
-                      <div className="user-info">
+                      <div className="user-info"
+                      onClick={() => handleUserClick(user)}>
                         <UserAvatar user={user} />
                         <div>
                           <div className="user-name">{user.username}</div>
@@ -1047,10 +1049,15 @@ const AdminUsers = () => {
 
       {/* User Details Modal */}
       {showUserModal && selectedUser && (
-        <div className="modal">
-          <div className="modal-content">
-            <h3>User Details: {selectedUser.username}</h3>
-            
+      <div className="modal">
+        <div className="modal-content">
+          {/* Modal Header with Avatar */}
+          <div className="modal-header-with-avatar">
+            <UserAvatar user={selectedUser} size="80px"/>
+          </div>
+          
+          {/* User Information Grid */}
+          <div className="user-info-grid">
             <div className="form-group">
               <label>Username:</label>
               <p>{selectedUser.username}</p>
@@ -1080,18 +1087,19 @@ const AdminUsers = () => {
               <label>Joined:</label>
               <p>{formatDate(selectedUser.createdAt)}</p>
             </div>
+          </div>
 
-            <div className="modal-actions">
-              <button 
-                className="btn-secondary" 
-                onClick={() => setShowUserModal(false)}
-              >
-                Close
-              </button>
-            </div>
+          <div className="modal-actions">
+            <button 
+              className="btn-secondary" 
+              onClick={() => setShowUserModal(false)}
+            >
+              Close
+            </button>
           </div>
         </div>
-      )}
+      </div>
+    )}
     </div>
   );
 };
