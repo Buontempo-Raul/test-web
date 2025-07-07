@@ -602,123 +602,174 @@ const AdminPosts = () => {
 
       {/* Enhanced Post Detail Modal */}
       {showPostModal && selectedPost && (
-        <div className="modal-overlay" onClick={() => setShowPostModal(false)}>
-          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Post Details</h3>
-              <button onClick={() => setShowPostModal(false)} className="close-button">×</button>
-            </div>
-            <div className="modal-body">
-              <div className="post-detail-layout">
-                {/* Left side - Images */}
-                <div className="post-images-section">
-                  <h4>Images ({getAllPostImages(selectedPost).length})</h4>
-                  <div className="post-images-grid">
-                    {getAllPostImages(selectedPost).length > 0 ? (
-                      getAllPostImages(selectedPost).map((image, index) => (
-                        <img 
-                          key={index}
-                          src={image} 
-                          alt={`Post image ${index + 1}`}
-                          className="post-detail-image"
-                          onError={(e) => {
-                            e.target.src = getPlaceholderImage();
+      <div className="modal-overlay" onClick={() => setShowPostModal(false)}>
+        <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Post Details</h3>
+            <button onClick={() => setShowPostModal(false)} className="close-button">×</button>
+          </div>
+          <div className="modal-body">
+            <div className="post-detail-layout">
+              {/* Left side - Images */}
+              <div className="post-images-section">
+                <h4>Images ({getAllPostImages(selectedPost).length})</h4>
+                <div className="post-images-grid">
+                  {getAllPostImages(selectedPost).length > 0 ? (
+                    getAllPostImages(selectedPost).map((image, index) => (
+                      <img 
+                        key={index}
+                        src={image} 
+                        alt={`Post image ${index + 1}`}
+                        className="post-detail-image"
+                        onError={(e) => {
+                          e.target.src = getPlaceholderImage();
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <div className="no-images">No images available</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right side - Information */}
+              <div className="post-info-section">
+                <div className="info-card">
+                  <h4>Post Information</h4>
+                  <div className="info-grid">
+                    <div className="info-item">
+                      <label>Caption:</label>
+                      <p>{selectedPost.caption || 'No caption provided'}</p>
+                    </div>
+                    <div className="info-item">
+                      <label>Post ID:</label>
+                      <p className="monospace">{selectedPost._id}</p>
+                    </div>
+                    <div className="info-item">
+                      <label>Created:</label>
+                      <p>{formatDate(selectedPost.createdAt)}</p>
+                    </div>
+                    <div className="info-item">
+                      <label>Status:</label>
+                      <p>
+                        <span 
+                          className="status-badge modern"
+                          style={{ 
+                            backgroundColor: `${getPostStatus(selectedPost).color}15`,
+                            color: getPostStatus(selectedPost).color,
+                            border: `1px solid ${getPostStatus(selectedPost).color}30`
                           }}
-                        />
+                        >
+                          {getPostStatus(selectedPost).text}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="info-card">
+                  <h4>Creator Information</h4>
+                  <div className="creator-detail">
+                    <UserAvatar user={selectedPost.creator} size={60} />
+                    <div className="creator-details">
+                      <h5>{selectedPost.creator?.username || 'Unknown User'}</h5>
+                      <p>{selectedPost.creator?.email || 'No email'}</p>
+                      <p className="join-date">
+                        Joined: {selectedPost.creator?.createdAt ? formatDate(selectedPost.creator.createdAt) : 'Unknown'}
+                      </p>
+                      {selectedPost.creator && (
+                        <button 
+                          onClick={() => handleUserClick(selectedPost.creator)}
+                          className="view-profile-btn"
+                        >
+                          View Profile
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="info-card">
+                  <h4>Engagement Stats</h4>
+                  <div className="engagement-stats">
+                    <div className="stat-item">
+                      <span className="stat-number">{selectedPost.likes?.length || 0}</span>
+                      <span className="stat-label">Likes</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-number">{selectedPost.comments?.length || 0}</span>
+                      <span className="stat-label">Comments</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-number">{getAllPostImages(selectedPost).length}</span>
+                      <span className="stat-label">Images</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comments Section */}
+                <div className="info-card">
+                  <h4>Comments ({selectedPost.comments?.length || 0})</h4>
+                  <div className="comments-container">
+                    {selectedPost.comments && selectedPost.comments.length > 0 ? (
+                      selectedPost.comments.map((comment, index) => (
+                        <div key={comment._id || index} className="comment-item">
+                          <div className="comment-header">
+                            <div className="comment-avatar">
+                              <UserAvatar user={comment.user} size={40} />
+                            </div>
+                            <div className="comment-meta">
+                              <button 
+                                className="comment-username"
+                                onClick={() => handleUserClick(comment.user)}
+                                style={{ 
+                                  background: 'none', 
+                                  border: 'none', 
+                                  padding: 0, 
+                                  color: '#6366f1', 
+                                  cursor: 'pointer',
+                                  textDecoration: 'underline'
+                                }}
+                              >
+                                {comment.user?.username || 'Unknown User'}
+                              </button>
+                              <div className="comment-date">
+                                {formatDate(comment.createdAt)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="comment-content">
+                            {comment.content || comment.text || 'No content'}
+                          </div>
+                          {comment.likes && comment.likes.length > 0 && (
+                            <div className="comment-likes">
+                              ❤️ {comment.likes.length} {comment.likes.length === 1 ? 'like' : 'likes'}
+                            </div>
+                          )}
+                        </div>
                       ))
                     ) : (
-                      <div className="no-images">No images available</div>
+                      <div className="no-comments">
+                        <p>No comments yet</p>
+                        <span>This post hasn't received any comments.</span>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Right side - Information */}
-                <div className="post-info-section">
+                {selectedPost.linkedShopItems && selectedPost.linkedShopItems.length > 0 && (
                   <div className="info-card">
-                    <h4>Post Information</h4>
-                    <div className="info-grid">
-                      <div className="info-item">
-                        <label>Caption:</label>
-                        <p>{selectedPost.caption || 'No caption provided'}</p>
-                      </div>
-                      <div className="info-item">
-                        <label>Post ID:</label>
-                        <p className="monospace">{selectedPost._id}</p>
-                      </div>
-                      <div className="info-item">
-                        <label>Created:</label>
-                        <p>{formatDate(selectedPost.createdAt)}</p>
-                      </div>
-                      <div className="info-item">
-                        <label>Status:</label>
-                        <p>
-                          <span 
-                            className="status-badge modern"
-                            style={{ 
-                              backgroundColor: `${getPostStatus(selectedPost).color}15`,
-                              color: getPostStatus(selectedPost).color,
-                              border: `1px solid ${getPostStatus(selectedPost).color}30`
-                            }}
-                          >
-                            {getPostStatus(selectedPost).text}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
+                    <h4>Linked Products</h4>
+                    <p>{selectedPost.linkedShopItems.length} product(s) linked to this post</p>
                   </div>
-
-                  <div className="info-card">
-                    <h4>Creator Information</h4>
-                    <div className="creator-detail">
-                      <UserAvatar user={selectedPost.creator} size={60} />
-                      <div className="creator-details">
-                        <h5>{selectedPost.creator?.username || 'Unknown User'}</h5>
-                        <p>{selectedPost.creator?.email || 'No email'}</p>
-                        <p className="join-date">
-                          Joined: {selectedPost.creator?.createdAt ? formatDate(selectedPost.creator.createdAt) : 'Unknown'}
-                        </p>
-                        {selectedPost.creator && (
-                          <button 
-                            onClick={() => handleUserClick(selectedPost.creator)}
-                            className="view-profile-btn"
-                          >
-                            View Profile
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="info-card">
-                    <h4>Engagement Stats</h4>
-                    <div className="engagement-stats">
-                      <div className="stat-item">
-                        <span className="stat-number">{selectedPost.likes?.length || 0}</span>
-                        <span className="stat-label">Likes</span>
-                      </div>
-                      <div className="stat-item">
-                        <span className="stat-number">{selectedPost.comments?.length || 0}</span>
-                        <span className="stat-label">Comments</span>
-                      </div>
-                      <div className="stat-item">
-                        <span className="stat-number">{getAllPostImages(selectedPost).length}</span>
-                        <span className="stat-label">Images</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedPost.linkedShopItems && selectedPost.linkedShopItems.length > 0 && (
-                    <div className="info-card">
-                      <h4>Linked Products</h4>
-                      <p>{selectedPost.linkedShopItems.length} product(s) linked to this post</p>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
+    )}
+
 
       {/* User Profile Modal */}
       {showUserModal && selectedUser && (
@@ -1768,6 +1819,267 @@ const AdminPosts = () => {
           .info-item {
             grid-template-columns: 1fr;
             gap: 0.5rem;
+          }
+        }
+
+        /* Comments Section Styles - Add these to your Posts.css or component styles */
+
+        .comments-container {
+          max-height: 400px;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+          padding: 1rem;
+          border: 1px solid #e9ecef;
+        }
+
+        .comment-item {
+          background: white;
+          padding: 1rem;
+          border-radius: 8px;
+          border: 1px solid #e5e7eb;
+          transition: box-shadow 0.2s ease;
+        }
+
+        .comment-item:hover {
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .comment-header {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .comment-avatar {
+          flex-shrink: 0;
+        }
+
+        .comment-meta {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .comment-username {
+          font-weight: 600;
+          color: #6366f1 !important;
+          font-size: 0.9rem;
+          background: none;
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          text-align: left;
+          text-decoration: none;
+          transition: color 0.2s ease;
+        }
+
+        .comment-username:hover {
+          color: #4f46e5 !important;
+          text-decoration: underline;
+        }
+
+        .comment-date {
+          color: #6b7280;
+          font-size: 0.8rem;
+          font-weight: 400;
+        }
+
+        .comment-content {
+          color: #374151;
+          line-height: 1.5;
+          margin-bottom: 0.5rem;
+          word-wrap: break-word;
+          white-space: pre-wrap;
+        }
+
+        .comment-likes {
+          font-size: 0.8rem;
+          color: #6b7280;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          margin-top: 0.5rem;
+        }
+
+        .no-comments {
+          text-align: center;
+          padding: 2rem;
+          color: #6b7280;
+          background: white;
+          border-radius: 8px;
+          border: 1px dashed #d1d5db;
+        }
+
+        .no-comments p {
+          margin: 0 0 0.5rem 0;
+          font-size: 1rem;
+          font-weight: 500;
+          color: #9ca3af;
+        }
+
+        .no-comments span {
+          font-size: 0.9rem;
+          font-style: italic;
+          color: #6b7280;
+        }
+
+        /* Comments container scrollbar styling */
+        .comments-container::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .comments-container::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 3px;
+        }
+
+        .comments-container::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 3px;
+        }
+
+        .comments-container::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+
+        /* Responsive design for comments */
+        @media (max-width: 768px) {
+          .comments-container {
+            max-height: 300px;
+            padding: 0.75rem;
+          }
+          
+          .comment-item {
+            padding: 0.75rem;
+          }
+          
+          .comment-header {
+            gap: 0.5rem;
+          }
+          
+          .comment-content {
+            font-size: 0.9rem;
+          }
+          
+          .no-comments {
+            padding: 1.5rem;
+          }
+        }
+
+        /* Additional info-card styling to ensure consistency */
+        .info-card h4 {
+          margin: 0 0 1rem 0;
+          color: #374151;
+          font-size: 1.1rem;
+          font-weight: 600;
+          border-bottom: 2px solid #f3f4f6;
+          padding-bottom: 0.5rem;
+        }
+
+        .artwork-modal {
+          max-width: 900px;
+        }
+
+        .modal-close {
+          background: none;
+          border: none;
+          font-size: 1.5rem;
+          cursor: pointer;
+          color: #718096;
+          padding: 0.5rem;
+          border-radius: 50%;
+          transition: all 0.2s ease;
+        }
+
+        .modal-close:hover {
+          background: #f7fafc;
+          color: #4a5568;
+        }
+
+        .artwork-detail-layout {
+          display: flex;
+          gap: 2rem;
+        }
+
+        .artwork-image-section {
+          flex: 0 0 300px;
+        }
+
+        .detail-image {
+          width: 100%;
+          height: 300px;
+          object-fit: cover;
+          border-radius: 12px;
+        }
+
+        .artwork-info-section {
+          flex: 1;
+        }
+
+        .artwork-info-section h2 {
+          margin: 0 0 1.5rem 0;
+          color: #1a202c;
+          font-size: 1.5rem;
+          font-weight: 700;
+        }
+
+        .detail-group {
+          margin-bottom: 1.5rem;
+          padding: 1rem;
+          background: #f7fafc;
+          border-radius: 8px;
+        }
+
+        .detail-group h4 {
+          margin: 0 0 0.75rem 0;
+          color: #2d3748;
+          font-size: 1rem;
+          font-weight: 600;
+        }
+
+        .detail-group p {
+          margin: 0.5rem 0;
+          color: #4a5568;
+          line-height: 1.5;
+        }
+
+        .auction-info {
+          border-left: 4px solid #e53e3e;
+        }
+
+        .tags-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .tag {
+          background: #e0e7ff;
+          color: #3730a3;
+          padding: 0.25rem 0.75rem;
+          border-radius: 20px;
+          font-size: 0.8rem;
+          font-weight: 500;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+          .artwork-detail-layout {
+            flex-direction: column;
+          }
+
+          .artwork-image-section {
+            flex: none;
+          }
+
+          .detail-image {
+            height: 250px;
           }
         }
       `}</style>
