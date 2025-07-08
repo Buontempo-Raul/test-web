@@ -1,4 +1,4 @@
-// frontend/src/pages/Profile/Profile.js - Complete Fixed Version
+// frontend/src/pages/Profile/Profile.js - FIXED with complete profile picture upload
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -29,7 +29,7 @@ const Profile = () => {
   
   // Add state for followers/following modal
   const [showFollowersModal, setShowFollowersModal] = useState(false);
-  const [followersModalType, setFollowersModalType] = useState('followers'); // 'followers' or 'following'
+  const [followersModalType, setFollowersModalType] = useState('followers');
   
   // Add state for edit modal
   const [showEditModal, setShowEditModal] = useState(false);
@@ -72,150 +72,105 @@ const Profile = () => {
     }
   };
 
-  // FIXED: Function to fetch user's posts using user ID
-  const fetchUserPosts = async (userId) => {
-    if (!userId) {
-      console.error('No user ID provided for fetching posts');
-      return;
-    }
-    
-    try {
-      console.log('Fetching posts for user ID:', userId);
-      const response = await postAPI.getUserPosts(userId);
-      console.log('Posts response:', response.data);
-      
-      if (response.data.success) {
-        setPosts(response.data.posts);
-        console.log('Posts loaded successfully:', response.data.posts.length);
-      } else {
-        console.error('Failed to fetch posts:', response.data.message);
-      }
-    } catch (error) {
-      console.error('Error fetching user posts:', error);
-      console.error('Error response:', error.response?.data);
-    }
-  };
-
-  // Function to handle follow/unfollow
+  // Handle follow/unfollow
   const handleFollowToggle = async () => {
     if (!currentUser || isOwnProfile) return;
     
     setIsFollowLoading(true);
     try {
       if (isFollowing) {
-        await userAPI.unfollowUser(user._id);
-        setIsFollowing(false);
-        setFollowersCount(prev => prev - 1);
+        const response = await userAPI.unfollowUser(user._id);
+        if (response.data.success) {
+          setIsFollowing(false);
+          setFollowersCount(prev => prev - 1);
+        }
       } else {
-        await userAPI.followUser(user._id);
-        setIsFollowing(true);
-        setFollowersCount(prev => prev + 1);
+        const response = await userAPI.followUser(user._id);
+        if (response.data.success) {
+          setIsFollowing(true);
+          setFollowersCount(prev => prev + 1);
+        }
       }
     } catch (error) {
       console.error('Error toggling follow:', error);
-      setError('Failed to update follow status. Please try again.');
     } finally {
       setIsFollowLoading(false);
     }
   };
 
-  // Function to handle opening followers/following modal
-  const handleFollowersClick = (type) => {
+  // Handle followers modal
+  const handleShowFollowersModal = (type) => {
     setFollowersModalType(type);
     setShowFollowersModal(true);
   };
 
-  // Function to close the modal
   const handleCloseFollowersModal = () => {
     setShowFollowersModal(false);
   };
 
-  // FIXED: Handle like functionality for posts in profile
-  const handleLike = async (postId) => {
-    if (!isAuthenticated) {
-      alert('Please log in to like posts');
-      return;
+  // Function to fetch user's posts
+  const fetchUserPosts = async (userId) => {
+    try {
+      const response = await postAPI.getUserPosts(userId);
+      if (response.data.success) {
+        setPosts(response.data.posts);
+      }
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
     }
+  };
 
+  // Handle post interactions
+  const handleLike = async (postId) => {
     try {
       const response = await postAPI.likePost(postId);
-      
       if (response.data.success) {
-        setPosts(prevPosts => 
-          prevPosts.map(post => {
-            if (post._id === postId) {
-              return {
-                ...post,
-                likes: response.data.likes,
-                isLikedByCurrentUser: response.data.isLiked,
-                likedBy: response.data.isLiked
-                  ? [...(post.likedBy || []), currentUser._id]
-                  : (post.likedBy || []).filter(id => id !== currentUser._id)
-              };
-            }
-            return post;
-          })
-        );
+        setPosts(prev => prev.map(post => 
+          post._id === postId 
+            ? { ...post, ...response.data.post }
+            : post
+        ));
       }
     } catch (error) {
       console.error('Error liking post:', error);
-      alert('Failed to like post. Please try again.');
     }
   };
 
-  // FIXED: Handle comment functionality for posts in profile
-  const handleComment = async (postId, commentText) => {
-    if (!isAuthenticated) {
-      alert('Please log in to comment on posts');
-      return;
-    }
-
-    if (!commentText || commentText.trim().length === 0) {
-      alert('Please enter a comment');
-      return;
-    }
-
+  const handleComment = async (postId, commentData) => {
     try {
-      const response = await postAPI.commentOnPost(postId, commentText.trim());
-      
+      const response = await postAPI.commentOnPost(postId, commentData);
       if (response.data.success) {
-        setPosts(prevPosts => 
-          prevPosts.map(post => {
-            if (post._id === postId) {
-              const updatedPost = { ...post };
-              updatedPost.comments = [...(updatedPost.comments || []), response.data.comment];
-              return updatedPost;
-            }
-            return post;
-          })
-        );
+        setPosts(prev => prev.map(post => 
+          post._id === postId 
+            ? { ...post, comments: response.data.comments }
+            : post
+        ));
       }
     } catch (error) {
       console.error('Error commenting on post:', error);
-      alert('Failed to add comment. Please try again.');
     }
   };
 
-  // FIXED: Main useEffect with proper post loading
+  // Load user profile and posts
   useEffect(() => {
-    // Function to fetch user profile
     const fetchUserProfile = async () => {
+      setLoading(true);
+      setError('');
+      
       try {
-        setLoading(true);
-        setError('');
-        
-        console.log('Fetching profile for username:', username);
         const response = await userAPI.getUserByUsername(username);
         
         if (response.data.success) {
           const userData = response.data.user;
           setUser(userData);
           
-          // Initialize follow state
-          if (userData.followers && currentUser) {
-            setIsFollowing(userData.followers.some(follower => 
-              follower._id ? follower._id === currentUser._id : follower === currentUser._id
-            ));
+          // Check follow status
+          if (currentUser && !isOwnProfile) {
+            const isFollowingUser = userData.followers?.some(follower => 
+              typeof follower === 'object' ? 
+                follower._id === currentUser._id : follower === currentUser._id
+            );
+            setIsFollowing(isFollowingUser);
           }
           
           setFollowersCount(userData.followers?.length || 0);
@@ -236,7 +191,7 @@ const Profile = () => {
             await checkFollowStatus(userData._id);
           }
 
-          // FIXED: Fetch posts using the user's ID after profile is loaded
+          // Fetch posts using the user's ID after profile is loaded
           if (userData._id) {
             await fetchUserPosts(userData._id);
           }
@@ -329,7 +284,8 @@ const Profile = () => {
     setUpdatingProfile(true);
     
     try {
-      const response = await userAPI.updateUserProfile(editFormData);
+      // FIXED: Use the correct API method name
+      const response = await userAPI.updateProfile(editFormData);
       
       if (response.data.success) {
         setUser(response.data.user);
@@ -407,19 +363,22 @@ const Profile = () => {
             ) : (
               <div className="profile-artworks-grid">
                 {artworks.map(artwork => (
-                  <div key={artwork._id} className="profile-artwork-card">
-                    <Link to={`/shop/product/${artwork._id}`}>
+                  <Link 
+                    key={artwork._id} 
+                    to={`/shop/artwork/${artwork._id}`}
+                    className="profile-artwork-card"
+                  >
+                    <div className="artwork-image">
                       <img 
-                        src={artwork.images?.[0] || '/api/placeholder/300/300'} 
+                        src={artwork.images?.[0]} 
                         alt={artwork.title}
-                        className="profile-artwork-image"
                       />
-                      <div className="profile-artwork-info">
-                        <h4>{artwork.title}</h4>
-                        <p className="profile-artwork-price">${artwork.price}</p>
-                      </div>
-                    </Link>
-                  </div>
+                    </div>
+                    <div className="artwork-info">
+                      <h3>{artwork.title}</h3>
+                      <p className="artwork-price">${artwork.price}</p>
+                    </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -446,56 +405,35 @@ const Profile = () => {
         <h2>Profile Not Found</h2>
         <p>{error}</p>
         <Link to="/" className="profile-home-link">
-          Go Home
+          Go to Home
         </Link>
       </div>
     );
   }
 
-  if (!user) {
-    return (
-      <div className="profile-error-container">
-        <h2>User Not Found</h2>
-        <p>The profile you're looking for doesn't exist.</p>
-        <Link to="/" className="profile-home-link">
-          Go Home
-        </Link>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   return (
     <div className="profile-container">
+      {/* Profile Header */}
       <motion.div 
         className="profile-header"
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.6 }}
       >
         <div className="profile-avatar-container">
-          <UserAvatar 
-            user={user}
-            size={180}
-            className="profile-avatar"
-            showBorder={true}
-          />
-          {user.isArtist && (
-            <span className="profile-artist-badge">Artist</span>
-          )}
-          {isOwnProfile && (
-            <div className="profile-upload-container">
-              <input
-                type="file"
-                id="profile-image-upload"
-                accept="image/*"
-                onChange={handleImageUpload}
-                style={{ display: 'none' }}
-              />
-              <label htmlFor="profile-image-upload" className="profile-upload-btn">
-                {uploadingImage ? '⏳' : '📷'}
-              </label>
-            </div>
-          )}
+          <motion.div
+            initial={{ scale: 0.8 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+          >
+            <UserAvatar 
+              user={user} 
+              size="large" 
+              className="profile-avatar"
+            />
+          </motion.div>
         </div>
         
         <div className="profile-info">
@@ -503,7 +441,7 @@ const Profile = () => {
             className="profile-username"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
           >
             {user.username}
           </motion.h1>
@@ -512,35 +450,44 @@ const Profile = () => {
             className="profile-stats"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
           >
             <div className="profile-stat">
               <span className="profile-stat-number">{posts.length}</span>
               <span className="profile-stat-label">Posts</span>
             </div>
-            <div 
-              className="profile-stat profile-stat-clickable"
-              onClick={() => handleFollowersClick('followers')}
+            
+            <button 
+              className="profile-stat profile-stat-button"
+              onClick={() => handleShowFollowersModal('followers')}
             >
               <span className="profile-stat-number">{followersCount}</span>
               <span className="profile-stat-label">Followers</span>
-            </div>
-            <div 
-              className="profile-stat profile-stat-clickable"
-              onClick={() => handleFollowersClick('following')}
+            </button>
+            
+            <button 
+              className="profile-stat profile-stat-button"
+              onClick={() => handleShowFollowersModal('following')}
             >
               <span className="profile-stat-number">{followingCount}</span>
               <span className="profile-stat-label">Following</span>
-            </div>
+            </button>
+            
+            {user.isArtist && (
+              <div className="profile-stat">
+                <span className="profile-stat-number">{artworks.length}</span>
+                <span className="profile-stat-label">Artworks</span>
+              </div>
+            )}
           </motion.div>
           
           <motion.div 
-            className="profile-meta"
+            className="profile-details"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.5 }}
           >
-            <span className="profile-joined-date">
+            <span className="profile-join-date">
               <svg className="profile-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                 <line x1="16" y1="2" x2="16" y2="6"/>
@@ -674,7 +621,7 @@ const Profile = () => {
         targetUser={user}
       />
 
-      {/* Edit Profile Modal */}
+      {/* Edit Profile Modal - FIXED: Complete modal with profile picture upload */}
       {showEditModal && (
         <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -686,6 +633,57 @@ const Profile = () => {
             </div>
             
             <div className="modal-body">
+              {/* Profile Picture Upload Section */}
+              <div className="form-group">
+                <label>Profile Picture</label>
+                <div className="image-upload-container">
+                  <div className="current-image">
+                    <img 
+                      src={editFormData.profileImage || user.profileImage || '/default-avatar.png'} 
+                      alt="Profile" 
+                      className="edit-profile-image"
+                    />
+                  </div>
+                  <div className="upload-controls">
+                    <input
+                      type="file"
+                      id="profile-image-upload"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      className="upload-image-btn"
+                      onClick={() => document.getElementById('profile-image-upload').click()}
+                      disabled={uploadingImage}
+                    >
+                      {uploadingImage ? 'Uploading...' : 'Change Picture'}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Upload Status Messages */}
+                {uploadingImage && (
+                  <div className="upload-status uploading">
+                    Uploading image...
+                  </div>
+                )}
+                
+                {uploadError && (
+                  <div className="upload-status error">
+                    {uploadError}
+                  </div>
+                )}
+                
+                {uploadSuccess && (
+                  <div className="upload-status success">
+                    Image uploaded successfully!
+                  </div>
+                )}
+              </div>
+
+              {/* Username Field */}
               <div className="form-group">
                 <label htmlFor="edit-username">Username</label>
                 <input
@@ -697,6 +695,7 @@ const Profile = () => {
                 />
               </div>
               
+              {/* Bio Field */}
               <div className="form-group">
                 <label htmlFor="edit-bio">Bio</label>
                 <textarea
@@ -709,6 +708,7 @@ const Profile = () => {
                 />
               </div>
               
+              {/* Website Field */}
               <div className="form-group">
                 <label htmlFor="edit-website">Website</label>
                 <input
@@ -722,15 +722,16 @@ const Profile = () => {
               </div>
             </div>
             
-            <div className="modal-footer">
+            {/* Modal Footer with Action Buttons */}
+            <div className="form-actions">
               <button 
-                className="btn-secondary" 
+                className="cancel-btn" 
                 onClick={() => setShowEditModal(false)}
               >
                 Cancel
               </button>
               <button 
-                className="btn-primary" 
+                className="save-profile-btn" 
                 onClick={handleProfileUpdate}
                 disabled={updatingProfile}
               >

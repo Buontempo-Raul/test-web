@@ -310,6 +310,11 @@ const getUserFavorites = async (req, res) => {
 // @access  Private
 const uploadProfileImage = async (req, res) => {
   try {
+    console.log('=== Profile Image Upload Debug ===');
+    console.log('File received:', req.file ? req.file.originalname : 'No file');
+    console.log('User ID:', req.user._id);
+    console.log('User username:', req.user.username);
+
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -317,9 +322,15 @@ const uploadProfileImage = async (req, res) => {
       });
     }
 
-    // Upload to Azure Blob Storage
-    const blobName = generateBlobName(req.file.originalname, 'profile-images');
-    const imageUrl = await uploadToAzure(req.file.buffer, blobName);
+    // FIXED: Generate blob name with correct parameters
+    // generateBlobName expects (prefix, userId, originalName)
+    const blobName = generateBlobName('profile', req.user._id, req.file.originalname);
+    console.log('Generated blob name:', blobName);
+
+    // FIXED: Upload to Azure with correct container name for profile images
+    // Note: uploadToAzure expects the full file object, not just file.buffer
+    const imageUrl = await uploadToAzure(req.file, blobName, 'images');
+    console.log('Image uploaded to:', imageUrl);
 
     // Update user's profile image in database
     const user = await User.findByIdAndUpdate(
@@ -334,6 +345,8 @@ const uploadProfileImage = async (req, res) => {
         message: 'User not found'
       });
     }
+
+    console.log('Profile image updated successfully for user:', user.username);
 
     res.json({
       success: true,
@@ -353,7 +366,7 @@ const uploadProfileImage = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to upload profile image',
-      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
