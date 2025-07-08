@@ -325,22 +325,25 @@ const Profile = () => {
       case 'Posts':
         return (
           <div className="profile-posts">
-            {posts.length === 0 ? (
+            {!posts || posts.length === 0 ? (
               <div className="profile-empty-state">
                 <p>{isOwnProfile ? "You haven't posted anything yet" : `${user?.username} hasn't posted anything yet`}</p>
                 {isOwnProfile && (
-                  <p className="profile-empty-subtitle">Share your first post to get started!</p>
+                  <p className="profile-empty-subtitle">
+                    <Link to="/explore">Share your first post</Link> to start connecting with the community!
+                  </p>
                 )}
               </div>
             ) : (
-              <div className="profile-posts-grid">
+              <div className="profile-posts-feed">
                 {posts.map(post => (
-                  <PostCard
-                    key={post._id}
-                    post={post}
+                  <PostCard 
+                    key={post._id} 
+                    post={post} 
                     onLike={handleLike}
                     onComment={handleComment}
                     currentUser={currentUser}
+                    showUserInfo={false}
                   />
                 ))}
               </div>
@@ -351,7 +354,7 @@ const Profile = () => {
       case 'Artworks':
         return (
           <div className="profile-artworks">
-            {artworks.length === 0 ? (
+            {!artworks || artworks.length === 0 ? (
               <div className="profile-empty-state">
                 <p>{isOwnProfile ? "You haven't added any artworks yet" : `${user?.username} hasn't added any artworks yet`}</p>
                 {isOwnProfile && (
@@ -365,18 +368,30 @@ const Profile = () => {
                 {artworks.map(artwork => (
                   <Link 
                     key={artwork._id} 
-                    to={`/shop/artwork/${artwork._id}`}
-                    className="profile-artwork-card"
+                    to={`/shop/product/${artwork._id}`}  // FIXED: Changed from /shop/artwork/ to /shop/product/
+                    className="artwork-card"
+                    style={{ textDecoration: 'none' }}
                   >
                     <div className="artwork-image">
                       <img 
-                        src={artwork.images?.[0]} 
+                        src={artwork.images?.[0] || '/api/placeholder/300/240'} 
                         alt={artwork.title}
+                        onError={(e) => {
+                          e.target.src = '/api/placeholder/300/240';
+                        }}
                       />
+                      {artwork.isSold && (
+                        <div className="sold-overlay">
+                          <span>SOLD</span>
+                        </div>
+                      )}
                     </div>
                     <div className="artwork-info">
                       <h3>{artwork.title}</h3>
                       <p className="artwork-price">${artwork.price}</p>
+                      {artwork.category && (
+                        <p className="artwork-category">{artwork.category}</p>
+                      )}
                     </div>
                   </Link>
                 ))}
