@@ -125,6 +125,42 @@ const AdminAuctions = () => {
     }
   };
 
+  const handleStopAuction = async (artworkId) => {
+    if (!window.confirm('Are you sure you want to stop this auction? This will cancel the auction completely without any winner, as if it never started. This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await adminAPI.stopAuction(artworkId);
+      
+      if (response.success) {
+        // Refresh the auctions list
+        await fetchAuctions();
+        
+        // Update selected auction if it's currently displayed
+        if (selectedAuction && selectedAuction._id === artworkId) {
+          setSelectedAuction({
+            ...selectedAuction,
+            auction: {
+              ...selectedAuction.auction,
+              isActive: false,
+              bids: [],
+              currentBid: selectedAuction.auction.startingPrice,
+              highestBidder: null
+            }
+          });
+        }
+        
+        alert('Auction stopped successfully. All bids have been removed and no winner was declared.');
+      } else {
+        throw new Error(response.message || 'Failed to stop auction');
+      }
+    } catch (error) {
+      console.error('Error stopping auction:', error);
+      alert('Failed to stop auction: ' + error.message);
+    }
+  };
+
   // Filter and sort auctions
   const filteredAuctions = (() => {
     let filtered = auctions.filter(auction => {
@@ -649,9 +685,15 @@ const AdminAuctions = () => {
               <div className="modal-actions">
                 <button className="btn-secondary">Export Auction Data</button>
                 {selectedAuction.auction?.isActive && (
-                  <button className="btn-warning">Pause Auction</button>
+                  <button 
+                    className="btn-danger"
+                    onClick={() => handleStopAuction(selectedAuction._id)}
+                  >
+                    🛑 Stop Auction
+                  </button>
                 )}
               </div>
+
             </div>
           </div>
         </div>
@@ -1526,6 +1568,25 @@ const AdminAuctions = () => {
           .modal-actions {
             flex-direction: column;
           }
+        }
+
+        .btn-danger {
+          background: #dc2626;
+          color: white;
+          border: none;
+          padding: 0.75rem 1.5rem;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .btn-danger:hover {
+          background: #b91c1c;
+          transform: translateY(-2px);
         }
       `}</style>
     </div>

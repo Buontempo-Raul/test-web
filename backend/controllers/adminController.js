@@ -742,6 +742,69 @@ const deleteArtwork = async (req, res) => {
   }
 };
 
+
+const stopAuction = async (req, res) => {
+  try {
+    const { artworkId } = req.params;
+
+    // Find the artwork
+    const artwork = await Artwork.findById(artworkId);
+    
+    if (!artwork) {
+      return res.status(404).json({
+        success: false,
+        message: 'Artwork not found'
+      });
+    }
+
+    // Check if auction exists
+    if (!artwork.auction) {
+      return res.status(400).json({
+        success: false,
+        message: 'No auction found for this artwork'
+      });
+    }
+
+    // Check if auction is active
+    if (!artwork.auction.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Auction is not currently active'
+      });
+    }
+
+    // Stop the auction by resetting it to original state (as if it never started)
+    artwork.auction.isActive = false;
+    artwork.auction.bids = []; // Clear all bids
+    artwork.auction.currentBid = artwork.auction.startingPrice; // Reset to starting price
+    artwork.auction.highestBidder = null; // Clear highest bidder
+    artwork.auction.endTime = new Date(); // Set end time to now
+    
+    // Save the changes
+    await artwork.save();
+
+    console.log(`🛑 Admin stopped auction for artwork: ${artwork.title} (ID: ${artworkId})`);
+
+    res.json({
+      success: true,
+      message: 'Auction stopped successfully. All bids have been removed and no winner was declared.',
+      auction: {
+        isActive: artwork.auction.isActive,
+        currentBid: artwork.auction.currentBid,
+        bidsCount: artwork.auction.bids.length,
+        endTime: artwork.auction.endTime
+      }
+    });
+
+  } catch (error) {
+    console.error('Error stopping auction:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while stopping auction'
+    });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getRecentActivity,
@@ -753,5 +816,6 @@ module.exports = {
   pauseUser,
   fullyRestoreUser,
   deletePost,
-  deleteArtwork
+  deleteArtwork,
+  stopAuction
 };

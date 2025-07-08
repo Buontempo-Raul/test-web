@@ -156,6 +156,20 @@ export const adminAPI = {
     }
   },
 
+  // Auction Management
+  stopAuction: async (artworkId) => {
+    try {
+      const response = await api.put(`/api/admin/auctions/${artworkId}/stop`);
+      return response.data;
+    } catch (error) {
+      console.error('stopAuction error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Failed to stop auction'
+      };
+    }
+  },
+
   // Artist Requests
   getArtistRequests: async (params = {}) => {
     try {

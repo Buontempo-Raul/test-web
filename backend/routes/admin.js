@@ -12,7 +12,8 @@ const {
   pauseUser,
   fullyRestoreUser,
   deletePost,
-  deleteArtwork
+  deleteArtwork,
+  stopAuction
 } = require('../controllers/adminController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -31,7 +32,8 @@ router.get('/test', (req, res) => {
       'PUT /api/admin/users/:userId/restore - Fully restore user (remove permanent ban)',
       'GET /api/admin/posts - Post management',
       'GET /api/admin/artworks - Artwork management',
-      'GET /api/admin/auctions - Auction management'
+      'GET /api/admin/auctions - Auction management',
+      'PUT /api/admin/auctions/:artworkId/stop - Stop auction (admin only)'  // Add this line
     ]
   });
 });
@@ -54,6 +56,8 @@ router.get('/auctions', getAllAuctions);
 router.put('/users/:userId/ban', banUser);        // Ban user (permanent email ban)
 router.put('/users/:userId/pause', pauseUser);    // Pause user (temporary restriction)
 router.put('/users/:userId/restore', fullyRestoreUser); // NEW: Fully restore user
+router.put('/auctions/:artworkId/stop', stopAuction);  // NEW: Stop auction route
+
 
 // Content management routes
 router.delete('/posts/:postId', deletePost);
