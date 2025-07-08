@@ -22,7 +22,7 @@ const Navbar = () => {
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/" className="navbar-logo">
-          <img src={logo} alt="Uncreated" />
+          <img src="/uncreated.logotransparent.png" alt="Uncreated" />
         </Link>
         
         <div className={`navbar-menu ${isMenuOpen ? 'active' : ''}`}>
