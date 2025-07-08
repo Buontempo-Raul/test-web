@@ -653,8 +653,11 @@ const getAllAuctions = async (req, res) => {
       filter['auction.isActive'] = false;
     }
 
+    // FIXED: Added population for auction bids bidder information
     const auctions = await Artwork.find(filter)
       .populate('creator', 'username')
+      .populate('auction.bids.bidder', 'username email')  // 🔧 FIXED: Now populates bidder info
+      .populate('auction.highestBidder', 'username')      // 🔧 FIXED: Also populate highest bidder
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
