@@ -42,6 +42,7 @@
   right: -200px;
   animation: complexOrbit 30s linear infinite;
   z-index: 0;
+  overflow: hidden;
 }
 
 /* Enhanced keyframe animations */
@@ -339,7 +340,7 @@
   line-height: 1.1;
   background: linear-gradient(135deg, hsl(0, 0%, 100%) 0%, #d3c4ea 50%, #e4bcff 100%);
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  /* -webkit-text-fill-color: transparent; */
   background-clip: text;
   position: relative;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -368,7 +369,7 @@
 
 .product-description {
   font-size: 1.2rem;
-  color: #ffffff;
+  color: #000000;
   line-height: 1.8;
   margin-bottom: 30px;
   font-weight: 400;
@@ -388,7 +389,7 @@
 }
 
 .artist-link {
-  color: white;
+  color: rgb(161, 25, 245);
   text-decoration: none;
 }
 
